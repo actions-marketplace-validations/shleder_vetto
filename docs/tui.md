@@ -35,7 +35,7 @@ Non-interactive scripts, CI environments, and Unix pipelines automatically bypas
 ## Dashboard Views (Tabs)
 
 ### 1. `[1: AGENTS]` — Fleet Control
-- **Dynamic Fleet Detection**: Automatically queries `$PATH` for known coding agents (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `swe_agent`, `smolagents`). Agents not installed on your system are cleanly omitted from the list.
+- **Dynamic Fleet Detection**: Automatically queries `$PATH` for known coding agents (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `windsurf`, `goose`, `openhands`, `devin`, `copilot`, `smolagents`). Agents not installed on your system are cleanly omitted from the list.
 - **Process Status**: Displays whether an agent is currently running, its PID, and whether transparent PATH-shims are active (`CONFINED`) or inactive (`UNCONFINED`).
 - **Interactive Controls**: Press `Space` to toggle transparent shims, or `Enter` to spawn an isolated sandbox.
 

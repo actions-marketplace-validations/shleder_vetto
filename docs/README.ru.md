@@ -141,7 +141,7 @@ Vetto реализует строгую трехтирную модель изо
 
 ## Матрица поддерживаемых AI-агентов
 
-Vetto включает готовые профили безопасности (`profiles/agents/*.toml`), автоматические сетевые разрешения, динамическое монтирование кэшей пакетных менеджеров (`npm`, `uv`, `bun`) и проброс графических дисплеев для Computer Use:
+Vetto включает готовые профили безопасности (`profiles/agents/*.toml`), автоматические сетевые разрешения, динамическое монтирование кэшей пакетных менеджеров (`npm`, `uv`, `bun`) и проброс графических дисплеев для Computer Use для 15 ведущих агентских рантаймов:
 
 | Агент | Команда / Пресет | Автоматические сетевые домены | Плагины и пути состояния |
 | :--- | :--- | :--- | :--- |
@@ -153,10 +153,12 @@ Vetto включает готовые профили безопасности (`
 | **Cursor** | `cursor` | Бэкенд Cursor, маркетплейс расширений | Сокеты IPC VS Code, `~/.cursor` |
 | **Aider** | `aider` | Эндпоинты настроенных LLM-провайдеров | Корень git-репозитория, история сессий |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | Хост расширений VS Code, кэши браузера |
-| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, кэши PyTorch |
+| **Windsurf** | `windsurf` | `api.codeium.com`, `windsurf.codeium.com` | `~/.windsurf`, состояние Cascade |
 | **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, расширения |
 | **OpenHands** | `openhands` | Эндпоинты выбранных моделей | Локальное выполнение без Docker |
-| **SWE-agent** | `swe_agent` | Эндпоинты бенчмарк-раннеров | Эфемерные рабочие директории |
+| **Devin** | `devin` | `api.devin.ai`, `cognition.ai` | `~/.devin`, `~/.config/devin` |
+| **GitHub Copilot** | `copilot` | `api.github.com`, эндпоинты Copilot | `~/.config/github-copilot` |
+| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, кэши PyTorch |
 
 ---
 

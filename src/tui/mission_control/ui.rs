@@ -201,7 +201,7 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
                 Style::default().fg(theme.muted),
             ),
             Line::styled(
-                " cursor, cline, windsurf, goose, openhands, swe-agent...",
+                " cursor, cline, windsurf, goose, openhands, devin...",
                 Style::default().fg(theme.muted),
             ),
             Line::from(""),

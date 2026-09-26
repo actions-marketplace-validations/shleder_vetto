@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 21] = [
+pub const SUPPORTED_AGENTS: [&str; 14] = [
     "claude",
     "codex",
     "opencode",
@@ -26,16 +26,9 @@ pub const SUPPORTED_AGENTS: [&str; 21] = [
     "cline",
     "copilot",
     "windsurf",
-    "continue",
     "goose",
     "openhands",
-    "swe_agent",
-    "plandex",
-    "mentat",
-    "gpt_engineer",
     "devin",
-    "crust",
-    "amp",
 ];
 
 struct AgentSpec {
@@ -96,11 +89,6 @@ const AGENT_SPECS: &[AgentSpec] = &[
         markers: &[".windsurf", ".codeium"],
     },
     AgentSpec {
-        name: "continue",
-        binaries: &["continue", "continue-cli"],
-        markers: &[".continue"],
-    },
-    AgentSpec {
         name: "goose",
         binaries: &["goose", "goose-ai"],
         markers: &[".goosehints", "goose.yaml"],
@@ -111,39 +99,9 @@ const AGENT_SPECS: &[AgentSpec] = &[
         markers: &[".openhands", ".all-hands"],
     },
     AgentSpec {
-        name: "swe_agent",
-        binaries: &["swe-agent", "sweagent"],
-        markers: &["swe-agent.yaml", ".swe-agent"],
-    },
-    AgentSpec {
-        name: "plandex",
-        binaries: &["plandex", "plandex-cli"],
-        markers: &[".plandex", "plandex.yaml"],
-    },
-    AgentSpec {
-        name: "mentat",
-        binaries: &["mentat", "mentat-cli"],
-        markers: &[".mentat", ".mentatconfig"],
-    },
-    AgentSpec {
-        name: "gpt_engineer",
-        binaries: &["gpt-engineer", "gpte"],
-        markers: &[".gpteng", "gpt-engineer.toml"],
-    },
-    AgentSpec {
         name: "devin",
         binaries: &["devin", "devin-cli"],
         markers: &[".devin", "devin.json"],
-    },
-    AgentSpec {
-        name: "crust",
-        binaries: &["crust", "crust-cli"],
-        markers: &[".crust", "crust.yaml"],
-    },
-    AgentSpec {
-        name: "amp",
-        binaries: &["amp", "amp-cli"],
-        markers: &[".amp", "amp.yaml"],
     },
 ];
 
@@ -334,9 +292,9 @@ mod tests {
         assert!(aider_bins.contains(&"aider"));
         assert!(aider_bins.contains(&"aider-chat"));
 
-        let swe_bins = agent_candidate_binaries("swe-agent");
-        assert!(swe_bins.contains(&"swe-agent"));
-        assert!(swe_bins.contains(&"sweagent"));
+        let codex_bins = agent_candidate_binaries("codex");
+        assert!(codex_bins.contains(&"codex"));
+        assert!(codex_bins.contains(&"codex-cli"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

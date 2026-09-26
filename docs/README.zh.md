@@ -141,7 +141,7 @@ Vetto 根据非特权用户空间可用的内核特性，严格划分三级安�
 
 ## 兼容智能体矩阵
 
-Vetto 为 22 款主流 AI 助手提供预置沙箱配置文件（`profiles/agents/*.toml`）、动态包管理器缓存支持（`npm`、`uv`、`bun`）以及 Computer Use 桌面图形透传：
+Vetto 为 15 款主流 AI 助手提供预置沙箱配置文件（`profiles/agents/*.toml`）、动态包管理器缓存支持（`npm`、`uv`、`bun`）以及 Computer Use 桌面图形透传：
 
 | 智能体 | 命令 / 预设 | 预置出站网络域名 | 插件与缓存挂载路径 |
 | :--- | :--- | :--- | :--- |
@@ -153,10 +153,12 @@ Vetto 为 22 款主流 AI 助手提供预置沙箱配置文件（`profiles/agent
 | **Cursor** | `cursor` | Cursor 后端服务, 扩展市场 | VS Code IPC 套接字, `~/.cursor` |
 | **Aider** | `aider` | 所配置的 LLM 服务提供商端点 | Git 仓库根目录, 历史缓存 |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code 扩展宿主, 浏览器缓存 |
-| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch 缓存 |
+| **Windsurf** | `windsurf` | `api.codeium.com`, `windsurf.codeium.com` | `~/.windsurf`, Cascade 状态目录 |
 | **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, 扩展模块 |
 | **OpenHands** | `openhands` | 所选模型提供商网络端点 | 免 Docker 本地隔离执行 |
-| **SWE-agent** | `swe_agent` | 基准测试运行器网络端点 | 临时沙箱工作空间 |
+| **Devin** | `devin` | `api.devin.ai`, `cognition.ai` | `~/.devin`, `~/.config/devin` |
+| **GitHub Copilot** | `copilot` | `api.github.com`, Copilot 端点 | `~/.config/github-copilot` |
+| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch 缓存 |
 
 ---
 

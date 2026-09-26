@@ -61,8 +61,8 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
 }
 
 #[test]
-fn test_all_22_agent_profiles_load_successfully() {
-    let temp = TempProject::new("all-22-agents");
+fn test_all_15_agent_profiles_load_successfully() {
+    let temp = TempProject::new("all-15-agents");
     let project = temp.path().join("project");
     let home = temp.path().join("home");
     std::fs::create_dir_all(&project).expect("create project dir");
@@ -81,14 +81,8 @@ fn test_all_22_agent_profiles_load_successfully() {
         "goose",
         "devin",
         "openhands",
-        "swe_agent",
-        "continue",
         "copilot",
-        "mentat",
-        "plandex",
-        "crust",
-        "gpt_engineer",
-        "amp",
+        "smolagents",
         "custom",
     ];
 
@@ -409,14 +403,8 @@ fn test_all_agent_profiles_unblock_user_tool_binaries_and_browser_caches() {
         "goose",
         "devin",
         "openhands",
-        "swe_agent",
-        "continue",
         "copilot",
-        "mentat",
-        "plandex",
-        "crust",
-        "gpt_engineer",
-        "amp",
+        "smolagents",
         "custom",
     ];
 

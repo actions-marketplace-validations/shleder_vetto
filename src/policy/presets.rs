@@ -149,11 +149,6 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "registry.npmjs.org".into(),
         ],
         "windsurf" => vec!["api.codeium.com".into(), "windsurf.codeium.com".into()],
-        "continue" => vec![
-            "api.continue.dev".into(),
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
-        ],
         "goose" => vec![
             "api.openai.com".into(),
             "api.anthropic.com".into(),
@@ -164,36 +159,10 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "api.openai.com".into(),
             "api.anthropic.com".into(),
         ],
-        "swe_agent" => vec![
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
-            "openrouter.ai".into(),
-        ],
-        "plandex" => vec![
-            "api.plandex.ai".into(),
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
-        ],
-        "mentat" => vec![
-            "api.mentat.ai".into(),
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
-        ],
-        "gpt_engineer" => vec![
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
-            "openrouter.ai".into(),
-        ],
         "devin" => vec![
             "api.devin.ai".into(),
             "cognition.ai".into(),
             "api.openai.com".into(),
-        ],
-        "crust" => vec!["api.crustdata.com".into(), "api.openai.com".into()],
-        "amp" => vec![
-            "api.amp.dev".into(),
-            "api.openai.com".into(),
-            "api.anthropic.com".into(),
         ],
         "smolagents" => vec![
             "api.openai.com".into(),
@@ -669,17 +638,6 @@ mod tests {
             ]
         );
         assert_eq!(
-            agent_network_allowlist("continue"),
-            vec![
-                "api.continue.dev",
-                "api.openai.com",
-                "api.anthropic.com",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
             agent_network_allowlist("goose"),
             vec![
                 "api.openai.com",
@@ -702,50 +660,6 @@ mod tests {
             ]
         );
         assert_eq!(
-            agent_network_allowlist("swe_agent"),
-            vec![
-                "api.openai.com",
-                "api.anthropic.com",
-                "openrouter.ai",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
-            agent_network_allowlist("plandex"),
-            vec![
-                "api.plandex.ai",
-                "api.openai.com",
-                "api.anthropic.com",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
-            agent_network_allowlist("mentat"),
-            vec![
-                "api.mentat.ai",
-                "api.openai.com",
-                "api.anthropic.com",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
-            agent_network_allowlist("gpt_engineer"),
-            vec![
-                "api.openai.com",
-                "api.anthropic.com",
-                "openrouter.ai",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
             agent_network_allowlist("devin"),
             vec![
                 "api.devin.ai",
@@ -757,21 +671,14 @@ mod tests {
             ]
         );
         assert_eq!(
-            agent_network_allowlist("crust"),
+            agent_network_allowlist("smolagents"),
             vec![
-                "api.crustdata.com",
-                "api.openai.com",
-                "registry.npmjs.org",
-                "pypi.org",
-                "files.pythonhosted.org",
-            ]
-        );
-        assert_eq!(
-            agent_network_allowlist("amp"),
-            vec![
-                "api.amp.dev",
                 "api.openai.com",
                 "api.anthropic.com",
+                "openrouter.ai",
+                "huggingface.co",
+                "hf.co",
+                "cas.huggingface.co",
                 "registry.npmjs.org",
                 "pypi.org",
                 "files.pythonhosted.org",

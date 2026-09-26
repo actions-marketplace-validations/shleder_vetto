@@ -604,7 +604,6 @@ pub fn is_interactive_agent_command(agent: Option<&str>, command: &[String]) -> 
                 | "windsurf"
                 | "goose"
                 | "openhands"
-                | "mentat"
                 | "devin"
         )
     } else {

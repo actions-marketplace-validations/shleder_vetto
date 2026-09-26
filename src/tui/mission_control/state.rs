@@ -272,9 +272,9 @@ fn format_agent_name(name: &str) -> String {
         "windsurf" => "Windsurf Cascade".to_string(),
         "goose" => "Block Goose AI".to_string(),
         "openhands" => "OpenHands (All-Hands)".to_string(),
-        "swe_agent" => "SWE-agent".to_string(),
-        "continue" => "Continue.dev".to_string(),
+        "devin" => "Cognition Devin".to_string(),
         "copilot" => "GitHub Copilot".to_string(),
+        "smolagents" => "Hugging Face Smolagents".to_string(),
         other => other.to_string(),
     }
 }
