@@ -7,7 +7,7 @@ Keep a Changelog; versioning follows SemVer.
 
 ### Added
 - **Interactive TUI Mission Control Dashboard (`vetto`)**: Launched strictly via bare `vetto` in interactive TTY sessions with zero CLI subcommand (`vetto ui` omitted). Built on Ratatui with dual cybernetic themes: Arasaka Cyber-Red (default) and Cyber Circuit (amber-phosphor), toggled via `t`.
-- **Dynamic Installed-Agent Fleet Detection**: Automatically detects AI coding agents present in PATH (`claude`, `codex`, `gemini`, `agy`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `swe_agent`, `smolagents`), omitting uninstalled agents from the UI.
+- **Dynamic Installed-Agent Fleet Detection**: Automatically detects AI coding agents present in PATH (`claude`, `codex`, `gemini`, `antigravity`/`agy`, `opencode`, `cursor`, `aider`, `cline`, `windsurf`, `goose`, `openhands`, `devin`, `copilot`, `smolagents`), omitting uninstalled agents from the UI.
 - **Unified 4-Tab Control Plane**:
   - `[1: AGENTS]`: Live agent process inspection, PATH-shim toggling (`Space`), sandbox launching (`Enter`).
   - `[2: SANDBOX VFS]`: Real-time kernel isolation matrix and secret masking status (`~/.ssh`, `~/.aws`, `.env`, tokens in `mode=0000` tmpfs overlays).

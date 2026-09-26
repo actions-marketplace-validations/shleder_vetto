@@ -23,11 +23,18 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 |---|---|---|---|---|---|---|
 | **Claude Code** | `--agent claude` | `claude -p "..."` / `npx @anthropic-ai/claude-code` | ✅ Verified | ✅ `--net=allowlist:api.anthropic.com` | ✅ Full TUI & Statusline | ✅ 100% Pass |
 | **OpenAI Codex** | `--agent codex` | `codex exec "..."` | ✅ Verified | ✅ `--net=allowlist:api.openai.com` | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **OpenCode** | `--agent opencode` | `opencode "..."` | ✅ Verified | ✅ Allowlisted model endpoints | ✅ Statusline | ✅ 100% Pass |
+| **Antigravity** | `--agent antigravity` | `antigravity "..."` / `agy "..."` | ✅ Verified | ✅ Allowlisted Google Cloud & API endpoints | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **Gemini CLI** | `--agent gemini` | `gemini "..."` | ✅ Verified | ✅ `generativelanguage.googleapis.com` | ✅ Statusline | ✅ 100% Pass |
 | **Cursor Agent** | `--agent cursor` | `cursor-agent "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Statusline | ✅ 100% Pass |
 | **Cline** | `--agent cline` | `cline --prompt "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Statusline | ✅ 100% Pass |
 | **Aider** | `--agent aider` | `aider --message "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Full PTY | ✅ 100% Pass |
 | **GitHub Copilot** | `--agent copilot` | `copilot "..."` | ✅ Verified | ✅ Allowlisted GitHub endpoints | ✅ Statusline | ✅ 100% Pass |
-| **OpenCode** | `--agent opencode` | `opencode "..."` | ✅ Verified | ✅ Allowlisted model endpoints | ✅ Statusline | ✅ 100% Pass |
+| **Windsurf** | `--agent windsurf` | `windsurf "..."` | ✅ Verified | ✅ `api.codeium.com`, `windsurf.codeium.com` | ✅ Statusline | ✅ 100% Pass |
+| **Goose** | `--agent goose` | `goose "..."` | ✅ Verified | ✅ Block, OpenAI, Anthropic endpoints | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **OpenHands** | `--agent openhands` | `openhands "..."` | ✅ Verified | ✅ Configured model endpoints | ✅ Statusline | ✅ 100% Pass |
+| **Devin** | `--agent devin` | `devin "..."` | ✅ Verified | ✅ `api.devin.ai`, `cognition.ai` | ✅ Statusline | ✅ 100% Pass |
+| **Smolagents** | `--agent smolagents` | `smolagents "..."` / `vetto eval` | ✅ Verified | ✅ Hugging Face Hub + model endpoints | ✅ Non-interactive & TUI | ✅ 100% Pass |
 | **Custom Agent / Shell** | (Default) | `vetto -- <command> [args...]` | ✅ Strict-Wins | ✅ Mode-dependent | ✅ Configurable | ✅ 100% Pass |
 
 ---

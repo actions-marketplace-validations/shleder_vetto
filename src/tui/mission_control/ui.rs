@@ -197,11 +197,11 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
             ),
             Line::from(""),
             Line::styled(
-                " Supported agents: claude, opencode, codex, aider, gemini,",
+                " Supported agents: claude, opencode, codex, aider, gemini, antigravity,",
                 Style::default().fg(theme.muted),
             ),
             Line::styled(
-                " cursor, cline, windsurf, goose, openhands, devin...",
+                " cursor, cline, windsurf, goose, openhands, devin, copilot, smolagents...",
                 Style::default().fg(theme.muted),
             ),
             Line::from(""),

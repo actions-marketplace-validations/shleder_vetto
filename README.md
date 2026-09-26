@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Enable zero-configuration sandboxing for your coding agent once. Vetto installs a non-destructive shim in `~/.vetto/shims` with priority in `PATH`:
 
 ```bash
-vetto enable claude   # supports codex, opencode, gemini, cursor, aider, and 20+ agents
+vetto enable claude   # supports codex, opencode, gemini, cursor, aider, and 15 profiles
 claude                # runs normally — fully sandboxed at the kernel boundary
 ```
 

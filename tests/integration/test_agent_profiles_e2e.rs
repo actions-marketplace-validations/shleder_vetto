@@ -317,6 +317,8 @@ fn test_agent_profiles_unblock_sockets_and_ipc_for_mcp_plugins() {
         "windsurf",
         "openhands",
         "devin",
+        "copilot",
+        "smolagents",
     ];
 
     for agent in agents {

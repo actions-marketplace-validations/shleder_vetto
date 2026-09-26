@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 14] = [
+pub const SUPPORTED_AGENTS: [&str; 15] = [
     "claude",
     "codex",
     "opencode",
@@ -29,6 +29,7 @@ pub const SUPPORTED_AGENTS: [&str; 14] = [
     "goose",
     "openhands",
     "devin",
+    "smolagents",
 ];
 
 struct AgentSpec {
@@ -102,6 +103,11 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "devin",
         binaries: &["devin", "devin-cli"],
         markers: &[".devin", "devin.json"],
+    },
+    AgentSpec {
+        name: "smolagents",
+        binaries: &["smolagents", "smolagent"],
+        markers: &[".smolagents"],
     },
 ];
 
@@ -254,6 +260,7 @@ mod tests {
             assert!(msg.contains("claude"));
             assert!(msg.contains("opencode"));
             assert!(msg.contains("windsurf"));
+            assert!(msg.contains("smolagents"));
             assert!(msg.contains("vetto init"));
         }
         let _ = fs::remove_dir_all(dir);
@@ -295,6 +302,10 @@ mod tests {
         let codex_bins = agent_candidate_binaries("codex");
         assert!(codex_bins.contains(&"codex"));
         assert!(codex_bins.contains(&"codex-cli"));
+
+        let smol_bins = agent_candidate_binaries("smolagents");
+        assert!(smol_bins.contains(&"smolagents"));
+        assert!(smol_bins.contains(&"smolagent"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

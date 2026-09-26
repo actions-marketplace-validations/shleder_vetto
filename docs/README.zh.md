@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 为您的 AI 编程助手启用零配置沙箱接管。Vetto 会在 `~/.vetto/shims` 中安装无侵入垫片并优先加载至 `PATH`：
 
 ```bash
-vetto enable claude   # 支持 codex, opencode, gemini, cursor, aider 等 20+ 款智能体
+vetto enable claude   # 支持 codex, opencode, gemini, cursor, aider 等 15 款预置配置
 claude                # 照常运行 — 全程受内核边界严格保护
 ```
 

@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Aktivieren Sie die konfigurationsfreie Sandbox für Ihren Agenten. Vetto installiert einen transparenten Shim in `~/.vetto/shims` mit Vorrang im `PATH`:
 
 ```bash
-vetto enable claude   # unterstützt codex, opencode, gemini, cursor, aider und über 20 Agenten
+vetto enable claude   # unterstützt codex, opencode, gemini, cursor, aider und 15 Profile
 claude                # läuft wie gewohnt — vollständig durch den Kernel geschützt
 ```
 

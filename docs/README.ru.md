@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Включите изоляцию без предварительной настройки для вашего агента. Vetto устанавливает прозрачный шим в `~/.vetto/shims` с приоритетом в системном `PATH`:
 
 ```bash
-vetto enable claude   # поддержка codex, opencode, gemini, cursor, aider и 20+ агентов
+vetto enable claude   # поддержка codex, opencode, gemini, cursor, aider и 15 профилей
 claude                # запускается привычно, но исполняется внутри песочницы ядра
 ```
 
