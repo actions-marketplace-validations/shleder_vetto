@@ -1,5 +1,5 @@
 Name:           vetto
-Version: 0.5.0
+Version: 0.5.1
 Release:        1%{?dist}
 Summary:        Daemon-less sandbox and audit layer for AI coding agents
 License:        Apache-2.0
@@ -34,6 +34,9 @@ cp -a profiles/. %{buildroot}%{_datadir}/vetto/profiles/
 %{_datadir}/vetto/profiles
 
 %changelog
+* Sat Sep 26 2026 vetto contributors - 0.5.1-1
+- Frontier 2026 AI coding CLI agents (omp, zcode, kimi, grok) and Gemini CLI purge.
+
 * Sat Sep 26 2026 vetto contributors - 0.5.0-1
 - Interactive TUI Mission Control Dashboard and repository modernization.
 

@@ -2,7 +2,22 @@
 
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
- 
+## [0.5.1] - 2026-09-27
+
+### Added
+- **Frontier 2026 AI Coding CLI Agents Integration**: Added complete security profiles, network allowlists, auto-detection, and TUI Mission Control integration for 4 frontier agents:
+  - `omp` (Stencil Labs / Rust core, [omp.sh](https://omp.sh/))
+  - `zcode` (Z.ai / GLM-5.3)
+  - `kimi` (Moonshot AI Kimi Code CLI)
+  - `grok` (xAI Grok Build CLI)
+  - Total active supported agent profiles expanded to 18.
+
+### Removed
+- **Deprecated Gemini CLI Purge**: Completely removed `profiles/agents/gemini.toml` and purged deprecated Gemini CLI references across core engine, doctor checks, onboard heuristics, integration tests, and 6 localized documentation suites. Google DeepMind's `antigravity` (`agy`) runtime and `$HOME/.gemini` paths remain strictly preserved.
+
+### Fixed
+- **Packaging Parity**: Synchronized version 0.5.1 across all package manifests (Cargo, npm, Homebrew, Chocolatey, RPM, AUR, Nix, VS Code extension, Helm, K8s, docs).
+
 ## [0.5.0] - 2026-09-26
 
 ### Added
