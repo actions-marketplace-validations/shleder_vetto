@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
+ 
+## [0.5.0] - 2026-09-26
+
+### Added
+- **Interactive TUI Mission Control Dashboard (`vetto`)**: Launched strictly via bare `vetto` in interactive TTY sessions with zero CLI subcommand (`vetto ui` omitted). Built on Ratatui with dual cybernetic themes: Arasaka Cyber-Red (default) and Cyber Circuit (amber-phosphor), toggled via `t`.
+- **Dynamic Installed-Agent Fleet Detection**: Automatically detects AI coding agents present in PATH (`claude`, `codex`, `gemini`, `agy`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `swe_agent`, `smolagents`), omitting uninstalled agents from the UI.
+- **Unified 4-Tab Control Plane**:
+  - `[1: AGENTS]`: Live agent process inspection, PATH-shim toggling (`Space`), sandbox launching (`Enter`).
+  - `[2: SANDBOX VFS]`: Real-time kernel isolation matrix and secret masking status (`~/.ssh`, `~/.aws`, `.env`, tokens in `mode=0000` tmpfs overlays).
+  - `[3: KERNEL DOCTOR]`: Live preflight probe for Landlock LSM ABI (v1–v6), user namespaces (`CLONE_NEWUSER`), Cgroups v2 `cgroup.kill`, and Seccomp-BPF filters.
+  - `[4: SESSIONS]`: Active sandbox session monitoring, PID inspection, and instant snapshot rollback (`u`).
+- **Resilient Terminal Lifecycle**: Non-blocking panic hook for guaranteed cooked-mode terminal restoration (`LeaveAlternateScreen`, `disable_raw_mode`, `ShowCursor`).
+
+### Removed
+- **Internal Markdown & Phase Runbooks**: Purged 27 obsolete internal orchestration logs, scratchpads, and phase runbooks (4,031 lines) from the repository root, `orchestration/`, and docs.
+
+### Fixed
+- **Packaging Parity**: Synchronized version 0.5.0 across all 24 package manifests (Cargo, npm, Homebrew, Chocolatey, RPM, AUR, Nix, VS Code extension, Helm, K8s).
 
 ## [0.4.7] - 2026-09-25
 ### Added
