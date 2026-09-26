@@ -9,12 +9,12 @@ use ratatui::Frame;
 use super::state::{DashboardState, MissionTab};
 
 const ASCII_LOGO_CIRCUIT: &[&str] = &[
-    r"██╗   ██╗███████╗████████╗████████╗ ██████╗ ",
-    r"██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝██╔═══██╗",
-    r"██║   ██║█████╗     ██║      ██║   ██║   ██║",
-    r"╚██╗ ██╔╝██╔══╝     ██║      ██║   ██║   ██║",
-    r" ╚████╔╝ ███████╗   ██║      ██║   ╚██████╔╝",
-    r"  ╚═══╝  ╚══════╝   ╚═╝      ╚═╝    ╚═════╝ ",
+    r"  ██╗   ██╗███████╗████████╗████████╗ ██████╗ ",
+    r"  ██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝██╔═══██╗",
+    r"  ██║   ██║█████╗     ██║      ██║   ██║   ██║",
+    r"  ╚██╗ ██╔╝██╔══╝     ██║      ██║   ██║   ██║",
+    r"   ╚████╔╝ ███████╗   ██║      ██║   ╚██████╔╝",
+    r"    ╚═══╝  ╚══════╝   ╚═╝      ╚═╝    ╚═════╝ ",
 ];
 
 const COMPACT_LOGO: &str = "  ╦  ╦ ╔═╗ ╔╦╗ ╔╦╗ ╔═╗  MISSION CONTROL";
@@ -27,13 +27,14 @@ pub fn draw(f: &mut Frame, state: &DashboardState) {
     let bg_block = Block::default().style(Style::default().bg(theme.bg));
     f.render_widget(bg_block, area);
 
-    // Compute layout: Header, Tabs, Body, Footer
+    // Compute layout: Top Margin, Header, Tabs, Body, Footer
     let show_full_logo = area.height >= 30 && area.width >= 70;
     let header_height = if show_full_logo { 7 } else { 3 };
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(1), // Top margin / breathing room from terminal edges
             Constraint::Length(header_height),
             Constraint::Length(3), // Tab bar
             Constraint::Min(12),   // Body
@@ -41,17 +42,17 @@ pub fn draw(f: &mut Frame, state: &DashboardState) {
         ])
         .split(area);
 
-    render_header(f, state, chunks[0], show_full_logo);
-    render_tabs(f, state, chunks[1]);
+    render_header(f, state, chunks[1], show_full_logo);
+    render_tabs(f, state, chunks[2]);
 
     match state.active_tab {
-        MissionTab::Agents => render_tab_agents(f, state, chunks[2]),
-        MissionTab::Sandbox => render_tab_sandbox(f, state, chunks[2]),
-        MissionTab::Doctor => render_tab_doctor(f, state, chunks[2]),
-        MissionTab::Sessions => render_tab_sessions(f, state, chunks[2]),
+        MissionTab::Agents => render_tab_agents(f, state, chunks[3]),
+        MissionTab::Sandbox => render_tab_sandbox(f, state, chunks[3]),
+        MissionTab::Doctor => render_tab_doctor(f, state, chunks[3]),
+        MissionTab::Sessions => render_tab_sessions(f, state, chunks[3]),
     }
 
-    render_footer(f, state, chunks[3]);
+    render_footer(f, state, chunks[4]);
 }
 
 fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: bool) {
@@ -60,7 +61,7 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
     if full_logo {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(48), Constraint::Min(20)])
+            .constraints([Constraint::Length(50), Constraint::Min(20)])
             .split(area);
 
         let logo_lines: Vec<Line> = ASCII_LOGO_CIRCUIT
@@ -78,7 +79,7 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
         let telemetry_lines = vec![
             Line::from(vec![
                 Span::styled(
-                    "V E T T O   M I S S I O N   C O N T R O L   ",
+                    "  V E T T O   M I S S I O N   C O N T R O L   ",
                     Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
@@ -89,7 +90,7 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
                 ),
             ]),
             Line::from(vec![
-                Span::styled("KERNEL ISOLATION: ", Style::default().fg(theme.muted)),
+                Span::styled("  KERNEL ISOLATION: ", Style::default().fg(theme.muted)),
                 Span::styled(
                     "FULL [Landlock + Namespaces + Cgroups v2 + Seccomp]",
                     Style::default()
@@ -98,7 +99,7 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
                 ),
             ]),
             Line::from(vec![
-                Span::styled("ACTIVE THEME:     ", Style::default().fg(theme.muted)),
+                Span::styled("  ACTIVE THEME:     ", Style::default().fg(theme.muted)),
                 Span::styled(
                     theme.name(),
                     Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
@@ -106,7 +107,7 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
                 Span::styled(" (press 't' to toggle)", Style::default().fg(theme.muted)),
             ]),
             Line::from(vec![
-                Span::styled("ACTIVE SHIMS:     ", Style::default().fg(theme.muted)),
+                Span::styled("  ACTIVE SHIMS:     ", Style::default().fg(theme.muted)),
                 Span::styled(
                     format!(
                         "{} / {} agents protected",
@@ -1111,5 +1112,64 @@ fn format_bytes(bytes: u64) -> String {
         format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     } else {
         format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    #[test]
+    fn test_top_margin_leaves_row_zero_empty_in_full_mode() {
+        let backend = TestBackend::new(100, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let state = DashboardState::new(None);
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // Row 0 should be empty (all spaces) because of the top margin breathing room
+        for x in 0..100 {
+            assert_eq!(
+                buffer.get(x, 0).symbol(),
+                " ",
+                "Expected row 0 col {x} to be empty space due to top breathing room margin"
+            );
+        }
+
+        // Row 1 should contain content (the header starts at row 1)
+        let row_1_has_content = (0..100).any(|x| buffer.get(x, 1).symbol() != " ");
+        assert!(
+            row_1_has_content,
+            "Expected row 1 to contain header content"
+        );
+    }
+
+    #[test]
+    fn test_top_margin_leaves_row_zero_empty_in_compact_mode() {
+        let backend = TestBackend::new(60, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let state = DashboardState::new(None);
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // Row 0 should be empty
+        for x in 0..60 {
+            assert_eq!(
+                buffer.get(x, 0).symbol(),
+                " ",
+                "Expected row 0 col {x} to be empty space in compact mode"
+            );
+        }
+
+        // Row 1 should contain compact header content
+        let row_1_has_content = (0..60).any(|x| buffer.get(x, 1).symbol() != " ");
+        assert!(
+            row_1_has_content,
+            "Expected row 1 to contain compact header"
+        );
     }
 }
