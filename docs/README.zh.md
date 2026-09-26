@@ -17,7 +17,7 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
-专为 AI 编程 CLI 助手（**Claude Code**、**OpenAI Codex**、**Cursor**、**Gemini**、**OpenCode**、**Aider**、**Antigravity**）打造的无守护进程（daemon-less）、无特权（rootless）内核级沙箱与安全策略运行时。Vetto 直接在 `fork()` 与 `execve()` 之间注入确定性的内核安全边界，初始化延迟低于 4 毫秒，且无需 Docker 容器开销。
+专为 AI 编程 CLI 助手（**Claude Code**、**OpenAI Codex**、**Cursor**、**OpenCode**、**Aider**、**Antigravity**、**OMP**、**ZCode**、**Kimi**、**Grok**）打造的无守护进程（daemon-less）、无特权（rootless）内核级沙箱与安全策略运行时。Vetto 直接在 `fork()` 与 `execve()` 之间注入确定性的内核安全边界，初始化延迟低于 4 毫秒，且无需 Docker 容器开销。
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 为您的 AI 编程助手启用零配置沙箱接管。Vetto 会在 `~/.vetto/shims` 中安装无侵入垫片并优先加载至 `PATH`：
 
 ```bash
-vetto enable claude   # 支持 codex, opencode, gemini, cursor, aider 等 15 款预置配置
+vetto enable claude   # 支持 codex, opencode, cursor, aider, antigravity 等 18 款预置配置
 claude                # 照常运行 — 全程受内核边界严格保护
 ```
 
@@ -141,7 +141,7 @@ Vetto 根据非特权用户空间可用的内核特性，严格划分三级安�
 
 ## 兼容智能体矩阵
 
-Vetto 为 15 款主流 AI 助手提供预置沙箱配置文件（`profiles/agents/*.toml`）、动态包管理器缓存支持（`npm`、`uv`、`bun`）以及 Computer Use 桌面图形透传：
+Vetto 为 18 款主流 AI 助手提供预置沙箱配置文件（`profiles/agents/*.toml`）、动态包管理器缓存支持（`npm`、`uv`、`bun`）以及 Computer Use 桌面图形透传：
 
 | 智能体 | 命令 / 预设 | 预置出站网络域名 | 插件与缓存挂载路径 |
 | :--- | :--- | :--- | :--- |
@@ -149,7 +149,10 @@ Vetto 为 15 款主流 AI 助手提供预置沙箱配置文件（`profiles/agent
 | **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, 插件目录 |
 | **OpenCode** | `opencode` | 动态 JSONC 端点（AIHubMix, Nvidia 等） | `~/.local/share/opencode`, `~/.config/opencode` |
 | **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, 遥测端点 | `~/.gemini/antigravity`, 技能与插件 |
-| **Gemini CLI** | `gemini` | `generativelanguage.googleapis.com` | `~/.config/gemini`, OAuth 凭证 |
+| **OMP** | `omp` | `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | `~/.config/omp`, `~/.omp`, project local `.omp` |
+| **ZCode** | `zcode` | `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | `~/.zcode`, `~/.config/zcode` |
+| **Kimi Code** | `kimi` | `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | `~/.kimi`, `~/.config/kimi` |
+| **Grok Build** | `grok` | `x.ai`, `api.x.ai`, `grok.com` | `~/.grok`, `~/.config/grok` |
 | **Cursor** | `cursor` | Cursor 后端服务, 扩展市场 | VS Code IPC 套接字, `~/.cursor` |
 | **Aider** | `aider` | 所配置的 LLM 服务提供商端点 | Git 仓库根目录, 历史缓存 |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code 扩展宿主, 浏览器缓存 |

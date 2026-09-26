@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        agent: [claude-code, codex, gemini]
+        agent: [claude-code, codex]
         os: [ubuntu-latest, macos-14]
 
     steps:
@@ -40,7 +40,6 @@ jobs:
           AGENT: ${{ matrix.agent }}
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -euo pipefail
           has_key="false"
@@ -54,10 +53,6 @@ jobs:
             codex)
               key_name="OPENAI_API_KEY"
               if [[ -n "${OPENAI_KEY:-}" ]]; then has_key="true"; fi
-              ;;
-            gemini)
-              key_name="GEMINI_API_KEY"
-              if [[ -n "${GEMINI_KEY:-}" ]]; then has_key="true"; fi
               ;;
           esac
 
@@ -92,9 +87,6 @@ jobs:
                 ;;
               codex)
                 $VETTO_BIN --verify --net=allowlist:api.openai.com -- echo "codex execution simulated under verified sandbox"
-                ;;
-              gemini)
-                $VETTO_BIN --verify --net=allowlist:generativelanguage.googleapis.com -- echo "gemini execution simulated under verified sandbox"
                 ;;
             esac
           else
@@ -132,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [codex, claude, gemini, antigravity, aider, cursor, cline, opencode, copilot, windsurf, continue, goose, openhands, swe_agent, plandex, mentat, gpt_engineer, devin, crust, amp]
+        profile: [codex, claude, antigravity, aider, cursor, cline, opencode, copilot, windsurf, continue, goose, openhands, swe_agent, plandex, mentat, gpt_engineer, devin, crust, amp, omp, zcode, kimi, grok]
         os: [ubuntu-latest, windows-latest]
 
     steps:

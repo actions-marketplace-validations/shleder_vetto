@@ -1,13 +1,12 @@
 [metadata]
-name = "gemini"
-description = "Safe compatibility roots for Gemini CLI."
+name = "zcode"
+description = "Hardened compatibility roots for ZCode CLI (Z.ai / GLM-5.3)."
 
 [filesystem]
 allow_read = [
     "$AGENT",
-    "$HOME/.gemini/plugins",
-    "$HOME/.gemini/skills",
-    "$HOME/.config/gemini",
+    "$HOME/.zcode",
+    "$HOME/.config/zcode",
     "$HOME/.local/bin",
     "$HOME/.cargo/bin",
     "/tmp",
@@ -23,9 +22,8 @@ allow_read = [
 ]
 allow_write = [
     "$AGENT",
-    "$HOME/.gemini/plugins",
-    "$HOME/.gemini/skills",
-    "$HOME/.config/gemini",
+    "$HOME/.zcode",
+    "$HOME/.config/zcode",
     "/tmp",
     "$HOME/.cache",
     "$HOME/.cache/ms-playwright",
@@ -40,9 +38,11 @@ allow_write = [
 
 [environment]
 pass_through = [
-    "GEMINI_API_KEY",
-    "GOOGLE_API_KEY",
-    "GEMINI_*",
+    "ZCODE_*",
+    "ZAI_API_KEY",
+    "GLM_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
     "DISPLAY",
     "WAYLAND_DISPLAY",
     "XDG_CURRENT_DESKTOP",
@@ -52,4 +52,15 @@ pass_through = [
     "DBUS_SESSION_BUS_ADDRESS",
     "BROWSER",
     "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "z.ai",
+    "api.z.ai",
+    "glm.z.ai",
+    "api.openai.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
 ]

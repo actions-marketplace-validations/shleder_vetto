@@ -98,7 +98,6 @@ fn command_for_agent(agent: &str) -> Option<String> {
     match canon {
         "codex" => Some("codex".to_string()),
         "claude" => Some("claude".to_string()),
-        "gemini" => Some("gemini".to_string()),
         "antigravity" => Some("antigravity".to_string()),
         "aider" => Some("aider".to_string()),
         "cursor" => Some("cursor-agent".to_string()),
@@ -110,6 +109,10 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "openhands" => Some("openhands".to_string()),
         "devin" => Some("devin".to_string()),
         "smolagents" => Some("smolagents".to_string()),
+        "omp" => Some("omp".to_string()),
+        "zcode" => Some("zcode".to_string()),
+        "kimi" => Some("kimi".to_string()),
+        "grok" => Some("grok".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }

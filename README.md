@@ -17,7 +17,7 @@
   <a href="docs/README.de.md">Deutsch</a>
 </p>
 
-Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI coding CLI agents (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto injects immutable security boundaries directly between `fork()` and `execve()` with sub-4ms startup latency and zero Docker overhead.
+Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI coding CLI agents (**Claude Code**, **OpenAI Codex**, **Cursor**, **OpenCode**, **Aider**, **Antigravity**, **OMP**, **ZCode**, **Kimi**, **Grok**). Vetto injects immutable security boundaries directly between `fork()` and `execve()` with sub-4ms startup latency and zero Docker overhead.
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Enable zero-configuration sandboxing for your coding agent once. Vetto installs a non-destructive shim in `~/.vetto/shims` with priority in `PATH`:
 
 ```bash
-vetto enable claude   # supports codex, opencode, gemini, cursor, aider, and 15 profiles
+vetto enable claude   # supports codex, opencode, cursor, aider, antigravity, and 18 profiles
 claude                # runs normally — fully sandboxed at the kernel boundary
 ```
 
@@ -141,7 +141,7 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 
 ## Multi-Agent Compatibility Roster
 
-Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 15 leading agent runtimes:
+Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 18 leading agent runtimes:
 
 | Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
 | :--- | :--- | :--- | :--- |
@@ -149,7 +149,10 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, plugins |
 | **OpenCode** | `opencode` | Dynamic JSONC endpoints (AIHubMix, Nvidia) | `~/.local/share/opencode`, `~/.config/opencode` |
 | **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, telemetry | `~/.gemini/antigravity`, plugins, skills |
-| **Gemini CLI** | `gemini` | `generativelanguage.googleapis.com` | `~/.config/gemini`, OAuth tokens |
+| **OMP** | `omp` | `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | `~/.config/omp`, `~/.omp`, project local `.omp` |
+| **ZCode** | `zcode` | `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | `~/.zcode`, `~/.config/zcode` |
+| **Kimi Code** | `kimi` | `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | `~/.kimi`, `~/.config/kimi` |
+| **Grok Build** | `grok` | `x.ai`, `api.x.ai`, `grok.com` | `~/.grok`, `~/.config/grok` |
 | **Cursor** | `cursor` | Cursor backend, extension marketplace | VS Code IPC sockets, `~/.cursor` |
 | **Aider** | `aider` | Configured LLM provider endpoints | Git repo root, history caches |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code extension host, browser caches |

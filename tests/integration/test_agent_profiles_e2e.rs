@@ -13,7 +13,9 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
     std::fs::create_dir_all(&project).expect("create project dir");
     std::fs::create_dir_all(&home).expect("create home dir");
 
-    let agents = vec!["codex", "claude", "aider", "gemini", "opencode"];
+    let agents = vec![
+        "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok",
+    ];
     for agent in agents {
         let opts = PolicyLoadOptions {
             agent: Some(agent.to_string()),
@@ -57,12 +59,18 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
                 "opencode auth.json must not be denied"
             );
         }
+        if agent == "omp" {
+            assert!(
+                pol.allow_write.contains(&home.join(".config/omp")),
+                "omp must have write access to ~/.config/omp"
+            );
+        }
     }
 }
 
 #[test]
-fn test_all_15_agent_profiles_load_successfully() {
-    let temp = TempProject::new("all-15-agents");
+fn test_all_18_agent_profiles_load_successfully() {
+    let temp = TempProject::new("all-18-agents");
     let project = temp.path().join("project");
     let home = temp.path().join("home");
     std::fs::create_dir_all(&project).expect("create project dir");
@@ -73,7 +81,6 @@ fn test_all_15_agent_profiles_load_successfully() {
         "claude",
         "aider",
         "antigravity",
-        "gemini",
         "opencode",
         "cursor",
         "cline",
@@ -83,6 +90,10 @@ fn test_all_15_agent_profiles_load_successfully() {
         "openhands",
         "copilot",
         "smolagents",
+        "omp",
+        "zcode",
+        "kimi",
+        "grok",
         "custom",
     ];
 
@@ -110,8 +121,8 @@ fn test_all_15_agent_profiles_load_successfully() {
 }
 
 #[test]
-fn test_aider_and_gemini_profile_credentials() {
-    let temp = TempProject::new("aider-gemini-creds");
+fn test_aider_and_omp_profile_credentials() {
+    let temp = TempProject::new("aider-omp-creds");
     let project = temp.path().join("project");
     let home = temp.path().join("home");
     std::fs::create_dir_all(&project).expect("create project dir");
@@ -131,21 +142,29 @@ fn test_aider_and_gemini_profile_credentials() {
         "aider .aider.conf.yml must not be denied"
     );
 
-    // 2. Gemini: GEMINI_API_KEY in environment pass_through
-    let opts_gemini = PolicyLoadOptions {
-        agent: Some("gemini".to_string()),
+    // 2. OMP: ANTHROPIC_API_KEY and OMP_* in environment pass_through
+    let opts_omp = PolicyLoadOptions {
+        agent: Some("omp".to_string()),
         include_project_policy: false,
         ..Default::default()
     };
-    let pol_gemini = load_with_options("default", None, &project, &home, Tier::Full, &opts_gemini)
-        .expect("load gemini policy");
+    let pol_omp = load_with_options("default", None, &project, &home, Tier::Full, &opts_omp)
+        .expect("load omp policy");
     assert!(
-        pol_gemini
+        pol_omp
             .environment
             .pass_through
             .iter()
-            .any(|v| v == "GEMINI_API_KEY"),
-        "gemini policy must pass through GEMINI_API_KEY"
+            .any(|v| v == "ANTHROPIC_API_KEY"),
+        "omp policy must pass through ANTHROPIC_API_KEY"
+    );
+    assert!(
+        pol_omp
+            .environment
+            .pass_through
+            .iter()
+            .any(|v| v == "OMP_*"),
+        "omp policy must pass through OMP_*"
     );
 }
 
@@ -312,13 +331,16 @@ fn test_agent_profiles_unblock_sockets_and_ipc_for_mcp_plugins() {
         "cline",
         "aider",
         "antigravity",
-        "gemini",
         "goose",
         "windsurf",
         "openhands",
         "devin",
         "copilot",
         "smolagents",
+        "omp",
+        "zcode",
+        "kimi",
+        "grok",
     ];
 
     for agent in agents {
@@ -397,7 +419,6 @@ fn test_all_agent_profiles_unblock_user_tool_binaries_and_browser_caches() {
         "claude",
         "aider",
         "antigravity",
-        "gemini",
         "opencode",
         "cursor",
         "cline",
@@ -407,6 +428,10 @@ fn test_all_agent_profiles_unblock_user_tool_binaries_and_browser_caches() {
         "openhands",
         "copilot",
         "smolagents",
+        "omp",
+        "zcode",
+        "kimi",
+        "grok",
         "custom",
     ];
 

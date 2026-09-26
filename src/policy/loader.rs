@@ -1192,6 +1192,22 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".cache/transformers"));
                         let _ = std::fs::create_dir_all(home.join(".cache/torch"));
                     }
+                    Some("omp") => {
+                        let _ = std::fs::create_dir_all(home.join(".config/omp"));
+                        let _ = std::fs::create_dir_all(home.join(".omp"));
+                    }
+                    Some("zcode") => {
+                        let _ = std::fs::create_dir_all(home.join(".zcode"));
+                        let _ = std::fs::create_dir_all(home.join(".config/zcode"));
+                    }
+                    Some("kimi") => {
+                        let _ = std::fs::create_dir_all(home.join(".kimi"));
+                        let _ = std::fs::create_dir_all(home.join(".config/kimi"));
+                    }
+                    Some("grok") => {
+                        let _ = std::fs::create_dir_all(home.join(".grok"));
+                        let _ = std::fs::create_dir_all(home.join(".config/grok"));
+                    }
                     _ => {}
                 }
                 let _ = std::fs::create_dir_all(home.join(".npm/_npx"));
@@ -1925,7 +1941,6 @@ fn agent_root(home: &Path, agent: &str) -> Result<PathBuf> {
     let suffix = match canon {
         "codex" => PathBuf::from(".codex"),
         "claude" => PathBuf::from(".claude"),
-        "gemini" => PathBuf::from(".gemini"),
         "antigravity" | "agy" => PathBuf::from(".gemini"),
         "aider" => PathBuf::from(".aider"),
         "cursor" => PathBuf::from(".cursor"),
@@ -1937,6 +1952,10 @@ fn agent_root(home: &Path, agent: &str) -> Result<PathBuf> {
         "openhands" => PathBuf::from(".openhands"),
         "devin" => PathBuf::from(".devin"),
         "smolagents" => PathBuf::from(".cache/smolagents"),
+        "omp" => PathBuf::from(".omp"),
+        "zcode" => PathBuf::from(".zcode"),
+        "kimi" => PathBuf::from(".kimi"),
+        "grok" => PathBuf::from(".grok"),
         "custom" => PathBuf::from(".config/vetto/agents/custom"),
         _ => bail!(
             "unknown agent '{}'; known agents: {}",
@@ -2637,8 +2656,8 @@ allow_read = ["/usr", "${PROJECT}"]
     }
 
     #[test]
-    fn gemini_agent_preset_policy_loading() {
-        let root = std::env::temp_dir().join(format!("vetto-gemini-test-{}", std::process::id()));
+    fn omp_agent_preset_policy_loading() {
+        let root = std::env::temp_dir().join(format!("vetto-omp-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
 
@@ -2650,36 +2669,37 @@ allow_read = ["/usr", "${PROJECT}"]
         std::fs::create_dir_all(&claude_dir).unwrap();
         std::fs::write(&env_file, "SECRET=1").unwrap();
 
-        let gemini_dir = root.join(".gemini");
-        // Do NOT manually create gemini_dir — loader must auto-create it
+        let omp_dir = root.join(".omp");
+        // Do NOT manually create omp_dir — loader must auto-create it
 
         let options = PolicyLoadOptions {
-            agent: Some("gemini-cli".to_string()),
+            agent: Some("omp".to_string()),
             ..Default::default()
         };
 
         let pol = load_with_options("default", None, &root, &root, Tier::Full, &options)
-            .expect("gemini preset must load");
+            .expect("omp preset must load");
 
         // Environment pass_through
         use std::ffi::OsStr;
+        assert!(pol.environment.allows(OsStr::new("OMP_CONFIG")));
+        assert!(pol.environment.allows(OsStr::new("ANTHROPIC_API_KEY")));
+        assert!(pol.environment.allows(OsStr::new("OPENAI_API_KEY")));
         assert!(pol.environment.allows(OsStr::new("GEMINI_API_KEY")));
-        assert!(pol.environment.allows(OsStr::new("GOOGLE_API_KEY")));
-        assert!(pol.environment.allows(OsStr::new("GEMINI_BASE_URL")));
-        assert!(pol.environment.allows(OsStr::new("GEMINI_TEST_FLAG")));
+        assert!(pol.environment.allows(OsStr::new("OPENROUTER_API_KEY")));
         assert!(pol.environment.allows(OsStr::new("PATH")));
         assert!(!pol.environment.allows(OsStr::new("AWS_SECRET_ACCESS_KEY")));
         assert!(!pol.environment.allows(OsStr::new("GH_TOKEN")));
 
         // Filesystem permissions
-        assert!(pol.allow_write.contains(&gemini_dir));
+        assert!(pol.allow_write.contains(&omp_dir));
 
-        // Secrets must be in deny_resolved, but gemini_dir must NOT be in deny_resolved
+        // Secrets must be in deny_resolved, but omp_dir must NOT be in deny_resolved
         let deny_paths: Vec<_> = pol.deny_resolved.iter().map(|d| &d.path).collect();
         assert!(deny_paths.contains(&&ssh_dir));
         assert!(deny_paths.contains(&&env_file));
         assert!(deny_paths.contains(&&claude_dir));
-        assert!(!deny_paths.contains(&&gemini_dir));
+        assert!(!deny_paths.contains(&&omp_dir));
 
         let _ = std::fs::remove_dir_all(root);
     }

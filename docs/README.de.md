@@ -17,7 +17,7 @@
   <a href="README.de.md"><b>Deutsch</b></a>
 </p>
 
-Daemon-lose, unprivilegierte (rootless) Kernel-Sandbox und Richtlinien-Laufzeitumgebung für KI-Programmier-CLI-Agenten (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto injiziert unveränderliche Sicherheitsgrenzen direkt zwischen `fork()` und `execve()` mit einer Startlatenz von unter 4 ms und ohne Docker-Overhead.
+Daemon-lose, unprivilegierte (rootless) Kernel-Sandbox und Richtlinien-Laufzeitumgebung für KI-Programmier-CLI-Agenten (**Claude Code**, **OpenAI Codex**, **Cursor**, **OpenCode**, **Aider**, **Antigravity**, **OMP**, **ZCode**, **Kimi**, **Grok**). Vetto injiziert unveränderliche Sicherheitsgrenzen direkt zwischen `fork()` und `execve()` mit einer Startlatenz von unter 4 ms und ohne Docker-Overhead.
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Aktivieren Sie die konfigurationsfreie Sandbox für Ihren Agenten. Vetto installiert einen transparenten Shim in `~/.vetto/shims` mit Vorrang im `PATH`:
 
 ```bash
-vetto enable claude   # unterstützt codex, opencode, gemini, cursor, aider und 15 Profile
+vetto enable claude   # unterstützt codex, opencode, cursor, aider, antigravity und 18 Profile
 claude                # läuft wie gewohnt — vollständig durch den Kernel geschützt
 ```
 

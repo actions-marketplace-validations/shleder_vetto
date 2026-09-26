@@ -12,7 +12,10 @@ unproven rather than assumed.
 | Claude Code | `claude`, `claude -p` | Optional/tool-specific | statusline for interactive, full/none for `-p` | `claude` | Provider and package endpoints depend on the task | not in CI |
 | OpenCode | `opencode` | permission model is not treated as an OS boundary | statusline | `opencode` | Provider-specific | not in CI |
 | Antigravity | `antigravity`, `agy` | Google internal boundary | statusline or full | `antigravity` | Google Cloud & APIs | not in CI |
-| Gemini CLI | `gemini` | Implementation dependent | statusline | `gemini` | Google Generative Language API | not in CI |
+| OMP | `omp` | Stencil Labs isolation boundary | statusline | `omp` | `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | not in CI |
+| ZCode | `zcode`, `zcode-cli` | Z.ai internal boundary | statusline | `zcode` | `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | not in CI |
+| Kimi Code | `kimi` | Moonshot AI boundary | statusline | `kimi` | `code.kimi.com`, Moonshot API | not in CI |
+| Grok Build | `grok`, `grok-build` | xAI boundary | statusline | `grok` | `x.ai`, `api.x.ai`, `grok.com` | not in CI |
 | Cursor Agent | `cursor-agent` | Implementation/version dependent | full | `cursor` | Treat endpoints as untrusted configuration | not in CI |
 | Aider | `aider` | No uniform OS boundary assumed | statusline | `aider` | Model provider plus optional Git endpoints | not in CI |
 | Cline | user-configured CLI/extension command | unknown | full | `cline` | Do not infer endpoints from the preset | not in CI |

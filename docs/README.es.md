@@ -17,7 +17,7 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
-Entorno de ejecución (runtime) sin demonios (daemon-less) y sin privilegios de root (rootless) para aislamiento a nivel de kernel y aplicación de políticas de seguridad en agentes de codificación CLI (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto inyecta límites de seguridad inmutables directamente entre `fork()` y `execve()` con una latencia de inicio inferior a 4 ms y sin sobrecarga de Docker.
+Entorno de ejecución (runtime) sin demonios (daemon-less) y sin privilegios de root (rootless) para aislamiento a nivel de kernel y aplicación de políticas de seguridad en agentes de codificación CLI (**Claude Code**, **OpenAI Codex**, **Cursor**, **OpenCode**, **Aider**, **Antigravity**, **OMP**, **ZCode**, **Kimi**, **Grok**). Vetto inyecta límites de seguridad inmutables directamente entre `fork()` y `execve()` con una latencia de inicio inferior a 4 ms y sin sobrecarga de Docker.
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Habilita el aislamiento sin configuración para tu agente de codificación. Vetto instala un shim no destructivo en `~/.vetto/shims` con prioridad en `PATH`:
 
 ```bash
-vetto enable claude   # compatible con codex, opencode, gemini, cursor, aider y 15 perfiles
+vetto enable claude   # compatible con codex, opencode, cursor, aider, antigravity y 18 perfiles
 claude                # se ejecuta normalmente, totalmente confinado en el kernel
 ```
 
