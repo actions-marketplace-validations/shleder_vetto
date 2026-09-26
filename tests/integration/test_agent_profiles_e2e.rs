@@ -13,16 +13,7 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
     std::fs::create_dir_all(&project).expect("create project dir");
     std::fs::create_dir_all(&home).expect("create home dir");
 
-    let agents = vec![
-        "codex",
-        "claude",
-        "aider",
-        "opencode",
-        "omp",
-        "zcode",
-        "kimi",
-        "grok",
-    ];
+    let agents = vec!["codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok"];
     for agent in agents {
         let opts = PolicyLoadOptions {
             agent: Some(agent.to_string()),

@@ -97,11 +97,7 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "api.moonshot.cn".into(),
             "api.moonshot.ai".into(),
         ],
-        "grok" => vec![
-            "x.ai".into(),
-            "api.x.ai".into(),
-            "grok.com".into(),
-        ],
+        "grok" => vec!["x.ai".into(), "api.x.ai".into(), "grok.com".into()],
         "antigravity" | "agy" => vec![
             "accounts.google.com".into(),
             "oauth2.googleapis.com".into(),
