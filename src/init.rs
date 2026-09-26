@@ -206,6 +206,30 @@ pub fn analyze_project(root: &Path) -> ProjectAnalysis {
             .recommended_network_domains
             .extend(agent_network_allowlist("smolagents"));
     }
+    if root.join(".omp").exists() || root.join("omp.toml").exists() {
+        analysis.detected_agents.push("OMP");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("omp"));
+    }
+    if root.join(".zcode").exists() || root.join("zcode.json").exists() {
+        analysis.detected_agents.push("ZCode");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("zcode"));
+    }
+    if root.join(".kimi").exists() || root.join("kimi.json").exists() {
+        analysis.detected_agents.push("Kimi Code");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("kimi"));
+    }
+    if root.join(".grok").exists() || root.join("grok.json").exists() {
+        analysis.detected_agents.push("Grok Build");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("grok"));
+    }
     if root.join("AGENTS.md").exists() {
         analysis.detected_agents.push("AGENTS.md");
     }
@@ -380,7 +404,7 @@ pub fn run_wizard(
     writer: &mut impl Write,
 ) -> Result<String> {
     writer.write_all(b"vetto first-run wizard:\n")?;
-    writer.write_all(b"1. Which AI coding agent do you use? [claude / codex / opencode / gemini / cursor / aider / windsurf / none]: ")?;
+    writer.write_all(b"1. Which AI coding agent do you use? [claude / codex / opencode / cursor / aider / windsurf / omp / zcode / kimi / grok / none]: ")?;
     writer.flush()?;
 
     let mut agent_line = String::new();
@@ -417,7 +441,6 @@ pub fn run_wizard(
         analysis.detected_agents = vec![match a.as_str() {
             "claude" => "Claude Code",
             "codex" => "OpenAI Codex",
-            "gemini" => "Google Gemini",
             "antigravity" => "Antigravity CLI",
             "aider" => "Aider",
             "opencode" => {
@@ -432,6 +455,10 @@ pub fn run_wizard(
             "openhands" => "OpenHands",
             "devin" => "Cognition Devin",
             "smolagents" => "Smolagents",
+            "omp" => "OMP",
+            "zcode" => "ZCode",
+            "kimi" => "Kimi Code",
+            "grok" => "Grok Build",
             _ => "Custom Agent",
         }];
         if allow_net {

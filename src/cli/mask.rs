@@ -83,7 +83,7 @@ mod tests {
     fn test_stream_mask_marker_style() {
         let input = "export ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789\n\
                      export OPENAI_API_KEY=sk-proj-0123456789abcdefghijklmnopqrstuvwxyz\n\
-                     export GEMINI_API_KEY=AIzaSyD-0123456789abcdefghijklmnopqrstuvwxyz\n\
+                     export GOOGLE_API_KEY=AIzaSyD-0123456789abcdefghijklmnopqrstuvwxyz\n\
                      export NPM_TOKEN=npm_0123456789abcdefghijklmnopqrstuvwxyz\n\
                      export PYPI_TOKEN=pypi-0123456789abcdefghijklmnopqrstuvwxyz\n\
                      export GITHUB_TOKEN=gho_0123456789abcdefghijklmnopqrstuvwxyz\n\

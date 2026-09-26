@@ -79,10 +79,28 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "chat.openai.com".into(),
             "platform.openai.com".into(),
         ],
-        "gemini" => vec![
+        "omp" => vec![
+            "omp.sh".into(),
+            "api.anthropic.com".into(),
+            "api.openai.com".into(),
             "generativelanguage.googleapis.com".into(),
-            "oauth2.googleapis.com".into(),
-            "accounts.google.com".into(),
+            "openrouter.ai".into(),
+        ],
+        "zcode" => vec![
+            "z.ai".into(),
+            "api.z.ai".into(),
+            "glm.z.ai".into(),
+            "api.openai.com".into(),
+        ],
+        "kimi" => vec![
+            "code.kimi.com".into(),
+            "api.moonshot.cn".into(),
+            "api.moonshot.ai".into(),
+        ],
+        "grok" => vec![
+            "x.ai".into(),
+            "api.x.ai".into(),
+            "grok.com".into(),
         ],
         "antigravity" | "agy" => vec![
             "accounts.google.com".into(),
@@ -365,6 +383,10 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
         "claude" => Some(&["$HOME/.claude"]),
         "codex" => Some(&["$HOME/.codex"]),
         "antigravity" | "agy" => Some(&["$HOME/.gemini", "$HOME/.config/Antigravity"]),
+        "omp" => Some(&["$HOME/.omp", "$HOME/.config/omp"]),
+        "zcode" => Some(&["$HOME/.zcode", "$HOME/.config/zcode"]),
+        "kimi" => Some(&["$HOME/.kimi", "$HOME/.config/kimi"]),
+        "grok" => Some(&["$HOME/.grok", "$HOME/.config/grok"]),
         _ => None,
     }
 }
@@ -387,6 +409,10 @@ pub const KNOWN_PRESETS: &[&str] = &[
     "codex",
     "antigravity",
     "agy",
+    "omp",
+    "zcode",
+    "kimi",
+    "grok",
 ];
 
 #[cfg(test)]
@@ -459,22 +485,70 @@ mod tests {
             ]
         );
         assert_eq!(
-            agent_network_allowlist("gemini"),
+            agent_network_allowlist("omp"),
             vec![
+                "omp.sh",
+                "api.anthropic.com",
+                "api.openai.com",
                 "generativelanguage.googleapis.com",
-                "oauth2.googleapis.com",
-                "accounts.google.com",
+                "openrouter.ai",
                 "registry.npmjs.org",
                 "pypi.org",
                 "files.pythonhosted.org",
             ]
         );
         assert_eq!(
-            agent_network_allowlist("gemini-cli"),
+            agent_network_allowlist("zcode"),
             vec![
-                "generativelanguage.googleapis.com",
-                "oauth2.googleapis.com",
-                "accounts.google.com",
+                "z.ai",
+                "api.z.ai",
+                "glm.z.ai",
+                "api.openai.com",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("zcode-cli"),
+            vec![
+                "z.ai",
+                "api.z.ai",
+                "glm.z.ai",
+                "api.openai.com",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("kimi"),
+            vec![
+                "code.kimi.com",
+                "api.moonshot.cn",
+                "api.moonshot.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("grok"),
+            vec![
+                "x.ai",
+                "api.x.ai",
+                "grok.com",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("grok-build"),
+            vec![
+                "x.ai",
+                "api.x.ai",
+                "grok.com",
                 "registry.npmjs.org",
                 "pypi.org",
                 "files.pythonhosted.org",

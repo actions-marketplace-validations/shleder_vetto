@@ -6,7 +6,7 @@ A fair, factual comparison of isolation mechanisms, threat models, failure modes
 
 ## 1. Feature & Boundary Matrix
 
-| Dimension | `vetto` | Built-in Agent Sandboxes (Claude Code / Codex / Gemini) | Docker / OCI Containers | gVisor / MicroVMs (Firecracker) |
+| Dimension | `vetto` | Built-in Agent Sandboxes (Claude Code / Codex / Antigravity) | Docker / OCI Containers | gVisor / MicroVMs (Firecracker) |
 |---|---|---|---|---|
 | **Threat Model** | Compromised agent, untrusted repo scripts, prompt injection attempting host escape or data exfiltration. | Agent accidental mistakes and unauthorized tool calls within IDE / CLI lifecycle. | Untrusted multi-tenant workload isolation with root separation. | Hostile untrusted code execution in multi-tenant cloud environments. |
 | **Startup Overhead** | **≈184 ms end-to-end for a full session** (e2e benchmark, fs-only median on CI runners; sandbox setup itself is sub-millisecond), daemon-less. | **0ms** (application-level checks) or process wrapper. | **150ms – 1s** (container daemon + bridge network setup). | **50ms – 500ms** (user-space kernel / VMM boot). |
@@ -45,7 +45,7 @@ Enforcement relies on host operating system kernel primitives. `vetto` never sil
 ## 3. When to Choose What
 
 ### Choose `vetto` when:
-1. You run AI coding agents (Claude Code, Codex, Gemini CLI, Aider, OpenCode) directly on your developer workstation and need sub-millisecond startup without running inside heavy containers.
+1. You run AI coding agents (Claude Code, Codex, Antigravity, Aider, OpenCode) directly on your developer workstation and need sub-millisecond startup without running inside heavy containers.
 2. You want automatic detection and protection of credentials (`.env`, `~/.aws`, `~/.ssh`) without modifying the agent's code.
 3. You need deterministic, fail-closed CI execution with detailed audit trails and SARIF/HTML security reports.
 

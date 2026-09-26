@@ -25,7 +25,10 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 | **OpenAI Codex** | `--agent codex` | `codex exec "..."` | ✅ Verified | ✅ `--net=allowlist:api.openai.com` | ✅ Full TUI & Statusline | ✅ 100% Pass |
 | **OpenCode** | `--agent opencode` | `opencode "..."` | ✅ Verified | ✅ Allowlisted model endpoints | ✅ Statusline | ✅ 100% Pass |
 | **Antigravity** | `--agent antigravity` | `antigravity "..."` / `agy "..."` | ✅ Verified | ✅ Allowlisted Google Cloud & API endpoints | ✅ Full TUI & Statusline | ✅ 100% Pass |
-| **Gemini CLI** | `--agent gemini` | `gemini "..."` | ✅ Verified | ✅ `generativelanguage.googleapis.com` | ✅ Statusline | ✅ 100% Pass |
+| **OMP** | `--agent omp` | `omp "..."` | ✅ Verified | ✅ `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | ✅ Statusline | ✅ 100% Pass |
+| **ZCode** | `--agent zcode` | `zcode "..."` | ✅ Verified | ✅ `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | ✅ Statusline | ✅ 100% Pass |
+| **Kimi Code** | `--agent kimi` | `kimi "..."` | ✅ Verified | ✅ `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | ✅ Statusline | ✅ 100% Pass |
+| **Grok Build** | `--agent grok` | `grok "..."` | ✅ Verified | ✅ `x.ai`, `api.x.ai`, `grok.com` | ✅ Statusline | ✅ 100% Pass |
 | **Cursor Agent** | `--agent cursor` | `cursor-agent "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Statusline | ✅ 100% Pass |
 | **Cline** | `--agent cline` | `cline --prompt "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Statusline | ✅ 100% Pass |
 | **Aider** | `--agent aider` | `aider --message "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Full PTY | ✅ 100% Pass |

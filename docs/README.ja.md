@@ -17,7 +17,7 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
-AIコーディングCLIエージェント（**Claude Code**、**OpenAI Codex**、**Cursor**、**Gemini**、**OpenCode**、**Aider**、**Antigravity**）のための、デーモン不要（daemon-less）・root権限不要（rootless）のカーネルレベルサンドボックスおよびポリシー適用ランタイムです。Vettoは、`fork()` と `execve()` の間に直接、変更不可能なセキュリティ境界を注入し、4ms未満の起動レイテンシとDockerオーバーヘッドゼロを実現します。
+AIコーディングCLIエージェント（**Claude Code**、**OpenAI Codex**、**Cursor**、**OpenCode**、**Aider**、**Antigravity**、**OMP**、**ZCode**、**Kimi**、**Grok**）のための、デーモン不要（daemon-less）・root権限不要（rootless）のカーネルレベルサンドボックスおよびポリシー適用ランタイムです。Vettoは、`fork()` と `execve()` の間に直接、変更不可能なセキュリティ境界を注入し、4ms未満の起動レイテンシとDockerオーバーヘッドゼロを実現します。
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 設定ファイル不要でAIエージェントのサンドボックス化を有効化。Vettoは非破壊的なシムを `~/.vetto/shims` に配置し、`PATH` の最優先で読み込みます：
 
 ```bash
-vetto enable claude   # codex, opencode, gemini, cursor, aider など15のプロファイルに対応
+vetto enable claude   # codex, opencode, cursor, aider, antigravity など18のプロファイルに対応
 claude                # 通常通り実行するだけで、カーネル境界内で完全保護されます
 ```
 

@@ -635,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn test_gemini_token_redaction() {
+    fn test_google_aiza_token_redaction() {
         let mut redactor = StreamingRedactor::with_style(RedactionStyle::Marker);
         let secret = "AIzaSyD-0123456789abcdefghijklmnopqrstuvwxyz";
         let output = redactor.redact_str(secret);

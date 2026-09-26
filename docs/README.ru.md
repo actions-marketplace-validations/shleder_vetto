@@ -17,7 +17,7 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
-Бесфоновый (daemon-less) и беспривилегированный (rootless) runtime для изоляции на уровне ядра и контроля политик AI-агентов, пишущих код (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto внедряет неизменяемые границы безопасности напрямую между `fork()` и `execve()` с задержкой запуска менее 4 мс и без накладных расходов Docker.
+Бесфоновый (daemon-less) и беспривилегированный (rootless) runtime для изоляции на уровне ядра и контроля политик AI-агентов, пишущих код (**Claude Code**, **OpenAI Codex**, **Cursor**, **OpenCode**, **Aider**, **Antigravity**, **OMP**, **ZCode**, **Kimi**, **Grok**). Vetto внедряет неизменяемые границы безопасности напрямую между `fork()` и `execve()` с задержкой запуска менее 4 мс и без накладных расходов Docker.
 
 ---
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Включите изоляцию без предварительной настройки для вашего агента. Vetto устанавливает прозрачный шим в `~/.vetto/shims` с приоритетом в системном `PATH`:
 
 ```bash
-vetto enable claude   # поддержка codex, opencode, gemini, cursor, aider и 15 профилей
+vetto enable claude   # поддержка codex, opencode, cursor, aider, antigravity и 18 профилей
 claude                # запускается привычно, но исполняется внутри песочницы ядра
 ```
 
@@ -141,7 +141,7 @@ Vetto реализует строгую трехтирную модель изо
 
 ## Матрица поддерживаемых AI-агентов
 
-Vetto включает готовые профили безопасности (`profiles/agents/*.toml`), автоматические сетевые разрешения, динамическое монтирование кэшей пакетных менеджеров (`npm`, `uv`, `bun`) и проброс графических дисплеев для Computer Use для 15 ведущих агентских рантаймов:
+Vetto включает готовые профили безопасности (`profiles/agents/*.toml`), автоматические сетевые разрешения, динамическое монтирование кэшей пакетных менеджеров (`npm`, `uv`, `bun`) и проброс графических дисплеев для Computer Use для 18 ведущих агентских рантаймов:
 
 | Агент | Команда / Пресет | Автоматические сетевые домены | Плагины и пути состояния |
 | :--- | :--- | :--- | :--- |
@@ -149,7 +149,10 @@ Vetto включает готовые профили безопасности (`
 | **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, плагины |
 | **OpenCode** | `opencode` | Динамические эндпоинты JSONC (AIHubMix, Nvidia) | `~/.local/share/opencode`, `~/.config/opencode` |
 | **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, телеметрия | `~/.gemini/antigravity`, плагины, скиллы |
-| **Gemini CLI** | `gemini` | `generativelanguage.googleapis.com` | `~/.config/gemini`, токены OAuth |
+| **OMP** | `omp` | `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | `~/.config/omp`, `~/.omp`, project local `.omp` |
+| **ZCode** | `zcode` | `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | `~/.zcode`, `~/.config/zcode` |
+| **Kimi Code** | `kimi` | `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | `~/.kimi`, `~/.config/kimi` |
+| **Grok Build** | `grok` | `x.ai`, `api.x.ai`, `grok.com` | `~/.grok`, `~/.config/grok` |
 | **Cursor** | `cursor` | Бэкенд Cursor, маркетплейс расширений | Сокеты IPC VS Code, `~/.cursor` |
 | **Aider** | `aider` | Эндпоинты настроенных LLM-провайдеров | Корень git-репозитория, история сессий |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | Хост расширений VS Code, кэши браузера |

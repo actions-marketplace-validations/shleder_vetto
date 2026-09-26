@@ -74,11 +74,14 @@ fn test_interactive_agent_preserves_stdin_terminal() {
     let agents = [
         "claude",
         "codex",
-        "gemini",
         "cursor",
         "aider",
         "antigravity",
         "agy",
+        "omp",
+        "zcode",
+        "kimi",
+        "grok",
     ];
     for agent in agents {
         assert!(

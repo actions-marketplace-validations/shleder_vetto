@@ -1,7 +1,7 @@
 //! Zero-config AI agent onboarding and automatic detection.
 //!
 //! When `vetto` is invoked without arguments:
-//! 1. Scans project markers (.claude, .codex, .gemini, .aider, .opencode, .cursor, AGENTS.md)
+//! 1. Scans project markers (.claude, .codex, .omp, .zcode, .kimi, .grok, .aider, .opencode, .cursor, AGENTS.md)
 //! 2. Resolves binary presence in PATH
 //! 3. Launches the detected agent in a secure-base profile with agent-specific network allowlists.
 //!
@@ -14,11 +14,10 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 15] = [
+pub const SUPPORTED_AGENTS: [&str; 18] = [
     "claude",
     "codex",
     "opencode",
-    "gemini",
     "antigravity",
     "agy",
     "cursor",
@@ -30,6 +29,10 @@ pub const SUPPORTED_AGENTS: [&str; 15] = [
     "openhands",
     "devin",
     "smolagents",
+    "omp",
+    "zcode",
+    "kimi",
+    "grok",
 ];
 
 struct AgentSpec {
@@ -55,9 +58,24 @@ const AGENT_SPECS: &[AgentSpec] = &[
         markers: &[".opencode", "opencode.json"],
     },
     AgentSpec {
-        name: "gemini",
-        binaries: &["gemini", "gemini-cli"],
-        markers: &[".gemini", "GEMINI.md", "gemini.json"],
+        name: "omp",
+        binaries: &["omp", "omp-cli"],
+        markers: &[".omp", "omp.toml", "omp.json"],
+    },
+    AgentSpec {
+        name: "zcode",
+        binaries: &["zcode", "zcode-cli"],
+        markers: &[".zcode", "zcode.json", "zcode.toml"],
+    },
+    AgentSpec {
+        name: "kimi",
+        binaries: &["kimi", "kimi-code", "kimi-cli"],
+        markers: &[".kimi", "kimi.json", "kimi.toml"],
+    },
+    AgentSpec {
+        name: "grok",
+        binaries: &["grok", "grok-build", "grok-cli"],
+        markers: &[".grok", "grok.json", "grok.toml"],
     },
     AgentSpec {
         name: "antigravity",
@@ -306,6 +324,22 @@ mod tests {
         let smol_bins = agent_candidate_binaries("smolagents");
         assert!(smol_bins.contains(&"smolagents"));
         assert!(smol_bins.contains(&"smolagent"));
+
+        let omp_bins = agent_candidate_binaries("omp");
+        assert!(omp_bins.contains(&"omp"));
+        assert!(omp_bins.contains(&"omp-cli"));
+
+        let zcode_bins = agent_candidate_binaries("zcode");
+        assert!(zcode_bins.contains(&"zcode"));
+        assert!(zcode_bins.contains(&"zcode-cli"));
+
+        let kimi_bins = agent_candidate_binaries("kimi");
+        assert!(kimi_bins.contains(&"kimi"));
+        assert!(kimi_bins.contains(&"kimi-code"));
+
+        let grok_bins = agent_candidate_binaries("grok");
+        assert!(grok_bins.contains(&"grok"));
+        assert!(grok_bins.contains(&"grok-build"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

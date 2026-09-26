@@ -265,7 +265,6 @@ fn format_agent_name(name: &str) -> String {
         "opencode" => "OpenCode AI".to_string(),
         "codex" => "OpenAI Codex".to_string(),
         "antigravity" | "agy" => "Antigravity (Google)".to_string(),
-        "gemini" => "Gemini CLI".to_string(),
         "cursor" => "Cursor IDE Agent".to_string(),
         "aider" => "Aider Pair Programmer".to_string(),
         "cline" => "Cline Assistant".to_string(),
@@ -275,6 +274,10 @@ fn format_agent_name(name: &str) -> String {
         "devin" => "Cognition Devin".to_string(),
         "copilot" => "GitHub Copilot".to_string(),
         "smolagents" => "Hugging Face Smolagents".to_string(),
+        "omp" => "OMP (Stencil Labs)".to_string(),
+        "zcode" => "ZCode (Z.ai / GLM-5.3)".to_string(),
+        "kimi" => "Kimi Code (Moonshot AI)".to_string(),
+        "grok" => "Grok Build (xAI)".to_string(),
         other => other.to_string(),
     }
 }

@@ -596,7 +596,6 @@ pub fn is_interactive_agent_command(agent: Option<&str>, command: &[String]) -> 
                 | "claude"
                 | "opencode"
                 | "aider"
-                | "gemini"
                 | "antigravity"
                 | "cursor"
                 | "cline"
@@ -606,6 +605,10 @@ pub fn is_interactive_agent_command(agent: Option<&str>, command: &[String]) -> 
                 | "openhands"
                 | "devin"
                 | "smolagents"
+                | "omp"
+                | "zcode"
+                | "kimi"
+                | "grok"
         )
     } else {
         false
@@ -961,13 +964,13 @@ mod tests {
             "allowlist:api.openai.com,chatgpt.com,auth.openai.com,cdn.oaistatic.com,chat.openai.com,platform.openai.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
-        // Gemini defaults to generativelanguage.googleapis.com,oauth2.googleapis.com,accounts.google.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
-        let cli = Cli::try_parse_from(["vetto", "--", "gemini"]).unwrap();
+        // OMP defaults to omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        let cli = Cli::try_parse_from(["vetto", "--", "omp"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
-        assert_eq!(cfg.agent_preset.as_deref(), Some("gemini"));
+        assert_eq!(cfg.agent_preset.as_deref(), Some("omp"));
         assert_eq!(
             cfg.net.label(),
-            "allowlist:generativelanguage.googleapis.com,oauth2.googleapis.com,accounts.google.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
+            "allowlist:omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
         // Aider defaults to api.openai.com,api.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,registry.npmjs.org,pypi.org,files.pythonhosted.org

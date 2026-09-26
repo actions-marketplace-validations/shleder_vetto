@@ -9,7 +9,6 @@ pub const PROFILE_NAMES: [&str; 4] = ["default", "strict", "audit", "permissive"
 
 pub const CODEX_AGENT_TOML: &str = include_str!("../../profiles/agents/codex.toml");
 pub const CLAUDE_AGENT_TOML: &str = include_str!("../../profiles/agents/claude.toml");
-pub const GEMINI_AGENT_TOML: &str = include_str!("../../profiles/agents/gemini.toml");
 pub const ANTIGRAVITY_AGENT_TOML: &str = include_str!("../../profiles/agents/antigravity.toml");
 pub const AIDER_AGENT_TOML: &str = include_str!("../../profiles/agents/aider.toml");
 pub const CURSOR_AGENT_TOML: &str = include_str!("../../profiles/agents/cursor.toml");
@@ -21,12 +20,15 @@ pub const GOOSE_AGENT_TOML: &str = include_str!("../../profiles/agents/goose.tom
 pub const OPENHANDS_AGENT_TOML: &str = include_str!("../../profiles/agents/openhands.toml");
 pub const DEVIN_AGENT_TOML: &str = include_str!("../../profiles/agents/devin.toml");
 pub const SMOLAGENTS_AGENT_TOML: &str = include_str!("../../profiles/agents/smolagents.toml");
+pub const OMP_AGENT_TOML: &str = include_str!("../../profiles/agents/omp.toml");
+pub const ZCODE_AGENT_TOML: &str = include_str!("../../profiles/agents/zcode.toml");
+pub const KIMI_AGENT_TOML: &str = include_str!("../../profiles/agents/kimi.toml");
+pub const GROK_AGENT_TOML: &str = include_str!("../../profiles/agents/grok.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
 
-pub const AGENT_PROFILE_NAMES: [&str; 15] = [
+pub const AGENT_PROFILE_NAMES: [&str; 18] = [
     "codex",
     "claude",
-    "gemini",
     "antigravity",
     "aider",
     "cursor",
@@ -38,6 +40,10 @@ pub const AGENT_PROFILE_NAMES: [&str; 15] = [
     "openhands",
     "devin",
     "smolagents",
+    "omp",
+    "zcode",
+    "kimi",
+    "grok",
     "custom",
 ];
 
@@ -121,13 +127,16 @@ pub fn canonical_agent_name(name: &str) -> Option<&'static str> {
         "cline" | "cline-cli" => Some("cline"),
         "opencode" | "opencode-ai" => Some("opencode"),
         "copilot" | "github-copilot-cli" | "gh-copilot" => Some("copilot"),
-        "gemini" | "gemini-cli" => Some("gemini"),
         "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
         "windsurf" | "windsurf-cli" => Some("windsurf"),
         "goose" | "goose-ai" => Some("goose"),
         "openhands" | "all-hands" => Some("openhands"),
         "devin" | "devin-cli" => Some("devin"),
         "smolagents" | "smol-agents" | "smolagent" => Some("smolagents"),
+        "omp" | "omp-cli" => Some("omp"),
+        "zcode" | "zcode-cli" => Some("zcode"),
+        "kimi" | "kimi-code" | "kimi-cli" => Some("kimi"),
+        "grok" | "grok-build" | "grok-cli" => Some("grok"),
         "custom" => Some("custom"),
         _ => None,
     }
@@ -137,7 +146,6 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
     match canonical_agent_name(name)? {
         "codex" => Some(CODEX_AGENT_TOML),
         "claude" => Some(CLAUDE_AGENT_TOML),
-        "gemini" => Some(GEMINI_AGENT_TOML),
         "antigravity" => Some(ANTIGRAVITY_AGENT_TOML),
         "aider" => Some(AIDER_AGENT_TOML),
         "cursor" => Some(CURSOR_AGENT_TOML),
@@ -149,6 +157,10 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
         "openhands" => Some(OPENHANDS_AGENT_TOML),
         "devin" => Some(DEVIN_AGENT_TOML),
         "smolagents" => Some(SMOLAGENTS_AGENT_TOML),
+        "omp" => Some(OMP_AGENT_TOML),
+        "zcode" => Some(ZCODE_AGENT_TOML),
+        "kimi" => Some(KIMI_AGENT_TOML),
+        "grok" => Some(GROK_AGENT_TOML),
         "custom" => Some(CUSTOM_AGENT_TOML),
         _ => None,
     }
