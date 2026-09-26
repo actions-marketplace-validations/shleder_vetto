@@ -3,22 +3,46 @@
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
   <a href="https://github.com/shleder/vetto/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/npm/v/%40shledery%2Fvetto?logo=npm&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/crates/v/vetto?logo=rust&style=flat-square&cacheSeconds=60" alt="crates.io"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.0-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.0-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <a href="../README.md">English</a> | <a href="README.ru.md">Русский</a>
+  <a href="../README.md">English</a> |
+  <a href="README.ru.md"><b>Русский</b></a> |
+  <a href="README.zh.md">简体中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.es.md">Español</a> |
+  <a href="README.de.md">Deutsch</a>
 </p>
 
-Бесфоновый (daemon-less) и беcпривилегированный (rootless) runtime для изоляции на уровне ядра и контроля политик AI-агентов, пишущих код (**Claude Code**, **OpenAI Codex CLI**, **Cursor**, **Gemini**, **Aider**). Vetto внедряет неизменяемые границы безопасности напрямую между `fork()` и `execve()` с задержкой инициализации менее 4 мс.
+Бесфоновый (daemon-less) и беспривилегированный (rootless) runtime для изоляции на уровне ядра и контроля политик AI-агентов, пишущих код (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto внедряет неизменяемые границы безопасности напрямую между `fork()` и `execve()` с задержкой запуска менее 4 мс и без накладных расходов Docker.
+
+---
+
+## Интерактивный TUI Mission Control Dashboard
+
+Начиная с версии **v0.5.0**, простой запуск команды `vetto` в любом интерактивном терминале открывает кибернетический центр управления **Mission Control**:
+
+```bash
+vetto
+```
+
+- **Динамический детекшн флота**: автоматическое сканирование `$PATH` и вывод только реально установленных AI-агентов (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `smolagents`). Отсутствующие агенты не загромождают интерфейс.
+- **Управление в одно нажатие клавиши**:
+  - `[1: AGENTS]`: живой мониторинг флота, включение/выключение шимов (`Space`), прямой запуск в песочнице (`Enter`).
+  - `[2: SANDBOX VFS]`: матрица маскирования секретов на уровне inode (overlay tmpfs с режимом `mode=0000` для `~/.ssh`, `~/.aws`, `.env`).
+  - `[3: KERNEL DOCTOR]`: живая диагностика Landlock LSM ABI (v1–v6), user namespaces (`CLONE_NEWUSER`), cgroups v2 (`cgroup.kill`) и Seccomp-BPF.
+  - `[4: SESSIONS]`: активные контейнеризированные сессии и мгновенный откат снапшотов без потери данных (`u`).
+- **Две кибернетические темы оформления**: Arasaka Cyber-Red (по умолчанию) и Cyber Circuit (янтарный фосфор), переключаемые по клавише `t`.
+- **Нулевой оверхед**: скрипты, неинтерактивные окружения и пайплайны автоматически обходят TUI без задержек.
 
 ---
 
 ## Доказательства вместо обещаний
 
-Автономные агенты выполняют недетерминированный код. Недоверенные хуки зависимостей, инъекции в промпты или галлюцинированные команды могут скомпрометировать учетные данные хоста (`~/.ssh`, `~/.aws`, `.env`) или повредить файловую систему. Под Vetto несанкционированные системные вызовы детерминированно блокируются:
+Автономные агенты выполняют недетерминированный код. Недоверенные хуки зависимостей, инъекции в промпты или галлюцинированные bash-команды могут скомпрометировать учетные данные хоста (`~/.ssh`, `~/.aws`, `.env`) или оставить неуправляемые фоновые серверы. Под Vetto несанкционированные системные вызовы детерминированно блокируются:
 
 ```text
 > Reading ~/.ssh/id_rsa...         BLOCKED (secret mask, EACCES)
@@ -30,20 +54,24 @@
 
 ### Fail-Closed Contract (Exit 125)
 
-Если граница изоляции нарушена или необходимые примитивы ядра не могут быть применены, выполнение немедленно прерывается с кодом возврата 125. Деревья дочерних процессов и осиротевшие подпроцессы уничтожаются синхронно. Гарантии, которые базовая ОС не может обеспечить, помечаются как неподдерживаемые — скрытого снижения уровня безопасности не происходит.
+Если граница изоляции нарушена или необходимые примитивы ядра не могут быть применены, выполнение немедленно прерывается с **кодом возврата 125**. Деревья дочерних процессов и осиротевшие подпроцессы уничтожаются синхронно через cgroups v2 `cgroup.kill`. Гарантии, которые базовая ОС не может обеспечить, помечаются как неподдерживаемые — скрытого снижения уровня безопасности не происходит.
+
+---
 
 ## Быстрый старт
 
 ### 1. Установка
 
-Через пакетные менеджеры:
+Через стандартные пакетные менеджеры:
 
 ```bash
-# npm
+# npm (кроссплатформенный глобальный бинарник)
 npm install -g @shledery/vetto
-# Homebrew
+
+# Homebrew (macOS & Linux)
 brew install shleder/tap/vetto
-# Cargo
+
+# Cargo (crates.io)
 cargo install vetto
 ```
 
@@ -53,71 +81,117 @@ cargo install vetto
 curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 ```
 
-### 2. Прозрачная изоляция агентов
+### 2. Прозрачная изоляция агентов (PATH-шимы)
 
-Включите песочницу без конфигурации для вашего агента. Vetto устанавливает безопасную прослойку в `~/.vetto/shims` с приоритетом в `PATH`:
+Включите изоляцию без предварительной настройки для вашего агента. Vetto устанавливает прозрачный шим в `~/.vetto/shims` с приоритетом в системном `PATH`:
 
 ```bash
-vetto enable claude   # поддерживает codex, gemini, cursor, aider и пресеты
-claude                # работает как обычно — полностью изолирован на уровне ядра
+vetto enable claude   # поддержка codex, opencode, gemini, cursor, aider и 20+ агентов
+claude                # запускается привычно, но исполняется внутри песочницы ядра
 ```
 
-### 3. Прямое выполнение и карантин MCP
+Для возврата к нативному неизолированному запуску:
 
-Запускайте скрипты со строгой изоляцией по умолчанию:
+```bash
+vetto disable claude
+```
+
+### 3. Прямой запуск и изолированный eval
+
+Запуск изолированных скриптов со строгими политиками по умолчанию:
 
 ```bash
 vetto run -- python script.py
 vetto -- npm test
+```
 
-# Безопасное выполнение фрагментов кода с лимитом памяти cgroups v2 и жестким таймаутом:
+Безопасное тестирование сниппетов кода с ограничением памяти cgroups v2 и аппаратным таймаутом:
+
+```bash
 vetto eval --python -c "print(1 + 1)" --timeout 5 --memory 256
 ```
 
-Изолируйте бинарный файл сервера Model Context Protocol (MCP), ограничив пути и отключив исходящий сетевой трафик:
+### 4. Мгновенный откат снапшотов
+
+Vetto автоматически делает легковесные copy-on-write снапшоты рабочей директории перед выполнением агента:
 
 ```bash
-vetto mcp wrap --allow ./data --net off -- <mcp-server-binary>
+vetto diff        # просмотр изменений, внесенных агентом в файлы
+vetto undo        # мгновенный откат рабочей копии к чистому состоянию до запуска
 ```
 
-Инспектируйте события безопасности и проверяйте работу платформы:
+### 5. Диагностика ядра и префлайт-проверка
+
+Проверка возможностей изоляции хостового ядра и контейнерных ограничений:
 
 ```bash
-vetto audit --latest --recap    # просмотр заблокированных системных вызовов и операций с файлами
-vetto doctor --fix              # проверка поддержки LSM ядра и восстановление хуков оболочки
+vetto doctor --preflight          # аудит Landlock ABI, неймспейсов и cgroups v2
+vetto doctor --preflight --json   # машиночитаемый вывод состояния окружения
 ```
 
-## Гарантии платформы
+---
 
-Vetto обеспечивает неизменяемую трехуровневую модель границ на основе возможностей ядра, доступных непривилегированному пространству пользователя:
+## Платформенные гарантии
 
-| Платформа / Уровень | Изоляция файловой системы | Сетевая изоляция | Жизненный цикл процессов | Статус |
+Vetto реализует строгую трехтирную модель изоляции на базе непривилегированных примитивов ядра:
+
+| Платформа / Тир | Изоляция файловой системы | Сетевая изоляция | Жизненный цикл процессов | Статус |
 | :--- | :--- | :--- | :--- | :--- |
-| **Linux (Native)**<br>Уровень 1 | Landlock LSM (ABI 1–6)<br>Маскировка VFS на уровне Inode для `~/.ssh`, `~/.aws`, `.env` | Network Namespaces (`CLONE_NEWNET`)<br>Изоляция Loopback + локальный брокер TCP/TLS | PID Namespaces (`CLONE_NEWPID`)<br>Детерминированное уничтожение дерева процессов | Production |
-| **Linux (WSL2)**<br>Уровень 1 | Landlock LSM через ядро WSL2<br>Полное ограничение Inode | Network Namespaces внутри ВМ<br>Изолированный исходящий трафик брокера | PID Namespaces + очистка `/proc`<br>Полное уничтожение дерева | Production (Рекомендовано для Windows) |
-| **macOS (Darwin)**<br>Уровень 2 | Seatbelt (SBPL)<br>Ограничение записи в `$PROJECT` и `/tmp` | Network Lockdown<br>`--net=off` через правила `(deny network*)` | Очистка Process Group<br>Наблюдение через kqueue | Standard (Требует Full Disk Access для `~/Documents`) |
-| **Windows Native**<br>Уровень 3 | AppContainer & LPAC<br>Ограничение токенов DACL | Capability Lockdown<br>Ограничение сетевых SID | Job Objects<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Используйте WSL2 для Уровня 1) |
+| **Linux (Native)**<br>Tier 1 | **Landlock LSM (ABI 1–6)**<br>Маскирование inode для `~/.ssh`, `~/.aws`, `.env` (tmpfs 0000) | **Сетевые пространства имен (`CLONE_NEWNET`)**<br>Изоляция loopback + локальный TCP/TLS брокер с проверкой SNI | **PID-пространства (`CLONE_NEWPID`)**<br>Детерминированное уничтожение дерева процессов через `cgroups v2` | Production |
+| **Linux (WSL2)**<br>Tier 1 | **Landlock LSM через ядро WSL2**<br>Полное ограничение inode | **Сетевые пространства внутри VM**<br>Изолированный брокер egress | **PID-неймспейсы + зачистка `/proc`**<br>Гарантированное уничтожение сирот | Production (Рекомендовано для Windows) |
+| **macOS (Darwin)**<br>Tier 2 | **Seatbelt (`libsandbox.1.dylib`)**<br>Ограничение записи рамками `$PROJECT` и `/tmp` | **Сетевой локдаун**<br>`--net=off` через правила `(deny network*)` | **Зачистка групп процессов**<br>Контроль через `pidfd` / kqueue watchdog | Standard (Требуется Full Disk Access для `~/Documents`) |
+| **Windows Native**<br>Tier 3 | **AppContainer & LPAC**<br>Ограничение токенов DACL | **Блокировка возможностей**<br>Ограниченные сетевые SID | **Job Objects**<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Используйте WSL2 для гарантий Tier 1) |
 
-## Целостность бинарных файлов и аттестация
+---
 
-Релизы собираются автоматизированными рабочими процессами GitHub Actions с публичной криптографической проверкой:
+## Матрица поддерживаемых AI-агентов
 
-- **SLSA Level 3 Provenance**: Аттестации сборки In-toto для всех релизных бинарников.
-- **Подписи Minisign**: Публикуются с каждым архивом релиза под открытым ключом `75ECEC9B5080C590`.
-- **Криптографические чексуммы**: Отдельные хэши SHA256, генерируемые и проверяемые при установке.
+Vetto включает готовые профили безопасности (`profiles/agents/*.toml`), автоматические сетевые разрешения, динамическое монтирование кэшей пакетных менеджеров (`npm`, `uv`, `bun`) и проброс графических дисплеев для Computer Use:
+
+| Агент | Команда / Пресет | Автоматические сетевые домены | Плагины и пути состояния |
+| :--- | :--- | :--- | :--- |
+| **Claude Code** | `claude` | `api.anthropic.com`, `claude.ai` | `~/.claude`, `~/.config/claude`, плагины |
+| **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, плагины |
+| **OpenCode** | `opencode` | Динамические эндпоинты JSONC (AIHubMix, Nvidia) | `~/.local/share/opencode`, `~/.config/opencode` |
+| **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, телеметрия | `~/.gemini/antigravity`, плагины, скиллы |
+| **Gemini CLI** | `gemini` | `generativelanguage.googleapis.com` | `~/.config/gemini`, токены OAuth |
+| **Cursor** | `cursor` | Бэкенд Cursor, маркетплейс расширений | Сокеты IPC VS Code, `~/.cursor` |
+| **Aider** | `aider` | Эндпоинты настроенных LLM-провайдеров | Корень git-репозитория, история сессий |
+| **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | Хост расширений VS Code, кэши браузера |
+| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, кэши PyTorch |
+| **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, расширения |
+| **OpenHands** | `openhands` | Эндпоинты выбранных моделей | Локальное выполнение без Docker |
+| **SWE-agent** | `swe_agent` | Эндпоинты бенчмарк-раннеров | Эфемерные рабочие директории |
+
+---
+
+## Безопасность и криптографическая целостность
+
+Релизы собираются в полностью изолированных пайплайнах GitHub Actions с публичной верификацией:
+
+- **SLSA Level 3 Provenance**: аттестации сборки in-toto генерируются для всех платформенных бинарников.
+- **Подписи Minisign**: публикуются с каждым архивом под публичным ключом `75ECEC9B5080C590`.
+- **Криптографические контрольные суммы**: автономные хэши SHA-256 верифицируются при установке.
+
+---
 
 ## Документация
 
-- [Platform Backends & Boundary Specs](platform-backends.md)
-- [Agent Presets & Registry](agents.md)
-- [Threat Model & Security Assumptions](threat-model.md)
-- [Exit Codes & Failure Modes](exit-codes.md)
-- [Vulnerability Reporting (SECURITY.md)](../SECURITY.md)
+- [Бэкенды платформ и спецификация границ](platform-backends.md)
+- [Реестр пресетов и профилей агентов](agents.md)
+- [Модель угроз и архитектурные допущения](threat-model.md)
+- [Диагностическая верификация ядра](architecture/verify-ng.md)
+- [Коды возврата и сценарии сбоев](exit-codes.md)
+- [Сообщение об уязвимостях (SECURITY.md)](../SECURITY.md)
 
-## Вклад в проект
+---
 
-Любой вклад приветствуется. Пожалуйста, создавайте ветки от main. Все изменения границ безопасности должны включать соответствующие тесты валидации ядра. Pull requests проверяются на раннерах Linux и macOS в GitHub Actions CI.
+## Участие в разработке
+
+Мы приветствуем вклад сообщества. Создавайте отдельные ветки от `main`. Все изменения границ безопасности должны сопровождаться соответствующими тестами ядра. Все пулл-реквесты валидируются на раннерах Linux, macOS и Windows в GitHub Actions CI.
+
+---
 
 ## Лицензия
 
-Лицензировано под Apache License, Version 2.0 ([LICENSE](../LICENSE)).
+Распространяется под лицензией Apache License, Version 2.0 ([LICENSE](../LICENSE)).

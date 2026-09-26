@@ -3,22 +3,46 @@
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
   <a href="https://github.com/shleder/vetto/releases/tag/v0.5.0"><img src="https://img.shields.io/badge/version-0.5.0-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/npm/v/%40shledery%2Fvetto?logo=npm&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/crates/v/vetto?logo=rust&style=flat-square&cacheSeconds=60" alt="crates.io"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.0-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.0-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="docs/README.ru.md">Русский</a>
+  <a href="README.md"><b>English</b></a> |
+  <a href="docs/README.ru.md">Русский</a> |
+  <a href="docs/README.zh.md">简体中文</a> |
+  <a href="docs/README.ja.md">日本語</a> |
+  <a href="docs/README.es.md">Español</a> |
+  <a href="docs/README.de.md">Deutsch</a>
 </p>
 
-Daemon-less, rootless kernel-level sandbox and policy enforcement runtime for AI coding agents (**Claude Code**, **OpenAI Codex CLI**, **Cursor**, **Gemini**, **Aider**). Vetto injects immutable security boundaries directly between `fork()` and `execve()` with sub-4ms initialization latency.
+Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI coding CLI agents (**Claude Code**, **OpenAI Codex**, **Cursor**, **Gemini**, **OpenCode**, **Aider**, **Antigravity**). Vetto injects immutable security boundaries directly between `fork()` and `execve()` with sub-4ms startup latency and zero Docker overhead.
+
+---
+
+## Interactive TUI Mission Control
+
+Starting in **v0.5.0**, running bare `vetto` in any interactive terminal launches the cybernetic **Mission Control Dashboard**:
+
+```bash
+vetto
+```
+
+- **Dynamic Fleet Detection**: Automatically scans your `$PATH` and displays installed AI agents (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `smolagents`), cleanly omitting uninstalled ones.
+- **Single-Keystroke Control Plane**:
+  - `[1: AGENTS]`: Live fleet monitoring, one-touch PATH-shim toggling (`Space`), and instant sandbox launching (`Enter`).
+  - `[2: SANDBOX VFS]`: Inode-level secret masking matrix (`mode=0000` tmpfs overlays over `~/.ssh`, `~/.aws`, `.env`).
+  - `[3: KERNEL DOCTOR]`: Live preflight probe of Landlock LSM ABI (v1–v6), user namespaces (`CLONE_NEWUSER`), cgroups v2 (`cgroup.kill`), and Seccomp-BPF.
+  - `[4: SESSIONS]`: Active containerized sessions and instant zero-loss snapshot rollback (`u`).
+- **Dual Cybernetic Themes**: Arasaka Cyber-Red (default) and Cyber Circuit (amber-phosphor), toggled on the fly via `t`.
+- **Zero Overhead**: Scripts, non-interactive environments, and Unix pipelines bypass the TUI automatically with zero startup overhead.
 
 ---
 
 ## Proof Before Promises
 
-Autonomous agents execute non-deterministic code. Untrusted dependency hooks, prompt injections, or hallucinated commands can compromise host credentials (`~/.ssh`, `~/.aws`, `.env`) or damage the filesystem. Under Vetto, unauthorized system calls are blocked deterministically:
+Autonomous agents execute non-deterministic code. Untrusted dependency hooks, prompt injections, or hallucinated bash commands can compromise host credentials (`~/.ssh`, `~/.aws`, `.env`) or leak runaway background servers. Under Vetto, unauthorized system calls are blocked deterministically:
 
 ```text
 > Reading ~/.ssh/id_rsa...         BLOCKED (secret mask, EACCES)
@@ -30,62 +54,82 @@ Autonomous agents execute non-deterministic code. Untrusted dependency hooks, pr
 
 ### Fail-Closed Contract (Exit 125)
 
-If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with exit code 125. Descendant process trees and orphaned subprocesses are reaped synchronously. Guarantees that the underlying OS cannot enforce are reported as unsupported—security is never silently downgraded.
+If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with **exit code 125**. Descendant process trees and orphaned subprocesses are reaped synchronously via cgroups v2 `cgroup.kill`. Guarantees that the underlying OS cannot enforce are reported as unsupported—security is never silently downgraded.
+
+---
 
 ## Quick Start
 
-### 1. Install
+### 1. Installation
 
-Via package managers:
+Via standard package managers:
 
 ```bash
-# npm
+# npm (cross-platform global binary)
 npm install -g @shledery/vetto
-# Homebrew
+
+# Homebrew (macOS & Linux)
 brew install shleder/tap/vetto
-# Cargo
+
+# Cargo (crates.io)
 cargo install vetto
 ```
 
-Or download via standalone installer:
+Or via standalone curl installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 ```
 
-### 2. Transparent Agent Sandboxing
+### 2. Transparent Agent Sandboxing (PATH-Shims)
 
 Enable zero-configuration sandboxing for your coding agent once. Vetto installs a non-destructive shim in `~/.vetto/shims` with priority in `PATH`:
 
 ```bash
-vetto enable claude   # supports codex, gemini, cursor, aider, and presets
+vetto enable claude   # supports codex, opencode, gemini, cursor, aider, and 20+ agents
 claude                # runs normally — fully sandboxed at the kernel boundary
 ```
 
-### 3. Direct Execution & MCP Quarantine
+To unwrap and restore native execution:
+
+```bash
+vetto disable claude
+```
+
+### 3. Direct Execution & Disposable Eval
 
 Execute standalone scripts under strict default isolation:
 
 ```bash
 vetto run -- python script.py
 vetto -- npm test
+```
 
-# Safely evaluate code snippets with cgroups v2 memory ceiling & hard timeout:
+Safely evaluate code snippets with cgroups v2 memory ceilings and monotonic hardware timeouts:
+
+```bash
 vetto eval --python -c "print(1 + 1)" --timeout 5 --memory 256
 ```
 
-Quarantine a Model Context Protocol (MCP) server binary with isolated paths and disabled network egress:
+### 4. Instant Snapshot Rollback
+
+Vetto takes automatic, copy-on-write workspace snapshots before agent execution:
 
 ```bash
-vetto mcp wrap --allow ./data --net off -- <mcp-server-binary>
+vetto diff        # inspect exact file modifications made by the agent
+vetto undo        # roll back workspace to the pre-execution clean state
 ```
 
-Inspect security events and verify platform enforcement:
+### 5. Diagnostics & Preflight Probe
+
+Audit host kernel isolation capabilities and container limits:
 
 ```bash
-vetto audit --latest --recap    # review blocked syscalls and file operations
-vetto doctor --fix              # probe kernel LSM support and repair shell hooks
+vetto doctor --preflight          # audit Landlock ABI, namespaces, and cgroups v2
+vetto doctor --preflight --json   # machine-readable capability payload
 ```
+
+---
 
 ## Platform Guarantees
 
@@ -93,10 +137,33 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 
 | Platform / Tier | Filesystem Isolation | Network Isolation | Process Lifecycle | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Linux (Native)**<br>Tier 1 | Landlock LSM (ABI 1–6)<br>Inode-level VFS masking over `~/.ssh`, `~/.aws`, `.env` | Network Namespaces (`CLONE_NEWNET`)<br>Loopback isolation + local TCP/TLS broker | PID Namespaces (`CLONE_NEWPID`)<br>Deterministic process tree teardown | Production |
-| **Linux (WSL2)**<br>Tier 1 | Landlock LSM via WSL2 kernel<br>Full inode restriction | Network Namespaces inside VM<br>Isolated broker egress | PID Namespaces + `/proc` sweep<br>Full tree extinction | Production (Recommended for Windows) |
-| **macOS (Darwin)**<br>Tier 2 | Seatbelt (SBPL)<br>Write confinement to `$PROJECT` and `/tmp` | Network Lockdown<br>`--net=off` via `(deny network*)` rules | Process Group Sweeping<br>kqueue watchdog supervision | Standard (Requires Full Disk Access for `~/Documents`) |
-| **Windows Native**<br>Tier 3 | AppContainer & LPAC<br>DACL token restriction | Capability Lockdown<br>Restricted network SIDs | Job Objects<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Use WSL2 for Tier 1 kernel namespaces) |
+| **Linux (Native)**<br>Tier 1 | **Landlock LSM (ABI 1–6)**<br>Inode-level VFS masking over `~/.ssh`, `~/.aws`, `.env` (mode 0000 tmpfs) | **Network Namespaces (`CLONE_NEWNET`)**<br>Loopback isolation + local TCP/TLS broker with SNI inspection | **PID Namespaces (`CLONE_NEWPID`)**<br>Deterministic process tree extinction via `cgroups v2` | Production |
+| **Linux (WSL2)**<br>Tier 1 | **Landlock LSM via WSL2 kernel**<br>Full inode restriction | **Network Namespaces inside VM**<br>Isolated broker egress | **PID Namespaces + `/proc` sweep**<br>Full tree extinction | Production (Recommended for Windows) |
+| **macOS (Darwin)**<br>Tier 2 | **Seatbelt (`libsandbox.1.dylib`)**<br>Write confinement to `$PROJECT` and `/tmp` | **Network Lockdown**<br>`--net=off` via `(deny network*)` rules | **Process Group Sweeping**<br>`pidfd` / kqueue watchdog supervision | Standard (Requires Full Disk Access for `~/Documents`) |
+| **Windows Native**<br>Tier 3 | **AppContainer & LPAC**<br>DACL token restriction | **Capability Lockdown**<br>Restricted network SIDs | **Job Objects**<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Use WSL2 for Tier 1 kernel namespaces) |
+
+---
+
+## Multi-Agent Compatibility Roster
+
+Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 22 leading agent runtimes:
+
+| Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
+| :--- | :--- | :--- | :--- |
+| **Claude Code** | `claude` | `api.anthropic.com`, `claude.ai` | `~/.claude`, `~/.config/claude`, plugins |
+| **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, plugins |
+| **OpenCode** | `opencode` | Dynamic JSONC endpoints (AIHubMix, Nvidia) | `~/.local/share/opencode`, `~/.config/opencode` |
+| **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, telemetry | `~/.gemini/antigravity`, plugins, skills |
+| **Gemini CLI** | `gemini` | `generativelanguage.googleapis.com` | `~/.config/gemini`, OAuth tokens |
+| **Cursor** | `cursor` | Cursor backend, extension marketplace | VS Code IPC sockets, `~/.cursor` |
+| **Aider** | `aider` | Configured LLM provider endpoints | Git repo root, history caches |
+| **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code extension host, browser caches |
+| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch caches |
+| **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, extensions |
+| **OpenHands** | `openhands` | Configured model endpoints | Docker-less local execution |
+| **SWE-agent** | `swe_agent` | Benchmark harness endpoints | Testbed ephemeral workspaces |
+
+---
 
 ## Binary Integrity & Attestation
 
@@ -104,19 +171,26 @@ Releases are built via automated GitHub Actions workflows with public cryptograp
 
 - **SLSA Level 3 Provenance**: In-toto build attestations generated for all release binaries.
 - **Minisign Signatures**: Published with each release archive under public key `75ECEC9B5080C590`.
-- **Cryptographic Checksums**: Standalone SHA256 hashes generated and verified during installation.
+- **Cryptographic Checksums**: Standalone SHA-256 hashes generated and verified during installation.
+
+---
 
 ## Documentation
 
 - [Platform Backends & Boundary Specs](docs/platform-backends.md)
 - [Agent Presets & Registry](docs/agents.md)
 - [Threat Model & Security Assumptions](docs/threat-model.md)
+- [Diagnostic Preflight Verification](docs/architecture/verify-ng.md)
 - [Exit Codes & Failure Modes](docs/exit-codes.md)
 - [Vulnerability Reporting (SECURITY.md)](SECURITY.md)
 
+---
+
 ## Contributing
 
-Contributions are welcome. Please branch from main. All boundary assertions must include corresponding kernel validation test cases. Pull requests are validated against Linux and macOS kernel runners in GitHub Actions CI.
+Contributions are welcome. Please branch from `main`. All boundary assertions must include corresponding kernel validation test cases. Pull requests are validated against Linux, macOS, and Windows kernel runners in GitHub Actions CI.
+
+---
 
 ## License
 

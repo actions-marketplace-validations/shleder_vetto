@@ -1,64 +1,260 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 340" width="100%" role="img" aria-label="vetto: a kernel wall between the AI agent and your machine">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="100%" height="auto" role="img" aria-label="Vetto TUI Mission Control Dashboard">
   <defs>
-    <linearGradient id="vbg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#0f141c"/>
-      <stop offset="100%" stop-color="#090d13"/>
+    <!-- Background cyber gradients -->
+    <linearGradient id="cyber-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07080c" />
+      <stop offset="50%" stop-color="#0a0c14" />
+      <stop offset="100%" stop-color="#050608" />
     </linearGradient>
-    <linearGradient id="vwall" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1c2128"/>
-      <stop offset="100%" stop-color="#12161d"/>
+    <linearGradient id="header-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#141822" />
+      <stop offset="100%" stop-color="#0d1017" />
     </linearGradient>
-    <linearGradient id="vdeny" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#3d1418" stop-opacity="0.9"/>
-      <stop offset="100%" stop-color="#241014" stop-opacity="0.65"/>
+    <linearGradient id="crimson-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff003c" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#990024" stop-opacity="0.5" />
     </linearGradient>
+    <linearGradient id="panel-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c0e15" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#08090e" stop-opacity="0.95" />
+    </linearGradient>
+
+    <!-- Outer shadow filter -->
+    <filter id="box-shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="16" in="SourceAlpha" result="blur" />
+      <feOffset dx="0" dy="12" result="offsetblur" />
+      <feFlood flood-color="#ff003c" flood-opacity="0.12" result="glow" />
+      <feComposite in2="offsetblur" operator="in" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
   </defs>
+
   <style>
-    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .title { fill: #f0f6fc; font-size: 84px; font-weight: 700; letter-spacing: -3px; }
-    .tag { fill: #8b949e; font-size: 17px; }
-    .tline { font-size: 13.5px; }
-    .p1 { fill: #58a6ff; font-weight: 700; }
-    .p2 { fill: #e3b341; font-weight: 700; }
-    .cmd { fill: #f0f6fc; font-weight: 600; }
-    .dim { fill: #8b949e; }
-    .bad { fill: #ff7b72; font-weight: 600; }
-    .blk { fill: #f0883e; font-weight: 700; }
-    .ok { fill: #3fb950; font-weight: 600; }
-    .walllab { fill: #6e7681; font-size: 11px; letter-spacing: 2px; }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .neon-red { fill: #ff003c; }
+    .neon-cyan { fill: #00f0ff; }
+    .neon-amber { fill: #fcee0a; }
+    .neon-green { fill: #00ff66; }
+    .dim { fill: #5b6275; }
+    .dim-dark { fill: #383c48; }
+    .bright { fill: #f0f6fc; }
+    .subtext { fill: #8a91a0; }
   </style>
 
-  <rect x="0" y="0" width="880" height="340" rx="12" fill="url(#vbg)"/>
-  <rect x="0.5" y="0.5" width="879" height="339" rx="12" fill="none" stroke="#21262d" stroke-width="1"/>
+  <!-- Container Box with Shadow & Subtle Glow -->
+  <g filter="url(#box-shadow)">
+    <!-- Terminal Outer Frame -->
+    <rect x="16" y="14" width="928" height="512" rx="10" fill="url(#cyber-bg)" stroke="#ff003c" stroke-opacity="0.5" stroke-width="1.2" />
 
-  <!-- Left: identity -->
-  <text x="44" y="118" class="mono title">vetto</text>
-  <text x="48" y="158" class="mono tag">your agent holds your keys.</text>
-  <text x="48" y="182" class="mono tag">give it a kernel wall instead.</text>
-  <text x="48" y="224" class="mono tline dim">no root · no daemons · fail-closed exit 125</text>
-  <text x="48" y="248" class="mono tline dim">breach or it didn't happen — never silent</text>
-  <text x="48" y="292" class="mono tline"><tspan class="dim">$ </tspan><tspan class="cmd">vetto enable claude</tspan><tspan class="dim">  →  </tspan><tspan class="ok">sandboxed</tspan></text>
+    <!-- Terminal Titlebar -->
+    <rect x="16" y="14" width="928" height="36" rx="10" fill="url(#header-grad)" />
+    <rect x="16" y="38" width="928" height="12" fill="url(#header-grad)" />
+    <line x1="16" y1="50" x2="944" y2="50" stroke="#252b3b" stroke-width="1" />
 
-  <!-- Middle: the wall -->
-  <rect x="400" y="24" width="10" height="292" rx="5" fill="url(#vwall)" stroke="#30363d" stroke-width="1"/>
-  <text x="342" y="180" class="mono walllab" transform="rotate(-90 342 180)">LANDLOCK · SECCOMP · NAMESPACES</text>
+    <!-- Window Dots -->
+    <circle cx="36" cy="32" r="5.5" fill="#ff4d4d" />
+    <circle cx="54" cy="32" r="5.5" fill="#fcee0a" />
+    <circle cx="72" cy="32" r="5.5" fill="#00ff66" />
 
-  <!-- Right: terminal proof -->
-  <rect x="440" y="24" width="392" height="292" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
-  <circle cx="464" cy="48" r="6" fill="#ff5f57"/>
-  <circle cx="484" cy="48" r="6" fill="#febc2e"/>
-  <circle cx="504" cy="48" r="6" fill="#28c840"/>
-  <text x="528" y="53" class="mono tline dim">agent session — confined</text>
-  <line x1="440" y1="66" x2="832" y2="66" stroke="#21262d" stroke-width="1"/>
+    <!-- Titlebar Title & Right Badge -->
+    <text x="480" y="36" text-anchor="middle" class="mono" font-size="12" fill="#8a91a0" font-weight="600" letter-spacing="0.5">
+      vetto — mission control (v0.5.0)
+    </text>
+    <rect x="734" y="24" width="194" height="18" rx="4" fill="#ff003c" fill-opacity="0.15" stroke="#ff003c" stroke-opacity="0.6" stroke-width="0.8" />
+    <circle cx="746" cy="33" r="3" fill="#ff003c" />
+    <text x="755" y="36" class="mono" font-size="10" font-weight="700" fill="#ff003c" letter-spacing="0.8">ARASAKA CYBER-RED [t]</text>
 
-  <text x="460" y="104" class="mono tline"><tspan class="p2">agent&gt; </tspan><tspan class="dim">read </tspan><tspan class="bad">~/.ssh/id_rsa</tspan></text>
-  <rect x="460" y="116" width="352" height="30" rx="6" fill="url(#vdeny)"/>
-  <text x="472" y="136" class="mono tline blk">BLOCKED · secret mask (EACCES)</text>
+    <!-- TAB NAVIGATION BAR -->
+    <g transform="translate(36, 68)">
+      <!-- Tab 1: AGENTS (Active) -->
+      <rect x="0" y="0" width="130" height="24" rx="4" fill="#ff003c" fill-opacity="0.22" stroke="#ff003c" stroke-width="1.2" />
+      <text x="65" y="16" text-anchor="middle" class="mono" font-size="11" font-weight="800" fill="#ffffff" letter-spacing="1">1: AGENTS</text>
 
-  <text x="460" y="178" class="mono tline"><tspan class="p2">agent&gt; </tspan><tspan class="dim">open raw socket</tspan></text>
-  <rect x="460" y="190" width="352" height="30" rx="6" fill="url(#vdeny)"/>
-  <text x="472" y="210" class="mono tline blk">BLOCKED · net namespace</text>
+      <!-- Tab 2: SANDBOX VFS -->
+      <rect x="140" y="0" width="150" height="24" rx="4" fill="#11141c" stroke="#252b3b" stroke-width="0.8" />
+      <text x="215" y="16" text-anchor="middle" class="mono" font-size="11" font-weight="600" fill="#6e7687" letter-spacing="1">2: SANDBOX VFS</text>
 
-  <text x="460" y="256" class="mono tline"><tspan class="p1">$ </tspan><tspan class="cmd">vetto audit --latest</tspan></text>
-  <text x="460" y="280" class="mono tline dim">3 denials · 0 leaks · exit 125 ready</text>
+      <!-- Tab 3: KERNEL DOCTOR -->
+      <rect x="300" y="0" width="160" height="24" rx="4" fill="#11141c" stroke="#252b3b" stroke-width="0.8" />
+      <text x="380" y="16" text-anchor="middle" class="mono" font-size="11" font-weight="600" fill="#6e7687" letter-spacing="1">3: KERNEL DOCTOR</text>
+
+      <!-- Tab 4: SESSIONS -->
+      <rect x="470" y="0" width="130" height="24" rx="4" fill="#11141c" stroke="#252b3b" stroke-width="0.8" />
+      <text x="535" y="16" text-anchor="middle" class="mono" font-size="11" font-weight="600" fill="#6e7687" letter-spacing="1">4: SESSIONS</text>
+
+      <!-- Mode indicator right -->
+      <text x="860" y="16" text-anchor="end" class="mono" font-size="10.5" font-weight="600" fill="#00ff66">● KERNEL LSM ARMED (FAIL-CLOSED)</text>
+    </g>
+
+    <!-- CIRCUIT LOGO & HERO TITLE -->
+    <g transform="translate(36, 108)">
+      <text x="0" y="14" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        ██╗   ██╗███████╗████████╗████████╗ ██████╗ 
+      </text>
+      <text x="0" y="27" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        ██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝██╔═══██╗
+      </text>
+      <text x="0" y="40" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        ██║   ██║█████╗     ██║      ██║   ██║   ██║
+      </text>
+      <text x="0" y="53" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        ╚██╗ ██╔╝██╔══╝     ██║      ██║   ██║   ██║
+      </text>
+      <text x="0" y="66" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        &#160;╚████╔╝ ███████╗   ██║      ██║   ╚██████╔╝
+      </text>
+      <text x="0" y="79" class="mono neon-red" font-size="11.5" font-weight="700" letter-spacing="1">
+        &#160;&#160;╚═══╝  ╚══════╝   ╚═╝      ╚═╝    ╚═════╝ 
+      </text>
+
+      <!-- Tagline -->
+      <text x="440" y="36" class="mono neon-amber" font-size="11" font-weight="700" letter-spacing="0.8">
+        KERNEL-LEVEL REIGN FOR AI CODING AGENTS
+      </text>
+      <text x="440" y="56" class="mono dim" font-size="10.5">
+        ROOTLESS · DAEMONLESS · SUB-4MS INJECTION · ZERO DOCKER OVERHEAD
+      </text>
+      <text x="440" y="76" class="mono neon-cyan" font-size="10.5">
+        Landlock LSM ABI 9  |  Namespaces  |  cgroups v2  |  Seccomp-BPF
+      </text>
+    </g>
+
+    <!-- HORIZONTAL DIVIDER -->
+    <line x1="36" y1="202" x2="924" y2="202" stroke="#1d2333" stroke-width="1" />
+
+    <!-- MAIN TWO-COLUMN DASHBOARD -->
+
+    <!-- LEFT COLUMN: INSTALLED AGENTS FLEET -->
+    <g transform="translate(36, 214)">
+      <!-- Panel Header -->
+      <rect x="0" y="0" width="418" height="258" rx="6" fill="url(#panel-bg)" stroke="#ff003c" stroke-opacity="0.3" stroke-width="1" />
+      <path d="M 0 6 Q 0 0 6 0 L 412 0 Q 418 0 418 6 L 418 28 L 0 28 Z" fill="#140a10" />
+      <line x1="0" y1="28" x2="418" y2="28" stroke="#ff003c" stroke-opacity="0.3" stroke-width="1" />
+      <text x="14" y="19" class="mono neon-red" font-size="11" font-weight="700" letter-spacing="1">
+        AI CODING FLEET (DISCOVERED IN PATH)
+      </text>
+      <text x="404" y="19" text-anchor="end" class="mono dim" font-size="10">5 DETECTED</text>
+
+      <!-- Row 1: Selected Agent (Claude) -->
+      <rect x="6" y="34" width="406" height="40" rx="4" fill="#ff003c" fill-opacity="0.18" stroke="#ff003c" stroke-opacity="0.7" stroke-width="1" />
+      <text x="18" y="58" class="mono bright" font-size="12" font-weight="800">▶ claude</text>
+      <rect x="94" y="44" width="168" height="20" rx="3" fill="#ff003c" fill-opacity="0.3" />
+      <text x="178" y="58" text-anchor="middle" class="mono" font-size="9.5" font-weight="800" fill="#ffffff">CONFINED · SHIM ACTIVE</text>
+      <text x="274" y="58" class="mono neon-green" font-size="10" font-weight="600">PID 28410</text>
+      <text x="350" y="58" class="mono dim" font-size="10">[ENTER]</text>
+
+      <!-- Row 2: Codex -->
+      <rect x="6" y="78" width="406" height="38" rx="4" fill="#0d1017" stroke="#1c2230" stroke-width="0.6" />
+      <text x="22" y="102" class="mono bright" font-size="12" font-weight="600">  codex</text>
+      <rect x="94" y="87" width="168" height="20" rx="3" fill="#00ff66" fill-opacity="0.12" stroke="#00ff66" stroke-opacity="0.4" stroke-width="0.8" />
+      <text x="178" y="101" text-anchor="middle" class="mono" font-size="9.5" font-weight="700" fill="#00ff66">CONFINED · SHIM ACTIVE</text>
+      <text x="274" y="101" class="mono neon-green" font-size="10" font-weight="600">PID 28452</text>
+      <text x="362" y="101" class="mono dim" font-size="10">[RUN]</text>
+
+      <!-- Row 3: OpenCode -->
+      <rect x="6" y="120" width="406" height="38" rx="4" fill="#0d1017" stroke="#1c2230" stroke-width="0.6" />
+      <text x="22" y="144" class="mono bright" font-size="12" font-weight="600">  opencode</text>
+      <rect x="94" y="129" width="168" height="20" rx="3" fill="#00ff66" fill-opacity="0.12" stroke="#00ff66" stroke-opacity="0.4" stroke-width="0.8" />
+      <text x="178" y="143" text-anchor="middle" class="mono" font-size="9.5" font-weight="700" fill="#00ff66">CONFINED · SHIM ACTIVE</text>
+      <text x="274" y="143" class="mono dim" font-size="10">IDLE</text>
+      <text x="362" y="143" class="mono dim" font-size="10">[RUN]</text>
+
+      <!-- Row 4: Cursor (Native) -->
+      <rect x="6" y="162" width="406" height="38" rx="4" fill="#0a0c12" stroke="#161b26" stroke-width="0.6" />
+      <text x="22" y="186" class="mono subtext" font-size="12">  cursor</text>
+      <rect x="94" y="171" width="168" height="20" rx="3" fill="#252b3b" fill-opacity="0.5" />
+      <text x="178" y="185" text-anchor="middle" class="mono dim" font-size="9.5" font-weight="600">UNCONFINED · NATIVE</text>
+      <text x="274" y="185" class="mono dim" font-size="10">IDLE</text>
+      <text x="354" y="185" class="mono neon-amber" font-size="10">[SPACE]</text>
+
+      <!-- Row 5: Aider (Native) -->
+      <rect x="6" y="204" width="406" height="38" rx="4" fill="#0a0c12" stroke="#161b26" stroke-width="0.6" />
+      <text x="22" y="228" class="mono subtext" font-size="12">  aider</text>
+      <rect x="94" y="213" width="168" height="20" rx="3" fill="#252b3b" fill-opacity="0.5" />
+      <text x="178" y="227" text-anchor="middle" class="mono dim" font-size="9.5" font-weight="600">UNCONFINED · NATIVE</text>
+      <text x="274" y="227" class="mono dim" font-size="10">IDLE</text>
+      <text x="354" y="227" class="mono neon-amber" font-size="10">[SPACE]</text>
+    </g>
+
+    <!-- RIGHT COLUMN: ACTIVE INSPECTOR & VFS SECURITY MATRIX -->
+    <g transform="translate(470, 214)">
+      <!-- Panel Header -->
+      <rect x="0" y="0" width="454" height="258" rx="6" fill="url(#panel-bg)" stroke="#00f0ff" stroke-opacity="0.25" stroke-width="1" />
+      <path d="M 0 6 Q 0 0 6 0 L 448 0 Q 454 0 454 6 L 454 28 L 0 28 Z" fill="#07121a" />
+      <line x1="0" y1="28" x2="454" y2="28" stroke="#00f0ff" stroke-opacity="0.25" stroke-width="1" />
+      <text x="14" y="19" class="mono neon-cyan" font-size="11" font-weight="700" letter-spacing="1">
+        SECURITY DRILLDOWN: CLAUDE CODE (ACTIVE)
+      </text>
+      <text x="440" y="19" text-anchor="end" class="mono neon-green" font-size="10">TIER 1 FULL</text>
+
+      <!-- Detailed Metrics Matrix -->
+      <g transform="translate(16, 42)">
+        <!-- Metric 1 -->
+        <text x="0" y="12" class="mono subtext" font-size="10.5">VFS Secret Mask:</text>
+        <text x="135" y="12" class="mono neon-green" font-size="10.5" font-weight="700">mode 0000 tmpfs</text>
+        <text x="270" y="12" class="mono dim" font-size="10">[~/.ssh, ~/.aws, .env]</text>
+
+        <!-- Metric 2 -->
+        <text x="0" y="34" class="mono subtext" font-size="10.5">Landlock LSM ABI:</text>
+        <text x="135" y="34" class="mono neon-green" font-size="10.5" font-weight="700">ABI 9 (v1–v6 enforced)</text>
+        <text x="320" y="34" class="mono dim" font-size="10">[READ/WRITE/EXEC]</text>
+
+        <!-- Metric 3 -->
+        <text x="0" y="56" class="mono subtext" font-size="10.5">User Namespaces:</text>
+        <text x="135" y="56" class="mono neon-green" font-size="10.5" font-weight="700">CLONE_NEWUSER</text>
+        <text x="270" y="56" class="mono dim" font-size="10">[Rootless Isolation]</text>
+
+        <!-- Metric 4 -->
+        <text x="0" y="78" class="mono subtext" font-size="10.5">Process Extinction:</text>
+        <text x="135" y="78" class="mono neon-green" font-size="10.5" font-weight="700">cgroups v2 kill</text>
+        <text x="270" y="78" class="mono dim" font-size="10">[Zero Leaked Orphans]</text>
+
+        <!-- Metric 5 -->
+        <text x="0" y="100" class="mono subtext" font-size="10.5">Network Isolation:</text>
+        <text x="135" y="100" class="mono neon-green" font-size="10.5" font-weight="700">L7 Relay + TLS SNI</text>
+        <text x="270" y="100" class="mono dim" font-size="10">[api.anthropic.com]</text>
+
+        <!-- Metric 6 -->
+        <text x="0" y="122" class="mono subtext" font-size="10.5">Violation Action:</text>
+        <text x="135" y="122" class="mono neon-red" font-size="10.5" font-weight="800">FAIL-CLOSED (Exit 125)</text>
+        <text x="320" y="122" class="mono dim" font-size="10">[No Silent Bypass]</text>
+      </g>
+
+      <!-- Mini Live Audit Stream inside Inspector -->
+      <g transform="translate(14, 178)">
+        <rect x="0" y="0" width="426" height="66" rx="4" fill="#08090d" stroke="#1d2333" stroke-width="0.8" />
+        <text x="10" y="16" class="mono dim" font-size="9.5">LIVE AUDIT PROBE (LAST INTERCEPTED SYSCALLS):</text>
+        <text x="10" y="34" class="mono" font-size="10">
+          <tspan fill="#ff003c" font-weight="700">[DENY]</tspan>
+          <tspan fill="#c0caf5"> openat(&quot;~/.ssh/id_rsa&quot;) </tspan>
+          <tspan fill="#fcee0a">→ EACCES (mask 0000)</tspan>
+        </text>
+        <text x="10" y="52" class="mono" font-size="10">
+          <tspan fill="#00ff66" font-weight="700">[PASS]</tspan>
+          <tspan fill="#c0caf5"> connect(&quot;api.anthropic.com:443&quot;) </tspan>
+          <tspan fill="#5b6275">→ TLS SNI broker</tspan>
+        </text>
+      </g>
+    </g>
+
+    <!-- BOTTOM COMMAND / HOTKEY DOCK -->
+    <g transform="translate(36, 482)">
+      <rect x="0" y="0" width="888" height="30" rx="5" fill="#0d1017" stroke="#252b3b" stroke-width="0.8" />
+      <text x="20" y="19" class="mono" font-size="10.5">
+        <tspan fill="#ff003c" font-weight="700">[1-4]</tspan><tspan fill="#8a91a0"> Tabs  </tspan>
+        <tspan fill="#fcee0a" font-weight="700">[Space]</tspan><tspan fill="#8a91a0"> Toggle Shim  </tspan>
+        <tspan fill="#00ff66" font-weight="700">[Enter]</tspan><tspan fill="#8a91a0"> Launch Sandbox  </tspan>
+        <tspan fill="#00f0ff" font-weight="700">[u]</tspan><tspan fill="#8a91a0"> Undo Rollback  </tspan>
+        <tspan fill="#ff003c" font-weight="700">[t]</tspan><tspan fill="#8a91a0"> Theme  </tspan>
+        <tspan fill="#5b6275" font-weight="700">[r]</tspan><tspan fill="#8a91a0"> Refresh  </tspan>
+        <tspan fill="#e06c75" font-weight="700">[q]</tspan><tspan fill="#8a91a0"> Quit</tspan>
+      </text>
+      <text x="870" y="19" text-anchor="end" class="mono dim" font-size="10">shleder/vetto v0.5.0</text>
+    </g>
+  </g>
 </svg>
