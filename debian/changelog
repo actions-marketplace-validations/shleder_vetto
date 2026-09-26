@@ -1,3 +1,9 @@
+vetto (0.5.0-1) unstable; urgency=medium
+
+  * Interactive TUI Mission Control Dashboard and repository modernization.
+
+ -- vetto contributors <noreply@github.com>  Sat, 26 Sep 2026 19:49:15 +0000
+
 vetto (0.4.7-1) unstable; urgency=medium
 
   * Diagnostic preflight verification (vetto doctor --preflight), container restriction probe, structured JSON report.
