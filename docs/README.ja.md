@@ -1,4 +1,4 @@
-![vetto — AIエージェントとマシンの間のカーネル隔離境界](../assets/readme/hero.svg)
+![vetto — AIエージェントとマシンの間のカーネル隔離境界](../assets/readme/hero.png)
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>

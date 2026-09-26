@@ -1,4 +1,4 @@
-![vetto — AI 编程助手与主机系统之间的内核隔离壁垒](../assets/readme/hero.svg)
+![vetto — AI 编程助手与主机系统之间的内核隔离壁垒](../assets/readme/hero.png)
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
