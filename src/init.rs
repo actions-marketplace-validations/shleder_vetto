@@ -194,6 +194,18 @@ pub fn analyze_project(root: &Path) -> ProjectAnalysis {
             .recommended_network_domains
             .extend(agent_network_allowlist("antigravity"));
     }
+    if root.join(".copilot").exists() || root.join("copilot-instructions.md").exists() {
+        analysis.detected_agents.push("GitHub Copilot");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("copilot"));
+    }
+    if root.join(".smolagents").exists() {
+        analysis.detected_agents.push("Smolagents");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("smolagents"));
+    }
     if root.join("AGENTS.md").exists() {
         analysis.detected_agents.push("AGENTS.md");
     }

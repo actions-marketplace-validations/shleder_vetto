@@ -589,22 +589,23 @@ pub fn is_interactive_agent_command(agent: Option<&str>, command: &[String]) -> 
     });
     if let Some(n) = name {
         let lower = n.to_ascii_lowercase();
+        let canon = crate::policy::defaults::canonical_agent_name(&lower).unwrap_or(&lower);
         matches!(
-            lower.as_str(),
+            canon,
             "codex"
                 | "claude"
                 | "opencode"
                 | "aider"
                 | "gemini"
                 | "antigravity"
-                | "agy"
                 | "cursor"
-                | "cursor-agent"
                 | "cline"
+                | "copilot"
                 | "windsurf"
                 | "goose"
                 | "openhands"
                 | "devin"
+                | "smolagents"
         )
     } else {
         false

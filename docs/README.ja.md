@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 設定ファイル不要でAIエージェントのサンドボックス化を有効化。Vettoは非破壊的なシムを `~/.vetto/shims` に配置し、`PATH` の最優先で読み込みます：
 
 ```bash
-vetto enable claude   # codex, opencode, gemini, cursor, aider など20以上のエージェントに対応
+vetto enable claude   # codex, opencode, gemini, cursor, aider など15のプロファイルに対応
 claude                # 通常通り実行するだけで、カーネル境界内で完全保護されます
 ```
 

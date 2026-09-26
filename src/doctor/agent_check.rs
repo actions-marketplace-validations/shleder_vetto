@@ -109,6 +109,7 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "goose" => Some("goose".to_string()),
         "openhands" => Some("openhands".to_string()),
         "devin" => Some("devin".to_string()),
+        "smolagents" => Some("smolagents".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }

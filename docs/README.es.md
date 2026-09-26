@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Habilita el aislamiento sin configuración para tu agente de codificación. Vetto instala un shim no destructivo en `~/.vetto/shims` con prioridad en `PATH`:
 
 ```bash
-vetto enable claude   # compatible con codex, opencode, gemini, cursor, aider y más de 20 agentes
+vetto enable claude   # compatible con codex, opencode, gemini, cursor, aider y 15 perfiles
 claude                # se ejecuta normalmente, totalmente confinado en el kernel
 ```
 

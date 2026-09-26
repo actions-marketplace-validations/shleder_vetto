@@ -10,11 +10,17 @@ unproven rather than assumed.
 |---|---|---|---|---|---|---|
 | OpenAI Codex CLI | `codex`, `codex exec` | Yes; platform/config dependent | statusline for interactive, full/none for `exec` | `codex` | Provider and Git endpoints must be explicitly allowed | not in CI |
 | Claude Code | `claude`, `claude -p` | Optional/tool-specific | statusline for interactive, full/none for `-p` | `claude` | Provider and package endpoints depend on the task | not in CI |
-| Aider | `aider` | No uniform OS boundary assumed | statusline | `aider` | Model provider plus optional Git endpoints | not in CI |
-| Cursor Agent | `cursor-agent` | Implementation/version dependent | full | `cursor` | Treat endpoints as untrusted configuration | not in CI |
-| Cline | user-configured CLI/extension command | unknown | full | `cline` | Do not infer endpoints from the preset | not in CI |
 | OpenCode | `opencode` | permission model is not treated as an OS boundary | statusline | `opencode` | Provider-specific | not in CI |
+| Antigravity | `antigravity`, `agy` | Google internal boundary | statusline or full | `antigravity` | Google Cloud & APIs | not in CI |
+| Gemini CLI | `gemini` | Implementation dependent | statusline | `gemini` | Google Generative Language API | not in CI |
+| Cursor Agent | `cursor-agent` | Implementation/version dependent | full | `cursor` | Treat endpoints as untrusted configuration | not in CI |
+| Aider | `aider` | No uniform OS boundary assumed | statusline | `aider` | Model provider plus optional Git endpoints | not in CI |
+| Cline | user-configured CLI/extension command | unknown | full | `cline` | Do not infer endpoints from the preset | not in CI |
 | GitHub Copilot CLI | `copilot` | implementation/version dependent | statusline | `copilot` | GitHub endpoints only when needed | not in CI |
+| Windsurf | `windsurf` | Codeium Cascade boundary | statusline | `windsurf` | Codeium API endpoints | not in CI |
+| Block Goose AI | `goose` | Implementation dependent | statusline or full | `goose` | Model provider endpoints | not in CI |
+| OpenHands | `openhands` | Containerized or local | statusline or none | `openhands` | Model endpoints | not in CI |
+| Cognition Devin | `devin` | Cloud agent CLI | statusline | `devin` | Devin API endpoints | not in CI |
 | Hugging Face smolagents | `smolagents`, `vetto eval` | No OS isolation (threads) | none / full | `smolagents` | Hugging Face Hub + model providers | covered in CI |
 | Custom process | any executable | unknown | statusline or none | `custom` | Default remains `off` | process contract covered |
 
