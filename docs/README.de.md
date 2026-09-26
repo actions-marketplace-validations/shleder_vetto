@@ -21,22 +21,17 @@ Daemon-lose, unprivilegierte (rootless) Kernel-Sandbox und Richtlinien-Laufzeitu
 
 ---
 
-## Interaktives TUI Mission Control Dashboard
+## Interaktives TUI Mission Control
 
-Ab Version **v0.5.0** öffnet die bloße Ausführung von `vetto` in einem interaktiven Terminal das Cyberpunk-Dashboard **Mission Control**:
+Starten Sie das interaktive Mission Control Dashboard einfach durch Ausführen von `vetto` im Terminal:
 
 ```bash
 vetto
 ```
 
-- **Dynamische Flottenerkennung**: Scannt automatisch `$PATH` und zeigt nur die auf Ihrem System installierten KI-Agenten an (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `smolagents`), während fehlende Tools ausgeblendet bleiben.
-- **Steuerung per Tastendruck**:
-  - `[1: AGENTS]`: Live-Prozessüberwachung, PATH-Shim-Aktivierung (`Leertaste`) und sofortiger Start in der Sandbox (`Enter`).
-  - `[2: SANDBOX VFS]`: Inode-Geheimnismatrix (`mode=0000` tmpfs-Overlays über `~/.ssh`, `~/.aws`, `.env`).
-  - `[3: KERNEL DOCTOR]`: Live-Diagnose von Landlock LSM ABI (v1–v6), Benutzer-Namensräumen (`CLONE_NEWUSER`), cgroups v2 (`cgroup.kill`) und Seccomp-BPF.
-  - `[4: SESSIONS]`: Aktive Sitzungsüberwachung und sofortiges Rollback ohne Datenverlust (`u`).
-- **Zwei Cyber-Themes**: Arasaka Cyber-Red (Standard) und Cyber Circuit (Bernstein-Phosphor), umschaltbar mit Taste `t`.
-- **Kein Overhead**: Skripte, nicht-interaktive Umgebungen und Unix-Pipes umgehen die TUI automatisch ohne Verzögerung.
+Beinhaltet Live-Erkennung von KI-Agenten, One-Touch-Aktivierung von PATH-Shims, VFS-Geheimnismatrix-Audit, Kernel-Diagnose und sofortiges Rollback.
+
+Tastenbelegungen, Ansichten und Designkonfiguration finden Sie im [Mission Control TUI Handbuch](tui.md).
 
 ---
 

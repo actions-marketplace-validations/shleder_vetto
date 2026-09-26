@@ -21,22 +21,17 @@
 
 ---
 
-## 交互式终端 Mission Control 仪表盘
+## 交互式终端 Mission Control
 
-自 **v0.5.0** 起，在任何交互式终端中直接运行 `vetto` 即可唤起赛博朋克风格的 **Mission Control** 仪表盘：
+在任何交互式终端中直接运行 `vetto` 即可唤起 Mission Control 仪表盘：
 
 ```bash
 vetto
 ```
 
-- **动态智能体检测**：自动扫描 `$PATH` 环境变量，仅列出系统中实际已安装的 AI 助手（`claude`、`codex`、`gemini`、`opencode`、`cursor`、`aider`、`cline`、`continue`、`goose`、`openhands`、`smolagents`），未安装的工具自动隐藏。
-- **单键控制中枢**：
-  - `[1: AGENTS]`：实时舰队进程监控、一键切换 PATH 垫片（`Space`）、在沙箱中即时启动（`Enter`）。
-  - `[2: SANDBOX VFS]`：Inode 级敏感凭据掩码矩阵（针对 `~/.ssh`、`~/.aws`、`.env` 的 `mode=0000` tmpfs 覆盖层）。
-  - `[3: KERNEL DOCTOR]`：实时检测 Landlock LSM ABI（v1–v6）、非特权用户命名空间（`CLONE_NEWUSER`）、cgroups v2（`cgroup.kill`）与 Seccomp-BPF。
-  - `[4: SESSIONS]`：活动会话查看与零数据丢失的即时快照回滚（`u`）。
-- **双配色赛博朋克主题**：Arasaka Cyber-Red（默认）与 Cyber Circuit（琥珀荧光），按下 `t` 键实时无缝切换。
-- **零额外开销**：脚本批处理、非交互式流水线与 Unix 管道将自动跳过 TUI，无任何性能损耗。
+包含实时 AI 编程助手检测、一键 PATH 垫片切换、VFS 凭据掩码矩阵实时审计、内核预检诊断与零损耗即时快照回滚。
+
+关于完整快捷键、界面视图与主题切换，请参阅 [Mission Control TUI 详细指南](tui.md)。
 
 ---
 

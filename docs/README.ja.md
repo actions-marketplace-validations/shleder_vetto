@@ -21,22 +21,17 @@ AIコーディングCLIエージェント（**Claude Code**、**OpenAI Codex**�
 
 ---
 
-## インタラクティブTUI Mission Control ダッシュボード
+## インタラクティブTUI Mission Control
 
-**v0.5.0** より、任意のターミナルで引数なしの `vetto` を実行するだけで、サイバーパンク調の **Mission Control** ダッシュボードが起動します：
+任意のターミナルで `vetto` を実行するだけで、Mission Control ダッシュボードが起動します：
 
 ```bash
 vetto
 ```
 
-- **動的エージェント検出**：`$PATH` を自動スキャンし、システムに実際にインストールされているAIエージェント（`claude`、`codex`、`gemini`、`opencode`、`cursor`、`aider`、`cline`、`continue`、`goose`、`openhands`、`smolagents`）のみを一覧表示。未インストールのものは非表示になります。
-- **ワンタッチキー操作**：
-  - `[1: AGENTS]`：リアルタイムフリート監視、PATHシムの切り替え（`Space`）、サンドボックスでの即時起動（`Enter`）。
-  - `[2: SANDBOX VFS]`：Inodeレベルの秘密情報マスキング（`~/.ssh`、`~/.aws`、`.env` を `mode=0000` tmpfs で隠蔽）。
-  - `[3: KERNEL DOCTOR]`：Landlock LSM ABI（v1–v6）、非特権ユーザー名前空間（`CLONE_NEWUSER`）、cgroups v2（`cgroup.kill`）、Seccomp-BPF のリアルタイム検証。
-  - `[4: SESSIONS]`：実行中セッションの監視とデータ損失ゼロの即時スナップショットロールバック（`u`）。
-- **2種類のサイバーテーマ**：Arasaka Cyber-Red（デフォルト）と Cyber Circuit（アンバー蛍光色）を `t` キーでリアルタイム切り替え。
-- **オーバーヘッドゼロ**：スクリプト実行やUnixパイプラインではTUIが自動的にバイパスされ、遅延なくコマンドが実行されます。
+AIエージェントの自動検出、ワンタッチでのPATHシム切り替え、VFS秘密情報マトリクスの監査、カーネル診断プローブ、即時ロールバックを備えています。
+
+キーバインドや詳細なビューについては、[Mission Control TUI ガイド](tui.md) をご覧ください。
 
 ---
 

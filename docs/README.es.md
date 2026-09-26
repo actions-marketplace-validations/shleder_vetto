@@ -23,20 +23,15 @@ Entorno de ejecución (runtime) sin demonios (daemon-less) y sin privilegios de 
 
 ## Panel Interactivo TUI Mission Control
 
-A partir de **v0.5.0**, ejecutar simplemente `vetto` en cualquier terminal interactivo abre el panel ciberpunk **Mission Control**:
+Ejecuta el panel interactivo Mission Control con solo escribir `vetto` en cualquier terminal:
 
 ```bash
 vetto
 ```
 
-- **Detección Dinámica de Agentes**: Escanea automáticamente `$PATH` y muestra únicamente los agentes instalados en tu sistema (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `smolagents`), ocultando limpiamente los no presentes.
-- **Control con Una Sola Tecla**:
-  - `[1: AGENTS]`: Monitoreo en vivo de procesos, alternancia de shims de PATH (`Espacio`), e inicio instantáneo en sandbox (`Enter`).
-  - `[2: SANDBOX VFS]`: Matriz de enmascaramiento de secretos a nivel de inodo (`mode=0000` tmpfs sobre `~/.ssh`, `~/.aws`, `.env`).
-  - `[3: KERNEL DOCTOR]`: Verificación en vivo de Landlock LSM ABI (v1–v6), espacios de nombres de usuario (`CLONE_NEWUSER`), cgroups v2 (`cgroup.kill`) y Seccomp-BPF.
-  - `[4: SESSIONS]`: Sesiones activas y reversión instantánea de instantáneas (snapshots) sin pérdida de datos (`u`).
-- **Dos Temas Cibernéticos**: Arasaka Cyber-Red (predeterminado) y Cyber Circuit (fósforo ámbar), intercambiables al instante con la tecla `t`.
-- **Cero Sobrecarga**: Scripts, entornos no interactivos y tuberías Unix eluden el TUI automáticamente sin demora de inicio.
+Incluye detección en vivo de agentes de IA, alternancia de shims de PATH con un toque, auditoría de la matriz de secretos VFS, diagnósticos del kernel y reversión instantánea de instantáneas.
+
+Para ver atajos de teclado, vistas detalladas y configuración de temas, consulta la [Guía de Mission Control TUI](tui.md).
 
 ---
 

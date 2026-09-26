@@ -23,20 +23,15 @@ Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI
 
 ## Interactive TUI Mission Control
 
-Starting in **v0.5.0**, running bare `vetto` in any interactive terminal launches the cybernetic **Mission Control Dashboard**:
+Launch the interactive Mission Control dashboard by simply running `vetto` in any interactive terminal:
 
 ```bash
 vetto
 ```
 
-- **Dynamic Fleet Detection**: Automatically scans your `$PATH` and displays installed AI agents (`claude`, `codex`, `gemini`, `opencode`, `cursor`, `aider`, `cline`, `continue`, `goose`, `openhands`, `smolagents`), cleanly omitting uninstalled ones.
-- **Single-Keystroke Control Plane**:
-  - `[1: AGENTS]`: Live fleet monitoring, one-touch PATH-shim toggling (`Space`), and instant sandbox launching (`Enter`).
-  - `[2: SANDBOX VFS]`: Inode-level secret masking matrix (`mode=0000` tmpfs overlays over `~/.ssh`, `~/.aws`, `.env`).
-  - `[3: KERNEL DOCTOR]`: Live preflight probe of Landlock LSM ABI (v1–v6), user namespaces (`CLONE_NEWUSER`), cgroups v2 (`cgroup.kill`), and Seccomp-BPF.
-  - `[4: SESSIONS]`: Active containerized sessions and instant zero-loss snapshot rollback (`u`).
-- **Dual Cybernetic Themes**: Arasaka Cyber-Red (default) and Cyber Circuit (amber-phosphor), toggled on the fly via `t`.
-- **Zero Overhead**: Scripts, non-interactive environments, and Unix pipelines bypass the TUI automatically with zero startup overhead.
+Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, and zero-loss snapshot rollbacks.
+
+For keybindings, detailed views, and theme configuration, see the [Mission Control TUI Guide](docs/tui.md).
 
 ---
 
