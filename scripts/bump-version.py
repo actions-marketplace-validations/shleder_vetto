@@ -158,13 +158,11 @@ def main():
     update_file(os.path.join(REPO_ROOT, "npm", "README.md"), rf'Prebuilt targets in `{re.escape(current)}`:', f'Prebuilt targets in `{target}`:')
     update_file(os.path.join(REPO_ROOT, "deploy", "k8s", "daemonset.yaml"), rf'image:\s*ghcr\.io/shleder/vetto:{re.escape(current)}', f'image: ghcr.io/shleder/vetto:{target}')
     update_file(os.path.join(REPO_ROOT, "deploy", "helm", "vetto", "Chart.yaml"), rf'appVersion:\s*"[^"]+"', f'appVersion: "{target}"')
-    update_file(os.path.join(REPO_ROOT, "README.md"), rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
-    update_file(os.path.join(REPO_ROOT, "README.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
-    update_file(os.path.join(REPO_ROOT, "docs", "README.ru.md"), rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
-    update_file(os.path.join(REPO_ROOT, "docs", "README.ru.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
-    for lang in ["zh", "ja", "es", "de"]:
-        update_file(os.path.join(REPO_ROOT, "docs", f"README.{lang}.md"), rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
-        update_file(os.path.join(REPO_ROOT, "docs", f"README.{lang}.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
+    for doc in [os.path.join(REPO_ROOT, "README.md")] + [os.path.join(REPO_ROOT, "docs", f"README.{lang}.md") for lang in ["ru", "zh", "ja", "es", "de"]]:
+        update_file(doc, rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
+        update_file(doc, rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
+        update_file(doc, rf'badge/npm-v{re.escape(current)}-CB3837', f'badge/npm-v{target}-CB3837')
+        update_file(doc, rf'badge/crates\.io-v{re.escape(current)}-orange', f'badge/crates.io-v{target}-orange')
 
     
     # GitHub Actions
