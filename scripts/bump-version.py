@@ -162,6 +162,10 @@ def main():
     update_file(os.path.join(REPO_ROOT, "README.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
     update_file(os.path.join(REPO_ROOT, "docs", "README.ru.md"), rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
     update_file(os.path.join(REPO_ROOT, "docs", "README.ru.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
+    for lang in ["zh", "ja", "es", "de"]:
+        update_file(os.path.join(REPO_ROOT, "docs", f"README.{lang}.md"), rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
+        update_file(os.path.join(REPO_ROOT, "docs", f"README.{lang}.md"), rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
+
     
     # GitHub Actions
     update_file(os.path.join(REPO_ROOT, "action.yml"), r'\(e\.g\. "' + re.escape(current) + r'" or "latest"\)', f'(e.g. "{target}" or "latest")')
