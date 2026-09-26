@@ -17,20 +17,13 @@ pub const CLINE_AGENT_TOML: &str = include_str!("../../profiles/agents/cline.tom
 pub const OPENCODE_AGENT_TOML: &str = include_str!("../../profiles/agents/opencode.toml");
 pub const COPILOT_AGENT_TOML: &str = include_str!("../../profiles/agents/copilot.toml");
 pub const WINDSURF_AGENT_TOML: &str = include_str!("../../profiles/agents/windsurf.toml");
-pub const CONTINUE_AGENT_TOML: &str = include_str!("../../profiles/agents/continue.toml");
 pub const GOOSE_AGENT_TOML: &str = include_str!("../../profiles/agents/goose.toml");
 pub const OPENHANDS_AGENT_TOML: &str = include_str!("../../profiles/agents/openhands.toml");
-pub const SWE_AGENT_TOML: &str = include_str!("../../profiles/agents/swe_agent.toml");
-pub const PLANDEX_AGENT_TOML: &str = include_str!("../../profiles/agents/plandex.toml");
-pub const MENTAT_AGENT_TOML: &str = include_str!("../../profiles/agents/mentat.toml");
-pub const GPT_ENGINEER_AGENT_TOML: &str = include_str!("../../profiles/agents/gpt_engineer.toml");
 pub const DEVIN_AGENT_TOML: &str = include_str!("../../profiles/agents/devin.toml");
-pub const CRUST_AGENT_TOML: &str = include_str!("../../profiles/agents/crust.toml");
-pub const AMP_AGENT_TOML: &str = include_str!("../../profiles/agents/amp.toml");
 pub const SMOLAGENTS_AGENT_TOML: &str = include_str!("../../profiles/agents/smolagents.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
 
-pub const AGENT_PROFILE_NAMES: [&str; 22] = [
+pub const AGENT_PROFILE_NAMES: [&str; 15] = [
     "codex",
     "claude",
     "gemini",
@@ -41,16 +34,9 @@ pub const AGENT_PROFILE_NAMES: [&str; 22] = [
     "opencode",
     "copilot",
     "windsurf",
-    "continue",
     "goose",
     "openhands",
-    "swe_agent",
-    "plandex",
-    "mentat",
-    "gpt_engineer",
     "devin",
-    "crust",
-    "amp",
     "smolagents",
     "custom",
 ];
@@ -138,16 +124,9 @@ pub fn canonical_agent_name(name: &str) -> Option<&'static str> {
         "gemini" | "gemini-cli" => Some("gemini"),
         "antigravity" | "antigravity-cli" | "agy" => Some("antigravity"),
         "windsurf" | "windsurf-cli" => Some("windsurf"),
-        "continue" | "continue-cli" => Some("continue"),
         "goose" | "goose-ai" => Some("goose"),
         "openhands" | "all-hands" => Some("openhands"),
-        "swe-agent" | "sweagent" | "swe_agent" => Some("swe_agent"),
-        "plandex" | "plandex-cli" => Some("plandex"),
-        "mentat" | "mentat-cli" => Some("mentat"),
-        "gpt-engineer" | "gpt_engineer" | "gpte" => Some("gpt_engineer"),
         "devin" | "devin-cli" => Some("devin"),
-        "crust" | "crust-cli" => Some("crust"),
-        "amp" | "amp-cli" => Some("amp"),
         "smolagents" | "smol-agents" | "smolagent" => Some("smolagents"),
         "custom" => Some("custom"),
         _ => None,
@@ -166,16 +145,9 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
         "opencode" => Some(OPENCODE_AGENT_TOML),
         "copilot" => Some(COPILOT_AGENT_TOML),
         "windsurf" => Some(WINDSURF_AGENT_TOML),
-        "continue" => Some(CONTINUE_AGENT_TOML),
         "goose" => Some(GOOSE_AGENT_TOML),
         "openhands" => Some(OPENHANDS_AGENT_TOML),
-        "swe_agent" => Some(SWE_AGENT_TOML),
-        "plandex" => Some(PLANDEX_AGENT_TOML),
-        "mentat" => Some(MENTAT_AGENT_TOML),
-        "gpt_engineer" => Some(GPT_ENGINEER_AGENT_TOML),
         "devin" => Some(DEVIN_AGENT_TOML),
-        "crust" => Some(CRUST_AGENT_TOML),
-        "amp" => Some(AMP_AGENT_TOML),
         "smolagents" => Some(SMOLAGENTS_AGENT_TOML),
         "custom" => Some(CUSTOM_AGENT_TOML),
         _ => None,

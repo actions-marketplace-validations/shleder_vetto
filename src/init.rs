@@ -416,16 +416,10 @@ pub fn run_wizard(
             "cline" => "Cline",
             "copilot" => "GitHub Copilot",
             "windsurf" => "Windsurf",
-            "continue" => "Continue",
             "goose" => "Block Goose",
             "openhands" => "OpenHands",
-            "swe-agent" | "swe_agent" => "SWE-agent",
-            "plandex" => "Plandex",
-            "mentat" => "Mentat",
-            "gpt-engineer" | "gpt_engineer" => "GPT Engineer",
             "devin" => "Cognition Devin",
-            "crust" => "Crust AI",
-            "amp" => "Amp AI",
+            "smolagents" => "Smolagents",
             _ => "Custom Agent",
         }];
         if allow_net {

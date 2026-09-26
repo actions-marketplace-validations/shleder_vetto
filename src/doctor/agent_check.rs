@@ -106,16 +106,9 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "opencode" => Some("opencode".to_string()),
         "copilot" => Some("copilot".to_string()),
         "windsurf" => Some("windsurf".to_string()),
-        "continue" => Some("continue".to_string()),
         "goose" => Some("goose".to_string()),
         "openhands" => Some("openhands".to_string()),
-        "swe_agent" => Some("swe-agent".to_string()),
-        "plandex" => Some("plandex".to_string()),
-        "mentat" => Some("mentat".to_string()),
-        "gpt_engineer" => Some("gpt-engineer".to_string()),
         "devin" => Some("devin".to_string()),
-        "crust" => Some("crust".to_string()),
-        "amp" => Some("amp".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }

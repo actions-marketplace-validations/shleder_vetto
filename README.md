@@ -141,7 +141,7 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 
 ## Multi-Agent Compatibility Roster
 
-Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 22 leading agent runtimes:
+Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 15 leading agent runtimes:
 
 | Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
 | :--- | :--- | :--- | :--- |
@@ -153,10 +153,12 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **Cursor** | `cursor` | Cursor backend, extension marketplace | VS Code IPC sockets, `~/.cursor` |
 | **Aider** | `aider` | Configured LLM provider endpoints | Git repo root, history caches |
 | **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code extension host, browser caches |
-| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch caches |
+| **Windsurf** | `windsurf` | `api.codeium.com`, `windsurf.codeium.com` | `~/.windsurf`, Cascade state |
 | **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, extensions |
 | **OpenHands** | `openhands` | Configured model endpoints | Docker-less local execution |
-| **SWE-agent** | `swe_agent` | Benchmark harness endpoints | Testbed ephemeral workspaces |
+| **Devin** | `devin` | `api.devin.ai`, `cognition.ai` | `~/.devin`, `~/.config/devin` |
+| **GitHub Copilot** | `copilot` | `api.github.com`, Copilot endpoints | `~/.config/github-copilot` |
+| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch caches |
 
 ---
 
