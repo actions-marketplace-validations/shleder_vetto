@@ -2,6 +2,7 @@ pub mod bundle;
 pub mod diff;
 pub mod enable;
 pub mod eval;
+pub mod fleet;
 pub mod git_hook;
 pub mod hook;
 pub mod kill;
@@ -22,6 +23,7 @@ pub use bundle::{PackArgs, UnpackArgs};
 pub use diff::DiffArgs;
 pub use enable::{DisableArgs, EnableArgs};
 pub use eval::EvalArgs;
+pub use fleet::{FleetArgs, FleetCommand, FleetSpawnArgs};
 pub use hook::{HookCommand, HookScope, ShellType};
 pub use kill::KillArgs;
 pub use mask::MaskArgs;
@@ -493,6 +495,11 @@ pub enum Command {
         /// Arguments passed to the target binary
         #[arg(last = true, value_name = "ARGS")]
         args: Vec<String>,
+    },
+    /// Manage concurrent multi-agent fleet execution, slots, and isolation
+    Fleet {
+        #[command(subcommand)]
+        command: fleet::FleetCommand,
     },
     /// Run named agents concurrently, each in an independent sandbox.
     #[command(hide = true)]
