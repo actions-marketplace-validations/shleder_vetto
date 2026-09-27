@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 18] = [
+pub const SUPPORTED_AGENTS: [&str; 24] = [
     "claude",
     "codex",
     "opencode",
@@ -33,6 +33,12 @@ pub const SUPPORTED_AGENTS: [&str; 18] = [
     "zcode",
     "kimi",
     "grok",
+    "hermes",
+    "kilo",
+    "pi",
+    "command_code",
+    "freebuff",
+    "deepseek_harness",
 ];
 
 struct AgentSpec {
@@ -126,6 +132,36 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "smolagents",
         binaries: &["smolagents", "smolagent"],
         markers: &[".smolagents"],
+    },
+    AgentSpec {
+        name: "hermes",
+        binaries: &["hermes", "hermes-agent"],
+        markers: &[".hermes", "hermes.json", "hermes.yaml"],
+    },
+    AgentSpec {
+        name: "kilo",
+        binaries: &["kilo", "kilo-code"],
+        markers: &[".kilo", "kilo.json"],
+    },
+    AgentSpec {
+        name: "pi",
+        binaries: &["pi", "pi-agent"],
+        markers: &[".pi", "pi.json"],
+    },
+    AgentSpec {
+        name: "command_code",
+        binaries: &["command-code", "command_code"],
+        markers: &[".command-code", "command-code.json"],
+    },
+    AgentSpec {
+        name: "freebuff",
+        binaries: &["freebuff", "freebuff-agent"],
+        markers: &[".freebuff", "freebuff.json"],
+    },
+    AgentSpec {
+        name: "deepseek_harness",
+        binaries: &["deepseek-harness", "deepseek_harness"],
+        markers: &[".deepseek", "deepseek.json"],
     },
 ];
 
@@ -340,6 +376,30 @@ mod tests {
         let grok_bins = agent_candidate_binaries("grok");
         assert!(grok_bins.contains(&"grok"));
         assert!(grok_bins.contains(&"grok-build"));
+
+        let hermes_bins = agent_candidate_binaries("hermes");
+        assert!(hermes_bins.contains(&"hermes"));
+        assert!(hermes_bins.contains(&"hermes-agent"));
+
+        let kilo_bins = agent_candidate_binaries("kilo");
+        assert!(kilo_bins.contains(&"kilo"));
+        assert!(kilo_bins.contains(&"kilo-code"));
+
+        let pi_bins = agent_candidate_binaries("pi");
+        assert!(pi_bins.contains(&"pi"));
+        assert!(pi_bins.contains(&"pi-agent"));
+
+        let cmd_bins = agent_candidate_binaries("command_code");
+        assert!(cmd_bins.contains(&"command-code"));
+        assert!(cmd_bins.contains(&"command_code"));
+
+        let freebuff_bins = agent_candidate_binaries("freebuff");
+        assert!(freebuff_bins.contains(&"freebuff"));
+        assert!(freebuff_bins.contains(&"freebuff-agent"));
+
+        let deepseek_bins = agent_candidate_binaries("deepseek_harness");
+        assert!(deepseek_bins.contains(&"deepseek-harness"));
+        assert!(deepseek_bins.contains(&"deepseek_harness"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

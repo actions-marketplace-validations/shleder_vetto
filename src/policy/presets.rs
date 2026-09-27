@@ -186,6 +186,44 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "hf.co".into(),
             "cas.huggingface.co".into(),
         ],
+        "hermes" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+            "nousresearch.com".into(),
+            "api.together.xyz".into(),
+        ],
+        "kilo" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "api.kilo.ai".into(),
+            "openrouter.ai".into(),
+        ],
+        "pi" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "api.groq.com".into(),
+            "openrouter.ai".into(),
+        ],
+        "command_code" => vec![
+            "api.cohere.com".into(),
+            "api.cohere.ai".into(),
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+        ],
+        "freebuff" => vec![
+            "api.deepseek.com".into(),
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+        ],
+        "deepseek_harness" => vec![
+            "api.deepseek.com".into(),
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+        ],
         _ => Vec::new(),
     };
 
@@ -384,6 +422,16 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
         "zcode" => Some(&["$HOME/.zcode", "$HOME/.config/zcode"]),
         "kimi" => Some(&["$HOME/.kimi", "$HOME/.config/kimi"]),
         "grok" => Some(&["$HOME/.grok", "$HOME/.config/grok"]),
+        "hermes" => Some(&["$HOME/.hermes", "$HOME/.config/hermes"]),
+        "kilo" => Some(&["$HOME/.kilo", "$HOME/.config/kilo"]),
+        "pi" => Some(&["$HOME/.pi", "$HOME/.config/pi"]),
+        "command_code" | "command-code" => {
+            Some(&["$HOME/.command-code", "$HOME/.config/command-code"])
+        }
+        "freebuff" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
+        "deepseek" | "deepseek_harness" => {
+            Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"])
+        }
         _ => None,
     }
 }
@@ -410,6 +458,14 @@ pub const KNOWN_PRESETS: &[&str] = &[
     "zcode",
     "kimi",
     "grok",
+    "hermes",
+    "kilo",
+    "pi",
+    "command_code",
+    "command-code",
+    "freebuff",
+    "deepseek",
+    "deepseek_harness",
 ];
 
 #[cfg(test)]
@@ -755,6 +811,92 @@ mod tests {
                 "files.pythonhosted.org",
             ]
         );
+        assert_eq!(
+            agent_network_allowlist("hermes"),
+            vec![
+                "api.openai.com",
+                "api.anthropic.com",
+                "openrouter.ai",
+                "nousresearch.com",
+                "api.together.xyz",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("kilo"),
+            vec![
+                "api.openai.com",
+                "api.anthropic.com",
+                "api.kilo.ai",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("pi"),
+            vec![
+                "api.openai.com",
+                "api.anthropic.com",
+                "api.groq.com",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("command_code"),
+            vec![
+                "api.cohere.com",
+                "api.cohere.ai",
+                "api.openai.com",
+                "api.anthropic.com",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("freebuff"),
+            vec![
+                "api.deepseek.com",
+                "api.openai.com",
+                "api.anthropic.com",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("deepseek_harness"),
+            vec![
+                "api.deepseek.com",
+                "api.openai.com",
+                "api.anthropic.com",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
+        assert_eq!(
+            agent_network_allowlist("deepseek-harness"),
+            vec![
+                "api.deepseek.com",
+                "api.openai.com",
+                "api.anthropic.com",
+                "openrouter.ai",
+                "registry.npmjs.org",
+                "pypi.org",
+                "files.pythonhosted.org",
+            ]
+        );
         assert!(agent_network_allowlist("custom").is_empty());
         assert!(agent_network_allowlist("unknown").is_empty());
     }
@@ -796,6 +938,30 @@ mod tests {
         assert_eq!(
             resolve_preset("agy"),
             Some(&["$HOME/.gemini", "$HOME/.config/Antigravity"][..])
+        );
+        assert_eq!(
+            resolve_preset("hermes"),
+            Some(&["$HOME/.hermes", "$HOME/.config/hermes"][..])
+        );
+        assert_eq!(
+            resolve_preset("kilo"),
+            Some(&["$HOME/.kilo", "$HOME/.config/kilo"][..])
+        );
+        assert_eq!(
+            resolve_preset("pi"),
+            Some(&["$HOME/.pi", "$HOME/.config/pi"][..])
+        );
+        assert_eq!(
+            resolve_preset("command_code"),
+            Some(&["$HOME/.command-code", "$HOME/.config/command-code"][..])
+        );
+        assert_eq!(
+            resolve_preset("freebuff"),
+            Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"][..])
+        );
+        assert_eq!(
+            resolve_preset("deepseek"),
+            Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"][..])
         );
     }
 
