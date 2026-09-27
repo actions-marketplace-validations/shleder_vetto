@@ -401,8 +401,9 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
         let outcome = execution.wait_collect();
         let _ = fleet.release_worker(&scope.worker_id);
         if let Some(code) = outcome.exit_code {
-            if code != 0 && worst_exit_code == 0 {
-                worst_exit_code = code;
+            let mapped = crate::exit_codes::map_session_exit_code(code, outcome.timed_out, false);
+            if mapped != 0 && worst_exit_code == 0 {
+                worst_exit_code = mapped;
             }
         }
     }

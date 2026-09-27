@@ -630,7 +630,9 @@ fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -
         };
         if contains_slice(&env, needle) {
             matched.push(pid);
-        } else if (env.is_empty() || !contains_slice(&env, needle))
+        } else if (env.is_empty()
+            || (!contains_slice(&env, b"VETTO_RUN_NONCE=")
+                && !contains_slice(&env, b"VETTO_PROD_NONCE=")))
             && pid_alive(pid as u32)
             && !pid_is_zombie(&status)
             && crate::sandbox::linux::proctrack::ppid_from_status(&status) == Some(me)
