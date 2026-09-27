@@ -274,6 +274,7 @@ fn timeout_tui_001_enforces_timeout_in_tui_mode() {
         return;
     }
     let project = TempProject::new("timeout-tui");
+    #[cfg(unix)]
     let marker = format!("vetto-timeout-tui-{}", std::process::id());
     let start = Instant::now();
     #[cfg(unix)]
