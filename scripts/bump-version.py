@@ -154,7 +154,6 @@ def main():
     update_file(HOMEBREW_RB, r'version\s+"[^"]+"', f'version "{target}"')
     update_file(HOMEBREW_RB, rf'/v{re.escape(current)}/', f'/v{target}/', count=0)
     update_file(SPEC, r'^Version:\s*.*', f'Version: {target}')
-    update_file(os.path.join(REPO_ROOT, "assets", "demo.svg"), rf'\[installed v{re.escape(current)}\]', f'[installed v{target}]')
     update_file(os.path.join(REPO_ROOT, "vscode", "package.json"), r'"version":\s*"[^"]+"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "plugins", "vscode", "package.json"), r'"version":\s*"[^"]+"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "editors", "vscode", "package.json"), r'"version":\s*"[^"]+"', f'"version": "{target}"')

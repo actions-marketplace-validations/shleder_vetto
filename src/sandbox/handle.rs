@@ -1,7 +1,45 @@
 //! Spawn contract + supervision handle shared by every backend.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+static ACTIVE_ROOTS: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+
+/// Register an active sandbox root PID into the concurrent process tracker.
+pub fn register_active_root(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    if let Ok(mut lock) = ACTIVE_ROOTS.lock() {
+        lock.get_or_insert_with(HashSet::new).insert(pid);
+    }
+}
+
+/// Unregister an active sandbox root PID when the sandbox has exited or been reaped.
+pub fn unregister_active_root(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    if let Ok(mut lock) = ACTIVE_ROOTS.lock() {
+        if let Some(set) = lock.as_mut() {
+            set.remove(&pid);
+        }
+    }
+}
+
+/// Check if a PID is an active root process of another concurrent sandbox.
+pub fn is_active_root(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    if let Ok(lock) = ACTIVE_ROOTS.lock() {
+        if let Some(set) = lock.as_ref() {
+            return set.contains(&pid);
+        }
+    }
+    false
+}
 
 #[cfg(target_os = "linux")]
 use crate::sandbox::linux::proctrack;
@@ -167,11 +205,13 @@ impl SandboxHandle {
             // SAFETY: plain waitpid with WNOHANG on our own child.
             let r = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
             if r == pid {
+                unregister_active_root(self.root_pid);
                 self.reclaim_terminal_control();
                 Some(decode_status(status))
             } else if r == 0 {
                 None
             } else if errno() == libc::ECHILD {
+                unregister_active_root(self.root_pid);
                 self.reclaim_terminal_control();
                 Some(-1)
             } else {
@@ -182,6 +222,7 @@ impl SandboxHandle {
         {
             let res = windows_try_wait(self.strategy.as_ref());
             if res.is_some() {
+                unregister_active_root(self.root_pid);
                 self.reclaim_terminal_control();
             }
             res
@@ -198,10 +239,12 @@ impl SandboxHandle {
                 let mut status = 0i32;
                 let r = unsafe { libc::waitpid(pid, &mut status, 0) };
                 if r == pid {
+                    unregister_active_root(self.root_pid);
                     self.reclaim_terminal_control();
                     return decode_status(status);
                 }
                 if r < 0 && errno() != libc::EINTR {
+                    unregister_active_root(self.root_pid);
                     self.reclaim_terminal_control();
                     return -1;
                 }
@@ -210,6 +253,7 @@ impl SandboxHandle {
         #[cfg(windows)]
         {
             let code = windows_wait(self.strategy.as_ref());
+            unregister_active_root(self.root_pid);
             self.reclaim_terminal_control();
             code
         }
@@ -306,6 +350,7 @@ impl SandboxHandle {
 impl Drop for SandboxHandle {
     fn drop(&mut self) {
         self.terminate();
+        unregister_active_root(self.root_pid);
     }
 }
 

@@ -29,7 +29,7 @@
 vetto
 ```
 
-包含实时 AI 编程助手检测、一键 PATH 垫片切换、VFS 凭据掩码矩阵实时审计、内核预检诊断与零损耗即时快照回滚。
+包含实时 AI 编程助手检测、一键 PATH 垫片切换、VFS 凭据掩码矩阵实时审计、内核预检诊断、零损耗即时快照回滚、实时安全事件流（`[5: SECURITY STREAM]`）与多智能体集群调度遥测（`[6: FLEET SWARM]`）。
 
 关于完整快捷键、界面视图与主题切换，请参阅 [Mission Control TUI 详细指南](tui.md)。
 
@@ -44,8 +44,6 @@ vetto
 > 打开原始套接字 (Raw Socket)...  BLOCKED (net namespace, EAFNOSUPPORT)
 > 派生后台驻留进程 (Daemon)...    TERMINATED (process tree extinction, exit 125)
 ```
-
-![Blocked exfiltration attempt under vetto](../assets/demo.svg)
 
 ### 故障安全契约 (Fail-Closed Exit 125)
 
@@ -122,6 +120,27 @@ vetto undo        # 一键恢复工作区至执行前的干净状态
 ```bash
 vetto doctor --preflight          # 检测 Landlock ABI、命名空间与 cgroups
 vetto doctor --preflight --json   # 机器可解析的 JSON 诊断报告
+```
+
+### 6. 多智能体集群并发调度 (`vetto fleet`)
+
+基于 cgroups v2 公平配额（Fair-Share）、两两成对命名空间隔离与瞬态 CoW 分支编排隔离 AI 编程智能体集群：
+
+```bash
+# 查看集群容量、Fair-Share 配额及活跃 Worker 状态
+vetto fleet status
+vetto fleet status --json
+
+# 启动并发隔离 Worker 并绑定 Fair-Share cgroups
+vetto fleet spawn claude --count 3
+vetto fleet spawn --count 4 -- sh -c "python agent.py"
+
+# 对 N 个 Worker 运行全量两两隔离自动化验证（N=8 时验证全部 28 组对照）
+vetto fleet verify --workers 8 --json
+
+# 终止指定 Worker 或清理整个智能体集群
+vetto fleet kill agent-01
+vetto fleet kill --all
 ```
 
 ---

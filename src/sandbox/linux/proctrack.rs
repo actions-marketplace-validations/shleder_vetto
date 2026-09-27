@@ -100,7 +100,11 @@ pub fn sweep_reparented(deadline_ms: u64, root_pid: i32) -> usize {
         let candidates = scan_children(me, root_pid);
         // Always reap any terminated zombie children among reparented children
         // regardless of session (mine == theirs). Do not let reparented zombies linger.
+        // Active sibling roots must never be stolen from their own handles.
         for &pid in &candidates {
+            if crate::sandbox::handle::is_active_root(pid as u32) {
+                continue;
+            }
             let mut status = 0i32;
             unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
         }
@@ -108,7 +112,8 @@ pub fn sweep_reparented(deadline_ms: u64, root_pid: i32) -> usize {
             .into_iter()
             .filter(|pid| {
                 // Never touch our own root (its status belongs to `wait`).
-                if *pid == root_pid {
+                // Sibling sandbox roots must never be targeted by concurrent sweeps.
+                if *pid == root_pid || crate::sandbox::handle::is_active_root(*pid as u32) {
                     return false;
                 }
                 // Foreign-session processes (concurrent sandboxes, harness
@@ -162,7 +167,7 @@ pub fn scan_children(me: u32, exclude_pid: i32) -> Vec<i32> {
         let Ok(pid) = name.parse::<i32>() else {
             continue;
         };
-        if pid <= 0 || pid == exclude_pid {
+        if pid <= 0 || pid == exclude_pid || crate::sandbox::handle::is_active_root(pid as u32) {
             continue;
         }
         let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else {

@@ -73,6 +73,7 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "tour",
         "status",
         "kill",
+        "fleet",
         "verify",
         "verify-ng",
         "run",
@@ -460,6 +461,7 @@ fn run() -> Result<()> {
         ),
         Some(cli::Command::Status { json }) => cli::status::run_cli(*json),
         Some(cli::Command::Kill(kill_args)) => cli::kill::run_cli(kill_args),
+        Some(cli::Command::Fleet { command }) => cli::fleet::run_cli(command.clone()),
         Some(cli::Command::Profile { command }) => match command {
             cli::ProfileCommand::Save {
                 name,

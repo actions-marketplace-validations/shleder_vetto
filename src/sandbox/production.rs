@@ -811,6 +811,7 @@ impl PreparedProductionExecution {
         self.fsm.transition(ExecutionState::Enforce)?;
         PROD_SPAWN_COUNT.fetch_add(1, Ordering::SeqCst);
         let pid = spawned.handle.root_pid;
+        crate::sandbox::handle::register_active_root(pid);
         self.capability.note_spawned(pid);
         // Windows host verification observes THIS child through the
         // retained handles: Job Object membership, the kill-on-close flag,
