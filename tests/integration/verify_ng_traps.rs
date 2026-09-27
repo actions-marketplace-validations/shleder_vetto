@@ -714,9 +714,9 @@ fn trap_evidence_model_trust_hierarchy_host_fact_beats_constrained_and_self_repo
     assert!(!EvidenceTier::SelfReport.is_proof());
 }
 
-/// Master Task Section 12: НЕ доказательство: agent self-report; stdout;
-/// произвольный JSON от sandboxed process; snapshot без provenance;
-/// observation без связи с execution identity.
+/// Master Task Section 12: NOT evidence: agent self-report; stdout;
+/// arbitrary JSON from sandboxed process; snapshot without provenance;
+/// observation without link to execution identity.
 #[test]
 fn trap_evidence_model_untrusted_sources_never_count_as_proof() {
     use evidence::{Evidence, EvidenceSource, EvidenceTier};

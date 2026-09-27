@@ -12,17 +12,17 @@ linux-fsonly = "PARTIAL"
 macos = "NOT_APPLICABLE"
 windows = "NOT_APPLICABLE"
 
-known_limitation = "Proves denial of the enumerated dangerous syscall surface via native ABI (номера из libc::SYS_*, без x86-64 констант на ARM64); полнота фильтра против 0-day не доказывается. macOS/Windows — NOT_APPLICABLE только с probe-доказательством отсутствия capability."
-residual_risk = "На linux-fsonly часть поверхности best-effort; расхождение дает INCONCLUSIVE."
+known_limitation = "Proves denial of enumerated dangerous syscall surface via native ABI (numbers from libc::SYS_*, no x86-64 constants on ARM64); filter completeness against 0-day not proven. macOS/Windows: NOT_APPLICABLE only with probe proof of absent capability."
+residual_risk = "On linux-fsonly, portion of surface is best-effort; divergence yields INCONCLUSIVE."
 
 [evidence.host_facts]
-wait_status = "root exit value собран через retained handle; ни один запрещённый вызов не вернул успех"
-audit-tap = "host-side audit/seccomp-tap (advisory) не показывает успешных запрещённых вызовов; отсутствие tap не дает PASS"
+wait_status = "root exit value gathered via retained handle; no denied syscall returned success"
+audit-tap = "host-side audit/seccomp-tap (advisory) shows no successful denied syscalls; missing tap does not yield PASS"
 
 [evidence.constrained_channel]
-errno_class = "запрещённые вызовы обязаны вернуть EPERM/ENOSYS с nonce сессии"
+errno_class = "denied syscalls must return EPERM/ENOSYS with session nonce"
 vectors = ["ptrace", "process_vm_readv-writev", "pidfd_getfd", "mount-pivot-umount", "io_uring", "userfaultfd", "bpf-perf"]
 
 [evidence.not_applicable]
-macos = "Darwin не имеет seccomp-bpf; требуется probe-доказательство отсутствия capability, иначе N/A-without-absence-evidence блокирует gate"
-windows = "Windows не имеет seccomp-bpf; требуется probe-доказательство отсутствия capability, иначе N/A-without-absence-evidence блокирует gate"
+macos = "Darwin does not have seccomp-bpf; requires probe evidence of missing capability, otherwise N/A-without-absence-evidence blocks gate"
+windows = "Windows does not have seccomp-bpf; requires probe evidence of missing capability, otherwise N/A-without-absence-evidence blocks gate"

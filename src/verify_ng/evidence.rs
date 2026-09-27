@@ -77,8 +77,8 @@ impl EvidenceTier {
 /// Source classification for evidence items.
 ///
 /// Master Task Section 12:
-/// НЕ доказательство: agent self-report; stdout; произвольный JSON от sandboxed
-/// process; snapshot без provenance; observation без связи с execution identity.
+/// NOT evidence: agent self-report; stdout; arbitrary JSON from sandboxed
+/// process; snapshot without provenance; observation without link to execution identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EvidenceSource {
     /// Trusted host observation after wait status, stat, or canary check.
@@ -543,8 +543,8 @@ mod evidence_tests {
 
     #[test]
     fn evidence_source_classification_and_proof_rules() {
-        // Master Task Section 12: НЕ доказательство: agent self-report; stdout;
-        // произвольный JSON от sandboxed process; snapshot без provenance; observation без связи с execution identity.
+        // Master Task Section 12: NOT evidence: agent self-report; stdout;
+        // arbitrary JSON from sandboxed process; snapshot without provenance; observation without link to execution identity.
         let untrusted = [
             EvidenceSource::AgentSelfReport,
             EvidenceSource::ProcessStdout,

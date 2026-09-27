@@ -1,4 +1,4 @@
-# MAC-PROC-001 — macOS process containment: kqueue watchdog + group-kill + sweep-бюджет (BestEffort; destructive только в VM).
+# MAC-PROC-001 — macOS process containment: kqueue watchdog + group-kill + sweep budget (BestEffort; destructive only in VM).
 id = "MAC-PROC-001"
 category = "proc"
 severity = "high"
@@ -10,13 +10,13 @@ macos = "PARTIAL"
 linux-full = "NOT_APPLICABLE"
 windows = "NOT_APPLICABLE"
 
-known_limitation = "PID namespaces на Darwin нет; containment — kqueue EVFILT_PROC watchdog + group-kill + sweep-бюджет 2с (BestEffort). Residue дает FAIL/INCONCLUSIVE, никогда PASS. Полнота sweep при SIGKILL недоказуема."
-residual_risk = "Watchdog races и outliving grandchildren — известный residual; destructive-сьюты только в disposable VM."
+known_limitation = "Darwin lacks PID namespaces; containment uses kqueue EVFILT_PROC watchdog + group-kill + 2s sweep budget (BestEffort). Residue yields FAIL/INCONCLUSIVE, never PASS. Sweep completeness under SIGKILL is unprovable."
+residual_risk = "Watchdog races and surviving grandchildren are known residuals; destructive suites only in disposable VM."
 
 [evidence.host_facts]
-sweep = "post-deadline sweep обязан найти ноль residue, иначе FAIL (не PASS)"
-watchdog-fact = "host-side watchdog observe: supervisor-death влечет SIGKILL дерева (не self-report)"
-wait_status = "root exit value через retained handle"
+sweep = "post-deadline sweep must find zero residue, otherwise FAIL (never PASS)"
+watchdog-fact = "host-side watchdog observe: supervisor death triggers SIGKILL of tree (not self-report)"
+wait_status = "root exit value via retained handle"
 
 [evidence.not_applicable]
 linux-full = "macOS-only containment battery"

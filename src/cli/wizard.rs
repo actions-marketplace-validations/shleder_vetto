@@ -75,7 +75,7 @@ pub fn run_wizard_flow(
 
         write!(
             writer,
-            "1. Какой агент? (claude/cursor/aider/opencode) [claude]: "
+            "1. Which agent? (claude/cursor/aider/opencode) [claude]: "
         )?;
         writer.flush()?;
         let mut agent = String::new();
@@ -87,7 +87,7 @@ pub fn run_wizard_flow(
             agent_trim.to_string()
         };
 
-        write!(writer, "2. Сеть? (full/allowlist/off/ask) [allowlist]: ")?;
+        write!(writer, "2. Network? (full/allowlist/off/ask) [allowlist]: ")?;
         writer.flush()?;
         let mut net = String::new();
         reader.read_line(&mut net)?;
@@ -98,7 +98,7 @@ pub fn run_wizard_flow(
             net_trim.to_string()
         };
 
-        write!(writer, "3. Защита секретов? (yes/no) [yes]: ")?;
+        write!(writer, "3. Protect secrets? (yes/no) [yes]: ")?;
         writer.flush()?;
         let mut sec = String::new();
         reader.read_line(&mut sec)?;

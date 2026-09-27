@@ -10,7 +10,7 @@ SW_VERS=$(sw_vers -productVersion 2>/dev/null || echo "Unknown")
 ARCH_NAME=$(uname -m 2>/dev/null || echo "Unknown")
 echo "Environment: macOS $SW_VERS ($ARCH_NAME)" | tee -a "$RESULTS_LOG"
 
-# 1. Подготовка тестовых каталогов и файлов
+# 1. Prepare test directories and files
 TEST_DIR=$(mktemp -d /tmp/vetto-sbpl-harness-XXXXXX)
 CANON_TEST_DIR=$(cd "$TEST_DIR" && pwd -P)
 TARGET_FILE="$CANON_TEST_DIR/public.txt"
@@ -21,9 +21,9 @@ echo "SUPER_SECRET_TOKEN" > "$SECRET_FILE"
 REPO_DIR=$(pwd -P)
 CANON_BIN_DIR=$(cd "target/matrix-binaries" 2>/dev/null && pwd -P || echo "$REPO_DIR/target/matrix-binaries")
 
-# 2. Определение профилей SBPL (Profile AST Shapes)
+# 2. Define SBPL profiles (Profile AST Shapes)
 
-# Shape A: Текущий широкий профиль Vetto ((allow file-read* (subpath "/")) + trailing deny)
+# Shape A: Broad Vetto profile ((allow file-read* (subpath "/")) + trailing deny)
 PROFILE_A="(version 1)
 (deny default)
 (allow process-exec)
@@ -34,7 +34,7 @@ PROFILE_A="(version 1)
 (deny file-read* (literal \"$SECRET_FILE\"))
 "
 
-# Shape B: Наивный фрагментированный профиль (из probe_sbpl_read_fragment в vetto doctor)
+# Shape B: Naive fragmented profile (from probe_sbpl_read_fragment in vetto doctor)
 PROFILE_B="(version 1)
 (deny default)
 (allow process-exec)
@@ -51,7 +51,7 @@ PROFILE_B="(version 1)
 (allow file-read* (subpath \"/Users\"))
 "
 
-# Shape C: Полный фрагментированный профиль (со всеми путями Cryptex/dyld/dev и метаданными)
+# Shape C: Complete fragmented profile (with all Cryptex/dyld/dev paths and metadata)
 PROFILE_C="(version 1)
 (deny default)
 (allow process-exec)
@@ -78,7 +78,7 @@ PROFILE_C="(version 1)
 (allow file-read* (literal \"$TARGET_FILE\"))
 "
 
-# Shape D: Предикатная модель require-any (форма srt / nono)
+# Shape D: Predicate require-any model (srt / nono form)
 PROFILE_D="(version 1)
 (deny default)
 (allow process-exec)
@@ -109,7 +109,7 @@ PROFILE_D="(version 1)
 )
 "
 
-# Shape E: Профиль с регулярными выражениями (Regex AST Shape)
+# Shape E: Regex profile (Regex AST Shape)
 PROFILE_E="(version 1)
 (deny default)
 (allow process-exec)
@@ -134,7 +134,7 @@ PROFILE_E="(version 1)
 (allow file-read* (literal \"$TARGET_FILE\"))
 "
 
-# Shape F: Истинная изоляция (Разрешение системы + целевого файла, запрет секретов)
+# Shape F: True isolation (Allow system + target file, deny secrets)
 PROFILE_F="(version 1)
 (deny default)
 (allow process-exec)

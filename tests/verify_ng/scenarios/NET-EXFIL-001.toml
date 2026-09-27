@@ -1,4 +1,4 @@
-# NET-EXFIL-001 — мультивекторная эксфильтрация (fail-closed, escape, exfil приоритет).
+# NET-EXFIL-001 — multi-vector exfiltration (fail-closed, escape, exfil priority).
 id = "NET-EXFIL-001"
 category = "net"
 severity = "blocker"
@@ -12,7 +12,7 @@ macos = "PARTIAL"
 windows = "PARTIAL"
 
 known_limitation = "Proves --net=off isolation only across the listed egress vectors; allowlist relay modes and TLS-through-allowed-API payload semantics need a separate broker suite (threat-model non-goal #1)."
-residual_risk = "Без netns (fs-only/mac/win) доказывается только syscall/capability denial, не отсутствие маршрута. Per-domain egress без admin на Windows — UNPROVABLE."
+residual_risk = "Without netns (fs-only/mac/win), only syscall/capability denial is proven, not absence of route. Per-domain egress without admin on Windows is UNPROVABLE."
 
 [evidence.host_facts]
 listener-v4 = "host loopback listener (IPv4) stays unconnected for the whole run"
