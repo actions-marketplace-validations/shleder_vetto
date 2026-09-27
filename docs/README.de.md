@@ -29,7 +29,7 @@ Starten Sie das interaktive Mission Control Dashboard einfach durch Ausführen v
 vetto
 ```
 
-Beinhaltet Live-Erkennung von KI-Agenten, One-Touch-Aktivierung von PATH-Shims, VFS-Geheimnismatrix-Audit, Kernel-Diagnose und sofortiges Rollback.
+Beinhaltet Live-Erkennung von KI-Agenten, One-Touch-Aktivierung von PATH-Shims, VFS-Geheimnismatrix-Audit, Kernel-Diagnose, sofortiges Rollback, Echtzeit-Sicherheitsereignis-Stream (`[5: SECURITY STREAM]`) und Multi-Agenten-Schwarm-Orchestrierung (`[6: FLEET SWARM]`).
 
 Tastenbelegungen, Ansichten und Designkonfiguration finden Sie im [Mission Control TUI Handbuch](tui.md).
 
@@ -122,6 +122,27 @@ vetto undo        # Arbeitsverzeichnis sofort in den sauberen Zustand vor der Au
 ```bash
 vetto doctor --preflight          # prüft Landlock ABI, Namensräume und cgroups v2
 vetto doctor --preflight --json   # maschinenlesbare JSON-Ausgabe
+```
+
+### 6. Multi-Agenten-Flottenparallelität (`vetto fleet`)
+
+Orchestrieren Sie Schwärme isolierter KI-Programmieragenten mit cgroups v2 Fair-Share-Ressourcenkontingenten, paarweiser Namensraum-Isolation und ephemeren CoW-Zweigen:
+
+```bash
+# Flottenkapazität, Fair-Share-Limits und aktive Worker-Scopes prüfen
+vetto fleet status
+vetto fleet status --json
+
+# Gleichzeitiges Starten isolierter Worker-Agenten mit Fair-Share-Cgroups
+vetto fleet spawn claude --count 3
+vetto fleet spawn --count 4 -- sh -c "python agent.py"
+
+# Automatisierte paarweise Isolationsüberprüfung über N Worker (28 Prüfungen für N=8)
+vetto fleet verify --workers 8 --json
+
+# Beenden eines Workers oder Bereinigen des gesamten Flottenschwarms
+vetto fleet kill agent-01
+vetto fleet kill --all
 ```
 
 ---

@@ -20,14 +20,16 @@ Non-interactive scripts, CI environments, and Unix pipelines automatically bypas
 
 | Key | Action | Description |
 | :--- | :--- | :--- |
-| `1` – `4` | **Switch Tab** | Jump directly to Agents, Sandbox VFS, Kernel Doctor, or Sessions |
-| `Tab` / `Shift+Tab` | **Cycle Tabs** | Move sequentially between tabs |
-| `↑` / `k`, `↓` / `j` | **Select Item** | Navigate agents or sessions in the active list |
+| `1` – `6` | **Switch Tab** | Jump directly to Agents (1), Sandbox VFS (2), Kernel Doctor (3), Sessions (4), Security Stream (5), or Fleet Swarm (6) |
+| `Tab` / `Shift+Tab` | **Cycle Tabs** | Move sequentially between all 6 tabs |
+| `↑` / `k`, `↓` / `j` | **Select Item** | Navigate agents, sessions, or fleet workers in the active list |
 | `Space` | **Toggle Shim** | Enable or disable transparent PATH-shim (`~/.vetto/shims/`) |
 | `Enter` | **Launch Sandbox** | Execute selected agent inside an isolated kernel sandbox |
+| `v` | **Verify Probe** | Run live 4-worker isolation verification probe on Fleet tab (`6`) |
+| `x` | **Terminate Worker** | Terminate selected worker process and release slot on Fleet tab (`6`) |
 | `u` | **Instant Undo** | Roll back workspace to the pre-session clean state |
 | `t` | **Toggle Theme** | Switch between Arasaka Cyber-Red and Cyber Circuit |
-| `r` | **Refresh** | Re-scan `$PATH`, running processes, and kernel status |
+| `r` | **Refresh** | Re-scan `$PATH`, running processes, fleet state, and kernel status |
 | `q` / `Esc` | **Quit** | Exit Mission Control cleanly and restore terminal |
 
 ---
@@ -58,6 +60,24 @@ Non-interactive scripts, CI environments, and Unix pipelines automatically bypas
 - Lists active and past sandboxed agent sessions.
 - Displays recorded syscall denials, blocked network attempts, and modified files.
 - Press `u` on any session to perform an instant, byte-level workspace rollback to the pre-session snapshot.
+
+### 5. `[5: SECURITY STREAM]` — Real-Time Policy Interception
+- **Real-Time Security Event Stream**: Captures and renders runtime kernel policy violations, unauthorized filesystem accesses, and blocked network attempts as they happen.
+- **Interception Counters**: Displays aggregate statistics of total filesystem denials, dropped egress attempts, and prevented syscall anomalies.
+
+### 6. `[6: FLEET SWARM]` — Fleet Concurrency & Swarm Telemetry
+- **4 Metric Cards**:
+  - **Active Fleet Workers**: Real-time counter of provisioned worker slots against maximum capacity (`active / 64`).
+  - **Fair-Share CPU Weight**: Current cgroups v2 `cpu.weight` balance factor (`100`).
+  - **Memory Ceiling per Worker**: Hard cgroup `memory.max` resource limit per agent (`2.0 GiB`).
+  - **IPC / PID Isolation Status**: Live kernel namespace guarantees (`CLONE_NEWIPC + CLONE_NEWPID`).
+- **Live Fleet Worker Allocation Table**:
+  - 8-column real-time allocation grid: `WORKER ID`, `AGENT`, `PID`, `PORT`, `COW BRANCH`, `CGROUP SCOPE`, `LIMITS`, and `STATUS`.
+  - Visual cursor (`▶ `) and theme-aware row highlighting for active selection.
+- **Interactive Swarm Operations**:
+  - Press `v` to run a live 4-worker pairwise isolation verification probe validating disjoint ephemeral ports, CoW branches, cgroups, and IPC/PID namespaces.
+  - Press `x` to terminate the selected worker process (`SIGKILL` + `cgroup.kill`) and immediately release its slot.
+  - Press `j` / `k` (or `↓` / `↑`) to navigate between active fleet workers.
 
 ---
 

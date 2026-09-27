@@ -22,6 +22,7 @@ mod enable_wrapper;
 mod entrypoint_contract_parity;
 #[cfg(target_os = "linux")]
 mod env_stripping;
+mod fleet_concurrency;
 mod git_hooks;
 mod heavy_scenarios;
 #[cfg(target_os = "linux")]

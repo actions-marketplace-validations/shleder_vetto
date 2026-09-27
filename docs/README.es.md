@@ -29,7 +29,7 @@ Ejecuta el panel interactivo Mission Control con solo escribir `vetto` en cualqu
 vetto
 ```
 
-Incluye detección en vivo de agentes de IA, alternancia de shims de PATH con un toque, auditoría de la matriz de secretos VFS, diagnósticos del kernel y reversión instantánea de instantáneas.
+Incluye detección en vivo de agentes de IA, alternancia de shims de PATH con un toque, auditoría de la matriz de secretos VFS, diagnósticos del kernel, reversión instantánea de instantáneas, flujo de eventos de seguridad en tiempo real (`[5: SECURITY STREAM]`) y orquestación de enjambres de agentes (`[6: FLEET SWARM]`).
 
 Para ver atajos de teclado, vistas detalladas y configuración de temas, consulta la [Guía de Mission Control TUI](tui.md).
 
@@ -122,6 +122,27 @@ Audita las capacidades de aislamiento del kernel del host:
 ```bash
 vetto doctor --preflight          # audita Landlock ABI, namespaces y cgroups v2
 vetto doctor --preflight --json   # salida estructurada en formato JSON
+```
+
+### 6. Concurrencia de Flotas Multi-Agente (`vetto fleet`)
+
+Orqueste enjambres de agentes de codificación de IA aislados con cuotas de recursos fair-share de cgroups v2, aislamiento de espacios de nombres por pares y ramas CoW efímeras:
+
+```bash
+# Inspeccionar capacidad de la flota, límites fair-share y scopes de workers activos
+vetto fleet status
+vetto fleet status --json
+
+# Generar workers aislados concurrentes con cgroups fair-share
+vetto fleet spawn claude --count 3
+vetto fleet spawn --count 4 -- sh -c "python agent.py"
+
+# Ejecutar verificación automatizada de aislamiento por pares entre N workers (28 comprobaciones para N=8)
+vetto fleet verify --workers 8 --json
+
+# Terminar un worker o limpiar todo el enjambre de la flota
+vetto fleet kill agent-01
+vetto fleet kill --all
 ```
 
 ---

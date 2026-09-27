@@ -29,7 +29,7 @@ Launch the interactive Mission Control dashboard by simply running `vetto` in an
 vetto
 ```
 
-Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, and zero-loss snapshot rollbacks.
+Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, zero-loss snapshot rollbacks, real-time policy interception streaming (`[5: SECURITY STREAM]`), and multi-agent swarm orchestration (`[6: FLEET SWARM]`).
 
 For keybindings, detailed views, and theme configuration, see the [Mission Control TUI Guide](docs/tui.md).
 
@@ -122,6 +122,27 @@ Audit host kernel isolation capabilities and container limits:
 ```bash
 vetto doctor --preflight          # audit Landlock ABI, namespaces, and cgroups v2
 vetto doctor --preflight --json   # machine-readable capability payload
+```
+
+### 6. Multi-Agent Fleet Concurrency (`vetto fleet`)
+
+Orchestrate swarms of isolated AI coding agents with fair-share cgroups v2 resource quotas, pairwise namespace isolation, and ephemeral CoW branches:
+
+```bash
+# Inspect fleet capacity, fair-share limits, and active worker scopes
+vetto fleet status
+vetto fleet status --json
+
+# Concurrently spawn isolated worker agents with fair-share cgroups
+vetto fleet spawn claude --count 3
+vetto fleet spawn --count 4 -- sh -c "python agent.py"
+
+# Run automated pairwise isolation verification across N workers (28 checks for N=8)
+vetto fleet verify --workers 8 --json
+
+# Terminate worker or clean up entire fleet swarm
+vetto fleet kill agent-01
+vetto fleet kill --all
 ```
 
 ---

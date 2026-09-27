@@ -29,7 +29,7 @@ AIコーディングCLIエージェント（**Claude Code**、**OpenAI Codex**�
 vetto
 ```
 
-AIエージェントの自動検出、ワンタッチでのPATHシム切り替え、VFS秘密情報マトリクスの監査、カーネル診断プローブ、即時ロールバックを備えています。
+AIエージェントの自動検出、ワンタッチでのPATHシム切り替え、VFS秘密情報マトリクスの監査、カーネル診断プローブ、即時ロールバック、リアルタイムセキュリティイベントストリーム（`[5: SECURITY STREAM]`）、マルチエージェントスウォーム統合（`[6: FLEET SWARM]`）を備えています。
 
 キーバインドや詳細なビューについては、[Mission Control TUI ガイド](tui.md) をご覧ください。
 
@@ -122,6 +122,27 @@ vetto undo        # ワークスペースを実行前のクリーンな状態に
 ```bash
 vetto doctor --preflight          # Landlock ABI、名前空間、cgroups v2 を診断
 vetto doctor --preflight --json   # 機械可読な JSON レポートを出力
+```
+
+### 6. マルチエージェントフリート並行実行 (`vetto fleet`)
+
+cgroups v2 による公平なリソース配分（Fair-Share）、ペアワイズな名前空間分離、エフェメラルな CoW ブランチを備えた独立した AI コーディングエージェントのスウォームをオーケストレーション：
+
+```bash
+# フリートのキャパシティ、Fair-Share 制限、アクティブなワーカーを確認
+vetto fleet status
+vetto fleet status --json
+
+# Fair-Share cgroups を適用して複数の隔離ワーカーを並行起動
+vetto fleet spawn claude --count 3
+vetto fleet spawn --count 4 -- sh -c "python agent.py"
+
+# N個のワーカー間で自動ペアワイズ隔離検証を実行（N=8 の場合は28組をチェック）
+vetto fleet verify --workers 8 --json
+
+# ワーカーの終了、またはフリートスウォーム全体のクリーンアップ
+vetto fleet kill agent-01
+vetto fleet kill --all
 ```
 
 ---
