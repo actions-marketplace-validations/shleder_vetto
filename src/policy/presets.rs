@@ -429,9 +429,7 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
             Some(&["$HOME/.command-code", "$HOME/.config/command-code"])
         }
         "freebuff" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
-        "deepseek" | "deepseek_harness" => {
-            Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"])
-        }
+        "deepseek" | "deepseek_harness" => Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"]),
         _ => None,
     }
 }

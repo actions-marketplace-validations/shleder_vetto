@@ -470,9 +470,15 @@ mod tests {
         assert_eq!(command_for_agent("hermes"), Some("hermes".to_string()));
         assert_eq!(command_for_agent("kilo"), Some("kilo".to_string()));
         assert_eq!(command_for_agent("pi"), Some("pi".to_string()));
-        assert_eq!(command_for_agent("command_code"), Some("command-code".to_string()));
+        assert_eq!(
+            command_for_agent("command_code"),
+            Some("command-code".to_string())
+        );
         assert_eq!(command_for_agent("freebuff"), Some("freebuff".to_string()));
-        assert_eq!(command_for_agent("deepseek_harness"), Some("deepseek-harness".to_string()));
+        assert_eq!(
+            command_for_agent("deepseek_harness"),
+            Some("deepseek-harness".to_string())
+        );
     }
 
     #[test]

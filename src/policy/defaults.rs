@@ -29,7 +29,8 @@ pub const KILO_AGENT_TOML: &str = include_str!("../../profiles/agents/kilo.toml"
 pub const PI_AGENT_TOML: &str = include_str!("../../profiles/agents/pi.toml");
 pub const COMMAND_CODE_AGENT_TOML: &str = include_str!("../../profiles/agents/command_code.toml");
 pub const FREEBUFF_AGENT_TOML: &str = include_str!("../../profiles/agents/freebuff.toml");
-pub const DEEPSEEK_HARNESS_AGENT_TOML: &str = include_str!("../../profiles/agents/deepseek_harness.toml");
+pub const DEEPSEEK_HARNESS_AGENT_TOML: &str =
+    include_str!("../../profiles/agents/deepseek_harness.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
 
 pub const AGENT_PROFILE_NAMES: [&str; 24] = [
