@@ -686,19 +686,42 @@ fn request_allowed(
         }
     }
 
-    let mut is_explicitly_allowed = is_loopback_host(host);
+    let mut is_explicitly_allowed = false;
 
-    // If host is an IP that matches an allowed CIDR
+    // Check IP literal before wildcard domain matching
     let clean_ip = host.trim_start_matches('[').trim_end_matches(']');
     if let Ok(ip) = clean_ip.parse::<IpAddr>() {
+        // Cloud metadata endpoints are NEVER allowed under any circumstances.
+        if is_cloud_metadata(ip) {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt to cloud metadata {host}:{port}"),
+            });
+            return false;
+        }
+
         let cidrs: Vec<IpCidr> = config
             .allow_cidr
             .iter()
             .filter_map(|c| IpCidr::parse(c).ok())
             .collect();
-        if cidrs.iter().any(|c| c.contains(ip)) {
+
+        let is_allowed_by_cidr = cidrs.iter().any(|c| c.contains(ip));
+        let is_allowed_loopback = is_loopback_host(host) && ip.is_loopback();
+
+        if forbidden_destination(ip) && !is_allowed_by_cidr && !is_allowed_loopback {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt to forbidden destination {host}:{port}"),
+            });
+            return false;
+        }
+
+        if is_allowed_by_cidr || is_allowed_loopback {
             is_explicitly_allowed = true;
         }
+    } else if is_loopback_host(host) {
+        is_explicitly_allowed = true;
     }
 
     if !is_explicitly_allowed {
@@ -836,6 +859,48 @@ fn connect_via_proxy(
     Ok(tcp)
 }
 
+fn is_valid_proxy_target(proxy_url: &str, allow_cidrs: &[IpCidr]) -> bool {
+    use std::net::ToSocketAddrs;
+    let trimmed = proxy_url.trim();
+    let trimmed = trimmed.strip_prefix("http://").unwrap_or(trimmed);
+    let trimmed = trimmed.strip_prefix("https://").unwrap_or(trimmed);
+    let (_auth, host_port) = if let Some((userinfo, hp)) = trimmed.split_once('@') {
+        (Some(userinfo), hp)
+    } else {
+        (None, trimmed)
+    };
+    let (p_host, p_port_str) = host_port.split_once(':').unwrap_or((host_port, "8080"));
+    let p_port: u16 = p_port_str.trim_matches('/').parse().unwrap_or(8080);
+    let p_host = p_host.trim_start_matches('[').trim_end_matches(']');
+    if p_host.is_empty() {
+        return false;
+    }
+
+    if let Ok(ip) = p_host.parse::<IpAddr>() {
+        if is_cloud_metadata(ip) {
+            return false;
+        }
+        let is_allowed = (is_loopback_host(p_host) && ip.is_loopback())
+            || allow_cidrs.iter().any(|c| c.contains(ip));
+        if !is_allowed && forbidden_destination(ip) {
+            return false;
+        }
+    } else if let Ok(addrs) = (p_host, p_port).to_socket_addrs() {
+        let any_forbidden = addrs.into_iter().any(|addr| {
+            if is_cloud_metadata(addr.ip()) {
+                return true;
+            }
+            let is_allowed = (is_loopback_host(p_host) && addr.ip().is_loopback())
+                || allow_cidrs.iter().any(|c| c.contains(addr.ip()));
+            !is_allowed && forbidden_destination(addr.ip())
+        });
+        if any_forbidden {
+            return false;
+        }
+    }
+    true
+}
+
 /// Resolve and connect entirely in the broker, pinning the selected
 /// `SocketAddr` for the lifetime of the TCP connection.
 fn resolve_and_connect(
@@ -858,42 +923,83 @@ fn resolve_and_connect(
         return Err(());
     }
 
-    if let Some(proxy_url) = get_upstream_proxy(host, port, config) {
-        if let Ok(stream) = connect_via_proxy(&proxy_url, host, port) {
-            let dummy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
-            return Ok((stream, dummy_addr));
-        }
-    }
-
-    let resolved = (host, port)
-        .to_socket_addrs()
-        .map_err(|_| ())?
-        .collect::<Vec<_>>();
-
-    if resolved.is_empty() {
-        return Err(());
-    }
-
     let cidrs: Vec<IpCidr> = config
         .allow_cidr
         .iter()
         .filter_map(|c| IpCidr::parse(c).ok())
         .collect();
 
-    let any_forbidden = resolved.iter().any(|addr| {
-        if is_doh_or_dot(host, port, Some(addr.ip())) {
-            return true;
+    // 1. Validate destination IP literal against cloud metadata and forbidden subnets BEFORE upstream proxy
+    let clean_ip = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = clean_ip.parse::<IpAddr>() {
+        if is_cloud_metadata(ip) {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt to cloud metadata {host}:{port}"),
+            });
+            return Err(());
         }
-        if (is_loopback_host(host) && addr.ip().is_loopback())
-            || cidrs.iter().any(|c| c.contains(addr.ip()))
-        {
-            false
-        } else {
-            forbidden_destination(addr.ip())
+        let is_allowed =
+            (is_loopback_host(host) && ip.is_loopback()) || cidrs.iter().any(|c| c.contains(ip));
+        if !is_allowed && forbidden_destination(ip) {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt to forbidden destination {host}:{port}"),
+            });
+            return Err(());
         }
-    });
+    }
 
-    if any_forbidden {
+    // 2. Pre-resolve destination addresses if possible to detect DNS rebinding to metadata or private IP
+    let resolved = (host, port)
+        .to_socket_addrs()
+        .map(|iter| iter.collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    if !resolved.is_empty() {
+        let any_forbidden = resolved.iter().any(|addr| {
+            if is_cloud_metadata(addr.ip()) {
+                return true;
+            }
+            if is_doh_or_dot(host, port, Some(addr.ip())) {
+                return true;
+            }
+            if (is_loopback_host(host) && addr.ip().is_loopback())
+                || cidrs.iter().any(|c| c.contains(addr.ip()))
+            {
+                false
+            } else {
+                forbidden_destination(addr.ip())
+            }
+        });
+
+        if any_forbidden {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt to forbidden destination {host}:{port}"),
+            });
+            return Err(());
+        }
+    }
+
+    // 3. Upstream proxy routing (destination and proxy host both validated)
+    if let Some(proxy_url) = get_upstream_proxy(host, port, config) {
+        if is_valid_proxy_target(&proxy_url, &cidrs) {
+            if let Ok(stream) = connect_via_proxy(&proxy_url, host, port) {
+                let dummy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
+                return Ok((stream, dummy_addr));
+            }
+        } else {
+            bus.publish(Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!("blocked SSRF attempt via forbidden upstream proxy: {proxy_url}"),
+            });
+            return Err(());
+        }
+    }
+
+    // 4. Direct connection using resolved addresses
+    if resolved.is_empty() {
         return Err(());
     }
 
@@ -933,6 +1039,36 @@ fn nat64_embedded_ipv4(octets: &[u8; 16]) -> Option<Ipv4Addr> {
     None
 }
 
+/// Check if an IP address targets a known cloud provider instance metadata service (IMDS).
+/// Covers AWS / GCP / Azure / DigitalOcean / OpenStack / Hetzner (169.254.169.254)
+/// and Alibaba Cloud (100.100.100.200), including IPv4-mapped IPv6 and RFC 6052 NAT64 prefixes.
+pub(crate) fn is_cloud_metadata(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, c, d] = ip.octets();
+            (a == 169 && b == 254 && c == 169 && d == 254)
+                || (a == 100 && b == 100 && c == 100 && d == 200)
+        }
+        IpAddr::V6(ip) => {
+            let octets = ip.octets();
+            let is_v4_mapped =
+                octets[..10].iter().all(|&b| b == 0) && octets[10] == 0xff && octets[11] == 0xff;
+            if is_v4_mapped {
+                let v4 = Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]);
+                let [a, b, c, d] = v4.octets();
+                (a == 169 && b == 254 && c == 169 && d == 254)
+                    || (a == 100 && b == 100 && c == 100 && d == 200)
+            } else if let Some(v4) = nat64_embedded_ipv4(&octets) {
+                let [a, b, c, d] = v4.octets();
+                (a == 169 && b == 254 && c == 169 && d == 254)
+                    || (a == 100 && b == 100 && c == 100 && d == 200)
+            } else {
+                false
+            }
+        }
+    }
+}
+
 /// Reject destinations that identify local, private, link-local, multicast,
 /// or otherwise non-public address space. This check runs on every resolved
 /// answer in the broker, including literal IP targets, IPv4-mapped IPv6
@@ -943,6 +1079,7 @@ pub(crate) fn forbidden_destination(ip: IpAddr) -> bool {
         IpAddr::V4(ip) => forbidden_ipv4(ip),
         IpAddr::V6(ip) => {
             let octets = ip.octets();
+            let is_metadata = is_cloud_metadata(IpAddr::V6(ip));
             let is_unspecified = octets.iter().all(|&b| b == 0);
             let is_loopback = octets[..15].iter().all(|&b| b == 0) && octets[15] == 1;
             let is_link_local = octets[0] == 0xfe && (octets[1] & 0xc0) == 0x80;
@@ -973,7 +1110,8 @@ pub(crate) fn forbidden_destination(ip: IpAddr) -> bool {
                 .map(forbidden_ipv4)
                 .unwrap_or(false);
 
-            is_unspecified
+            is_metadata
+                || is_unspecified
                 || is_loopback
                 || is_link_local
                 || is_unique_local
@@ -1002,9 +1140,7 @@ fn forbidden_ipv4(ip: Ipv4Addr) -> bool {
     let multicast_or_reserved = a >= 224;
     let unspecified = a == 0;
     let broadcast = a == 255 && b == 255 && c == 255 && d == 255;
-    let cloud_metadata = (a == 169 && b == 254 && c == 169 && d == 254)
-        // Alibaba Cloud metadata endpoint.
-        || (a == 100 && b == 100 && c == 100 && d == 200);
+    let cloud_metadata = is_cloud_metadata(IpAddr::V4(ip));
 
     private
         || link_local
@@ -2618,5 +2754,110 @@ mod tests {
             super::get_upstream_proxy("sub.ignore.com", 80, &config),
             None
         );
+    }
+
+    #[test]
+    fn test_anti_ssrf_is_cloud_metadata() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            169, 254, 169, 254
+        ))));
+        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            100, 100, 100, 200
+        ))));
+
+        // IPv4-mapped IPv6
+        let v6_mapped = Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xa9fe, 0xa9fe); // ::ffff:169.254.169.254
+        assert!(super::is_cloud_metadata(IpAddr::V6(v6_mapped)));
+
+        // Ordinary IPs are not cloud metadata
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            1, 1, 1, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            127, 0, 0, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            10, 0, 0, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            192, 168, 1, 1
+        ))));
+    }
+
+    #[test]
+    fn test_anti_ssrf_request_allowed_wildcard_drops_metadata_and_private_ips() {
+        let bus = crate::events::bus::EventBus::new();
+        let config = BrokerConfig {
+            policy: BrokerPolicy::Allowlist(vec!["*".into()]),
+            debug_guard: None,
+            mode: RelayMode::NetNs,
+            allow_cidr: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            policy_path: None,
+            block_doh: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+        };
+
+        // Cloud metadata MUST be dropped even under wildcard '*' allowlist
+        assert!(!request_allowed("169.254.169.254", 80, None, &config, &bus));
+        assert!(!request_allowed("100.100.100.200", 80, None, &config, &bus));
+
+        // RFC 1918 private subnets MUST be dropped under wildcard '*' allowlist
+        assert!(!request_allowed("10.0.0.1", 80, None, &config, &bus));
+        assert!(!request_allowed("172.16.0.1", 80, None, &config, &bus));
+        assert!(!request_allowed("192.168.1.1", 80, None, &config, &bus));
+
+        // Public IPs are allowed by wildcard
+        assert!(request_allowed("1.1.1.1", 443, None, &config, &bus));
+        assert!(request_allowed("8.8.8.8", 53, None, &config, &bus));
+    }
+
+    #[test]
+    fn test_anti_ssrf_resolve_and_connect_blocks_upstream_proxy_bypass() {
+        let bus = crate::events::bus::EventBus::new();
+        let config = BrokerConfig {
+            policy: BrokerPolicy::Allowlist(vec!["*".into()]),
+            debug_guard: None,
+            mode: RelayMode::NetNs,
+            allow_cidr: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            policy_path: None,
+            block_doh: false,
+            http_proxy: Some("http://proxy.corp:8080".into()),
+            https_proxy: Some("http://proxy.corp:8443".into()),
+            no_proxy: None,
+        };
+
+        // Upstream proxy MUST NOT bypass Anti-SSRF destination blocking
+        assert!(super::resolve_and_connect("169.254.169.254", 80, &config, &bus).is_err());
+        assert!(super::resolve_and_connect("100.100.100.200", 80, &config, &bus).is_err());
+        assert!(super::resolve_and_connect("10.0.0.1", 80, &config, &bus).is_err());
+        assert!(super::resolve_and_connect("192.168.1.1", 80, &config, &bus).is_err());
+    }
+
+    #[test]
+    fn test_anti_ssrf_proxy_target_validation() {
+        let allow_cidrs = Vec::new();
+        // Proxy pointing to cloud metadata is invalid
+        assert!(!super::is_valid_proxy_target(
+            "http://169.254.169.254:8080",
+            &allow_cidrs
+        ));
+        assert!(!super::is_valid_proxy_target(
+            "http://100.100.100.200:8080",
+            &allow_cidrs
+        ));
+        // Proxy pointing to private subnet is invalid (without allow_cidr)
+        assert!(!super::is_valid_proxy_target(
+            "http://10.0.0.1:8080",
+            &allow_cidrs
+        ));
+        assert!(!super::is_valid_proxy_target(
+            "http://192.168.1.1:8080",
+            &allow_cidrs
+        ));
     }
 }

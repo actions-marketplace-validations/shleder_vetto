@@ -8,6 +8,8 @@
 mod common;
 
 mod adv_isolation;
+#[cfg(target_os = "linux")]
+mod anti_ssrf;
 mod cli_auto_enable;
 mod cli_reporting;
 #[cfg(target_os = "linux")]

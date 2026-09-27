@@ -22,7 +22,7 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-pub use state::{AgentCard, DashboardState, MissionTab};
+pub use state::{AgentCard, DashboardState, MissionTab, SecurityEventItem, SecurityEventType};
 pub use theme::{Theme, ThemeMode};
 
 const TICK_RATE: Duration = Duration::from_millis(250);
@@ -76,7 +76,7 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                         }
 
                         match key.code {
-                            // Tab switching [1-4]
+                            // Tab switching [1-5]
                             KeyCode::Char('1') => state.active_tab = MissionTab::Agents,
                             KeyCode::Char('2') => state.active_tab = MissionTab::Sandbox,
                             KeyCode::Char('3') => {
@@ -88,6 +88,10 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                                 }
                             }
                             KeyCode::Char('4') => state.active_tab = MissionTab::Sessions,
+                            KeyCode::Char('5') => {
+                                state.active_tab = MissionTab::SecurityStream;
+                                state.poll_security_events();
+                            }
 
                             // Tab cycling (Tab / BackTab)
                             KeyCode::Tab => {
@@ -191,6 +195,7 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
 
         if last_tick.elapsed() >= TICK_RATE {
             last_tick = Instant::now();
+            state.poll_security_events();
         }
     };
 
