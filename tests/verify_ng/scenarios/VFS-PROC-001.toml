@@ -15,8 +15,8 @@ known_limitation = "Covers /proc/self/{mem,fd,cwd,root,exe}, /proc/<pid>/fd leak
 residual_risk = "On fs-only and macOS, portions of OS surfaces are visible wider than in PIDns/full; strength ceiling PARTIAL there. Windows: \\Device\\ and drive-alias coverage is advisory."
 
 [evidence.host_facts]
-postmortem = "host stat/canary comparison of secret target after wait: absence/immutability means held"
-proc-leak = "no foreign fd/mem/cwd/root path must yield secret bytes (host-side comparison)"
+postmortem = "host stat/canary comparison of canary target after wait: absence/immutability means held"
+proc-leak = "no foreign fd/mem/cwd/root path must yield canary bytes (host-side comparison)"
 
 [evidence.constrained_channel]
 errno_class = "open/read via /proc|/sys|/dev aliases must return EACCES/EPERM/ENOENT with session nonce"
