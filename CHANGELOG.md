@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
 
+## [0.5.4] - 2026-09-27
+
+### Added
+- **12-Scenario Adversarial Stress Test Suite**:
+  - Implemented comprehensive integration test suite `tests/integration/adversarial_suite.rs` (421 lines) and registered 12 adversarial TOML scenarios under `tests/verify_ng/scenarios/` (SEC-UNSHARE-001 through PROXY-BYPASS-001) covering syscall boundary traps, secret isolation, policy containment, and stdio reliability.
+  - Verified 100% green execution across Linux, Windows, macOS, QEMU aarch64, SBPL, and SLSA Level 3 matrix targets without ignoring any test.
+
+### Fixed
+- **Authoritative Verdict Coupling (Fail-Closed Exit 125)**:
+  - Coupled `vetto::audit::VerdictEngine::evaluate` before exit in `src/main.rs`. Any detected security violations (`blocked_total > 0`, non-Pass status, contract breaches) unconditionally force exit code 125 (`EXIT_FAIL_CLOSED`), preventing child processes that violate boundaries from escaping with exit code 0.
+- **Elimination of 64KB Stdio Buffer Deadlocks (INV-25)**:
+  - Replaced synchronous `spawn_streaming_redactor` with non-blocking `sandbox::production::AsyncPipeReader` with a 200ms drain deadline, eliminating deadlocks when external consumers pause reading high-throughput child stdout/stderr.
+- **Universal TUI Timeout Enforcement**:
+  - Wired `cfg.session_timeout` into `tui::statusline::run` and `tui::full::run` with non-blocking deadline checks, terminating hung child processes with code 124 and cleanly restoring terminal out of raw mode.
+- **Watchdog Signal Escalation**:
+  - Implemented async-signal-safe `on_sigint` handler with atomic counter escalating repeat SIGINT to SIGKILL, backed by `vetto-sigint-watchdog` background thread escalating to SIGKILL after 500ms.
+- **CLI Preprocessing Purity**:
+  - Removed mutating host side-effects (`enable_agent_silent`) from `preprocess_cli_args`.
+- **Seccomp Syscall & Socket Hardening**:
+  - Added `NR_UNSHARE`, `NR_SETNS`, and `NR_CLONE3` returning `EPERM` to `HARDENING_SYSCALLS`. Added cBPF filter inspecting socket type masked with `0x0f` to deny `SOCK_RAW` socket creation with `EACCES`.
+- **Repository Secret Isolation (`.git/config`)**:
+  - Included `.git/config` in `mask_mandatory_secrets` via tmpfs VFS overlay across all sandbox profiles and marked as secret-shaped across all platforms.
+- **Non-Interactive Piped STDIN Preservation**:
+  - Guarded fd 0 redirection behind `libc::isatty(STDIN_FILENO) == 1` in Linux and macOS sandboxes so piped input in CI/headless mode is preserved without truncation.
+- **Orphan Grandchild Evacuation under Cleared Environments**:
+  - Fixed `sweep_tree_by_nonce` under shared sessions to detect and terminate orphaned processes that wiped their environment via `clearenv()`.
+- **Policy Engine Hardening**:
+  - Blocked repository policies from overriding `--preset paranoid` network settings and rejected write root attempts targeting `/`, `/etc`, or `$HOME` with fatal fail-closed exit code 125.
+  - Added regular file validation via `is_usable_file` in `read_layer_file` to reject symlinks in `.vetto/policy.d/`.
+- **Packaging Parity**:
+  - Synchronized version 0.5.4 across all manifests and documentation suites.
+
 ## [0.5.3] - 2026-09-27
 
 ### Added
