@@ -1,3 +1,9 @@
+vetto (0.5.4-1) unstable; urgency=medium
+
+  * Adversarial stress hardening, vulnerability remediation & 12-scenario test suite.
+
+ -- vetto contributors <noreply@github.com>  Sun, 27 Sep 2026 18:05:40 +0000
+
 vetto (0.5.3-1) unstable; urgency=medium
 
   * Maintenance and synchronization.
