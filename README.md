@@ -184,6 +184,20 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 
 ---
 
+## Active Upstream Integrations & Ecosystem PRs
+
+Vetto engineering maintains native upstream isolation adapters across open-source AI agent frameworks, replacing heavy Docker daemon dependencies and unprotected subprocesses with lightweight kernel fencing:
+
+| Framework | Target Issue | Integration PR | Isolation Architecture |
+| :--- | :--- | :--- | :--- |
+| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` with monotonic wall-clock timeout and process group extinction (`os.killpg(SIGKILL)`). |
+| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | Pre-flight DNS watchdog blocking loopback, RFC 1918, CGNAT, and AWS/GCP instance metadata. |
+| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` containerless backend with dynamic Linux Landlock ABI (1–6) detection and rootless path bounding. |
+| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` containerless process fencer with `PR_SET_PDEATHSIG`, subreaper, and namespace sandboxing. |
+| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Multi-tier terminal sandbox execution and secret masking (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
+
+---
+
 ## Binary Integrity & Attestation
 
 Releases are built via automated GitHub Actions workflows with public cryptographic verification:
