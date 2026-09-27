@@ -55,6 +55,9 @@ const NR_BPF: u32 = libc::SYS_bpf as u32;
 const NR_REBOOT: u32 = libc::SYS_reboot as u32;
 const NR_SWAPON: u32 = libc::SYS_swapon as u32;
 const NR_SWAPOFF: u32 = libc::SYS_swapoff as u32;
+const NR_UNSHARE: u32 = libc::SYS_unshare as u32;
+const NR_SETNS: u32 = libc::SYS_setns as u32;
+const NR_CLONE3: u32 = libc::SYS_clone3 as u32;
 
 // Keep this list evidence-based. These interfaces tear down or replace the
 // namespace/filesystem setup, expose another process, open kernel tracing and
@@ -91,6 +94,9 @@ const HARDENING_SYSCALLS: &[u32] = &[
     NR_REBOOT,
     NR_SWAPON,
     NR_SWAPOFF,
+    NR_UNSHARE,
+    NR_SETNS,
+    NR_CLONE3,
 ];
 
 // In agent-min profile, deny additional legacy/exotic syscalls unneeded by
@@ -190,6 +196,7 @@ const fn bpf_jump(code: u16, k: u32, jt: u8, jf: u8) -> SockFilter {
 const BPF_LD_BPF_W_BPF_ABS: u16 = 0x20;
 const BPF_JMP_JEQ_K: u16 = 0x15;
 const BPF_JMP_JSET_K: u16 = 0x45;
+const BPF_ALU_AND_K: u16 = 0x54;
 const BPF_RET: u16 = 0x06;
 const X32_SYSCALL_BIT: u32 = 0x4000_0000;
 
@@ -260,6 +267,13 @@ pub fn build_program_for_profile(
     let hardening_deny_index = program.len();
     program.push(bpf_stmt(RET, SECCOMP_RET_ERRNO | libc::EPERM as u32));
 
+    let socket_check_start = program.len();
+    // Check args[1] (offset 24): socket type masked with 0x0f (SOCK_TYPE_MASK)
+    program.push(bpf_stmt(LD_ABS, 24));
+    program.push(bpf_stmt(BPF_ALU_AND_K, 0x0f));
+    let raw_jump_index = program.len();
+    program.push(bpf_jump(JEQ, libc::SOCK_RAW as u32, 0, 0));
+
     let domain_index = program.len();
     program.extend([
         bpf_stmt(LD_ABS, 16),
@@ -271,11 +285,15 @@ pub fn build_program_for_profile(
     ]);
     let permitted_family_index = program.len() - 1;
 
+    let raw_deny_index = program.len();
+    program.push(bpf_stmt(RET, SECCOMP_RET_ERRNO | libc::EACCES as u32));
+
     // The socket and socketpair branches jump directly to the argument
     // inspection. Every hardening syscall branch jumps to one shared EPERM
     // return. All offsets are guaranteed to fit in u8 for this compact filter.
-    program[socket_index].jt = jump_offset(socket_index, domain_index);
-    program[socketpair_index].jt = jump_offset(socketpair_index, domain_index);
+    program[socket_index].jt = jump_offset(socket_index, socket_check_start);
+    program[socketpair_index].jt = jump_offset(socketpair_index, socket_check_start);
+    program[raw_jump_index].jt = jump_offset(raw_jump_index, raw_deny_index);
     for (index, instruction) in program
         .iter_mut()
         .enumerate()
@@ -402,6 +420,9 @@ mod tests {
         assert_eq!(NR_REBOOT, libc::SYS_reboot as u32);
         assert_eq!(NR_SWAPON, libc::SYS_swapon as u32);
         assert_eq!(NR_SWAPOFF, libc::SYS_swapoff as u32);
+        assert_eq!(NR_UNSHARE, libc::SYS_unshare as u32);
+        assert_eq!(NR_SETNS, libc::SYS_setns as u32);
+        assert_eq!(NR_CLONE3, libc::SYS_clone3 as u32);
     }
 
     #[test]
@@ -410,7 +431,10 @@ mod tests {
             build_program(SocketPolicy::UnixOnly),
             build_program(SocketPolicy::UnixAndIp),
         ] {
-            assert_eq!(program.len(), 6 + 2 + HARDENING_SYSCALLS.len() + 2 + 6);
+            assert_eq!(
+                program.len(),
+                6 + 2 + HARDENING_SYSCALLS.len() + 2 + 3 + 6 + 1
+            );
             for syscall in [NR_SOCKET, NR_SOCKETPAIR] {
                 let (index, branch) = program
                     .iter()
@@ -421,12 +445,44 @@ mod tests {
                     .expect("socket syscall branch");
                 let target = index + 1 + branch.jt as usize;
                 assert_eq!(program[target].code, BPF_LD_BPF_W_BPF_ABS);
-                assert_eq!(program[target].k, 16, "socket branch must inspect args[0]");
+                assert_eq!(program[target].k, 24, "socket branch must inspect args[1]");
+            }
+        }
+    }
+
+    #[test]
+    fn sock_raw_is_blocked_with_eacces_in_all_socket_policies() {
+        let denied = SECCOMP_RET_ERRNO | libc::EACCES as u32;
+        for program in [
+            build_program(SocketPolicy::UnixOnly),
+            build_program(SocketPolicy::UnixAndIp),
+        ] {
+            for raw_val in [
+                libc::SOCK_RAW as u32,
+                (libc::SOCK_RAW | libc::SOCK_CLOEXEC) as u32,
+                (libc::SOCK_RAW | libc::SOCK_NONBLOCK) as u32,
+            ] {
+                assert_eq!(
+                    eval_with_type(&program, NR_SOCKET, AF_INET, raw_val),
+                    denied
+                );
+                assert_eq!(
+                    eval_with_type(&program, NR_SOCKETPAIR, AF_INET, raw_val),
+                    denied
+                );
+                assert_eq!(
+                    eval_with_type(&program, NR_SOCKET, AF_UNIX, raw_val),
+                    denied
+                );
             }
         }
     }
 
     fn eval(program: &[SockFilter], syscall: u32, family: u32) -> u32 {
+        eval_with_type(program, syscall, family, libc::SOCK_STREAM as u32)
+    }
+
+    fn eval_with_type(program: &[SockFilter], syscall: u32, family: u32, sock_type: u32) -> u32 {
         let mut pc = 0usize;
         let mut accumulator = 0u32;
         loop {
@@ -437,8 +493,13 @@ mod tests {
                         0 => syscall,
                         4 => native_audit_arch(),
                         16 => family,
+                        24 => sock_type,
                         offset => panic!("unexpected load offset {offset}"),
                     };
+                    pc += 1;
+                }
+                BPF_ALU_AND_K => {
+                    accumulator &= instruction.k;
                     pc += 1;
                 }
                 BPF_JMP_JEQ_K => {

@@ -37,6 +37,7 @@ type SharedBuf = Arc<Mutex<Vec<u8>>>;
 /// stays with the production execution boundary. Waiting inside uses
 /// try_wait polling (proven killer path for the quit branch), never a bare
 /// blocking wait that could bypass tree cleanup.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     bus: &EventBus,
     stdout_r: OwnedFd,
@@ -45,7 +46,8 @@ pub fn run(
     tier: &str,
     net: &str,
     profile: &str,
-) -> i32 {
+    timeout: Option<Duration>,
+) -> (i32, bool) {
     let mut rx = bus.subscribe();
     let mut app_state = AppState::new(tier, net, profile);
 
@@ -53,6 +55,8 @@ pub fn run(
     let err_buf: SharedBuf = Arc::new(Mutex::new(Vec::new()));
     spawn_pipe_reader(stdout_r, Arc::clone(&out_buf));
     spawn_pipe_reader(stderr_r, Arc::clone(&err_buf));
+
+    let deadline = timeout.map(|d| Instant::now() + d);
 
     let _ = terminal::enable_raw_mode();
     let _ = execute!(io::stdout(), EnterAlternateScreen);
@@ -62,8 +66,8 @@ pub fn run(
         let _ = terminal::disable_raw_mode();
         // No dashboard to drive the session: poll to natural exit (the
         // boundary still sweeps afterwards; never a bare blocking wait).
-        let (code, _) = crate::sandbox::production::wait_for_exit(handle, None);
-        return code;
+        let (code, timed_out) = crate::sandbox::production::wait_for_exit(handle, timeout);
+        return (code, timed_out);
     };
 
     let mut scroll_up: usize = 0;
@@ -73,6 +77,21 @@ pub fn run(
     let mut drawn_output_len = (usize::MAX, usize::MAX);
     let mut confirm_quit = false;
     let exit_code = loop {
+        if let Some(dl) = deadline {
+            if Instant::now() >= dl {
+                handle.terminate();
+                let drain_start = Instant::now();
+                while drain_start.elapsed() < Duration::from_millis(200) {
+                    if handle.try_wait().is_some() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let _ = execute!(io::stdout(), LeaveAlternateScreen);
+                let _ = terminal::disable_raw_mode();
+                return (crate::exit_codes::EXIT_TIMEOUT, true);
+            }
+        }
         app_state.drain(&mut rx);
         let output_len = (
             out_buf.lock().map(|buf| buf.len()).unwrap_or(0),
@@ -161,7 +180,7 @@ pub fn run(
 
     let _ = execute!(io::stdout(), LeaveAlternateScreen);
     let _ = terminal::disable_raw_mode();
-    exit_code
+    (exit_code, false)
 }
 
 fn spawn_pipe_reader(fd: OwnedFd, buf: SharedBuf) {

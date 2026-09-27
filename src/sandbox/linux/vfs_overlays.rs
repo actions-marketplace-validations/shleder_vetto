@@ -185,6 +185,10 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
         if proj_env.exists() {
             mounts::mask_path(&proj_env, proj_env.is_dir())?;
         }
+        let git_config = root.join(".git").join("config");
+        if git_config.exists() {
+            mounts::mask_path(&git_config, git_config.is_dir())?;
+        }
     }
 
     for socket_path in get_dangerous_unix_sockets() {

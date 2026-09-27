@@ -300,17 +300,22 @@ fn child(
             }
         }
         StdioMode::Captured { stdout_w, stderr_w } => {
-            // SAFETY: open of a static NUL-terminated path.
-            let devnull = unsafe { libc::open(b"/dev/null\0".as_ptr().cast(), libc::O_RDONLY) };
-            if devnull < 0 {
-                child_fail(
-                    err_w,
-                    124,
-                    &format!("open /dev/null: {}", std::io::Error::last_os_error()),
-                );
-            }
-            if let Err(error) = dup2_to(devnull, 0) {
-                child_fail(err_w, 124, &error);
+            let is_tty = unsafe { libc::isatty(libc::STDIN_FILENO) } == 1;
+            if is_tty {
+                // SAFETY: open of a static NUL-terminated path.
+                let devnull = unsafe { libc::open(b"/dev/null\0".as_ptr().cast(), libc::O_RDONLY) };
+                if devnull < 0 {
+                    child_fail(
+                        err_w,
+                        124,
+                        &format!("open /dev/null: {}", std::io::Error::last_os_error()),
+                    );
+                }
+                if let Err(error) = dup2_to(devnull, 0) {
+                    child_fail(err_w, 124, &error);
+                }
+                // SAFETY: plain close on the temporary /dev/null descriptor.
+                unsafe { libc::close(devnull) };
             }
             if let Err(error) = dup2_to(stdout_w, 1) {
                 child_fail(err_w, 124, &error);
@@ -318,8 +323,6 @@ fn child(
             if let Err(error) = dup2_to(stderr_w, 2) {
                 child_fail(err_w, 124, &error);
             }
-            // SAFETY: plain close on the temporary /dev/null descriptor.
-            unsafe { libc::close(devnull) };
         }
         StdioMode::Inherit => {}
     }

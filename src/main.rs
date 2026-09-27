@@ -177,30 +177,9 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
             return Ok(raw_args.to_vec());
         }
 
-        if let Some(canon) =
+        if let Some(_canon) =
             vetto::policy::defaults::canonical_agent_name(arg).filter(|&c| c != "custom")
         {
-            if let Ok(shims_dir) =
-                vetto::cli::hook::get_shims_dir(vetto::cli::hook::HookScope::Global)
-            {
-                let shim_path = shims_dir.join(canon);
-                let is_wrapped =
-                    shim_path.exists() && vetto::shim::is_vetto_shim_content(&shim_path);
-                if !is_wrapped {
-                    let target_agent =
-                        if let Ok((bin, _)) = vetto::onboard::find_real_agent_binary(arg) {
-                            bin
-                        } else {
-                            canon.to_string()
-                        };
-                    let _ = vetto::cli::enable::enable_agent_silent(
-                        &target_agent,
-                        false,
-                        vetto::cli::hook::HookScope::Global,
-                    );
-                }
-            }
-
             let mut rewritten = raw_args.to_vec();
             rewritten.insert(i, "--".to_string());
             return Ok(rewritten);
@@ -1422,12 +1401,7 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
     // failed preparation never spawns (no fallback). The previously
     // detected `backend` box below is moved into the boundary here (its
     // earlier borrow for `describe` ended at the trace line above).
-    // Only `--tui=none` honors `--timeout` (TUI modes own their wait loops);
-    // freeze exactly what the supervisor will enforce.
-    let frozen_timeout = match cfg.tui {
-        TuiMode::None => cfg.session_timeout,
-        _ => None,
-    };
+    let frozen_timeout = cfg.session_timeout;
     let unprepared = sandbox::production::UnpreparedProductionExecution::new(
         *backend,
         pol,
@@ -1497,16 +1471,24 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
     let relay_port: Option<u16> = None;
 
     #[cfg(unix)]
-    let mut out_reader = None;
+    let mut out_reader: Option<sandbox::production::AsyncPipeReader> = None;
     #[cfg(unix)]
-    let mut err_reader = None;
+    let mut err_reader: Option<sandbox::production::AsyncPipeReader> = None;
     #[cfg(unix)]
     if cfg.tui == TuiMode::None && cfg.mask_secrets {
         if let Some(r1) = stdout_r.take() {
-            out_reader = Some(spawn_streaming_redactor(r1, std::io::stdout()));
+            out_reader = Some(sandbox::production::AsyncPipeReader::spawn(
+                r1,
+                sandbox::production::PROD_MAX_STDIO,
+                std::time::Duration::from_millis(200),
+            ));
         }
         if let Some(r2) = stderr_r.take() {
-            err_reader = Some(spawn_streaming_redactor(r2, std::io::stderr()));
+            err_reader = Some(sandbox::production::AsyncPipeReader::spawn(
+                r2,
+                sandbox::production::PROD_MAX_STDIO,
+                std::time::Duration::from_millis(200),
+            ));
         }
     }
 
@@ -1742,15 +1724,6 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
 
     install_sigint_forwarder(root_pid, tier);
 
-    if cfg.session_timeout.is_some() && cfg.tui != TuiMode::None {
-        bus.publish(Event::Notice {
-            ts: events::types::now(),
-            message: "--timeout is enforced only with --tui=none; this TUI mode \
-                      owns its own wait loop and ignores it"
-                .to_string(),
-        });
-    }
-
     // ---- Phase 3: run the UI / wait ---------------------------------------
     // The SAME `SpawnedProductionExecution` owns the wait in every mode:
     // interactive dashboards borrow `spawned.handle` for their loops, then
@@ -1762,15 +1735,21 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
     let (exit_code, timed_out) = match cfg.tui {
         TuiMode::Statusline => {
             let master = pty_master.expect("statusline wires a pty");
-            let code = tui::statusline::run(
+            let (code, timed_out) = tui::statusline::run(
                 &bus,
                 &master,
                 &mut spawned.handle,
                 tier_label(tier),
                 &cfg.net.label(),
                 &pol.name,
+                cfg.session_timeout,
             );
-            let result = spawned.finish(Some(code), false);
+            let result = spawned.finish(Some(code), timed_out);
+            if timed_out {
+                bus.publish(Event::SessionTimeout {
+                    ts: events::types::now(),
+                });
+            }
             eprintln!(
                 "vetto: enforcement {}",
                 result.report.render_deterministic()
@@ -1780,7 +1759,7 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         TuiMode::Full => {
             let out = stdout_r.expect("full mode wires stdout pipe");
             let err = stderr_r.expect("full mode wires stderr pipe");
-            let code = tui::full::run(
+            let (code, timed_out) = tui::full::run(
                 &bus,
                 out,
                 err,
@@ -1788,8 +1767,14 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
                 tier_label(tier),
                 &cfg.net.label(),
                 &pol.name,
+                cfg.session_timeout,
             );
-            let result = spawned.finish(Some(code), false);
+            let result = spawned.finish(Some(code), timed_out);
+            if timed_out {
+                bus.publish(Event::SessionTimeout {
+                    ts: events::types::now(),
+                });
+            }
             eprintln!(
                 "vetto: enforcement {}",
                 result.report.render_deterministic()
@@ -1817,10 +1802,36 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
                 result.report.render_deterministic()
             );
             if let Some(h) = out_reader.take() {
-                let _ = h.join();
+                h.notify_child_exited();
+                let out = h.join();
+                if !out.is_empty() {
+                    use std::io::Write;
+                    let mut redactor = pty::AnsiRedactor::new();
+                    let redacted = redactor.redact_chunk(&out);
+                    let flushed = redactor.flush();
+                    let mut dest = std::io::stdout();
+                    let _ = dest.write_all(&redacted);
+                    if !flushed.is_empty() {
+                        let _ = dest.write_all(&flushed);
+                    }
+                    let _ = dest.flush();
+                }
             }
             if let Some(h) = err_reader.take() {
-                let _ = h.join();
+                h.notify_child_exited();
+                let err = h.join();
+                if !err.is_empty() {
+                    use std::io::Write;
+                    let mut redactor = pty::AnsiRedactor::new();
+                    let redacted = redactor.redact_chunk(&err);
+                    let flushed = redactor.flush();
+                    let mut dest = std::io::stderr();
+                    let _ = dest.write_all(&redacted);
+                    if !flushed.is_empty() {
+                        let _ = dest.write_all(&flushed);
+                    }
+                    let _ = dest.flush();
+                }
             }
             (result.exit_code.unwrap_or(-1), result.timed_out)
         }
@@ -1836,6 +1847,8 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         );
         (result.exit_code.unwrap_or(-1), result.timed_out)
     };
+    #[cfg(unix)]
+    CHILD_TARGET.store(0, std::sync::atomic::Ordering::SeqCst);
 
     let duration_secs = started.elapsed().as_secs();
     bus.publish(Event::SessionEnded {
@@ -1930,11 +1943,30 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         }
     }
 
-    let code = exit_codes::map_session_exit_code(
+    let evidence_channel_intact = vetto::sandbox::is_evidence_channel_intact();
+    let verdict = vetto::audit::VerdictEngine::evaluate(
+        &contract,
+        blocked_total as usize,
+        0, // unauthorized writes
+        0, // surviving zombies
+        evidence_channel_intact,
+        exit_code,
+    );
+
+    let mut code = exit_codes::map_session_exit_code(
         exit_code,
         timed_out,
         blocked_threshold_reached && !cfg.shadow,
     );
+
+    if !cfg.shadow
+        && !timed_out
+        && (verdict.exit_code == exit_codes::EXIT_FAIL_CLOSED
+            || verdict.status != vetto::audit::VerdictStatus::Pass
+            || blocked_total > 0)
+    {
+        code = exit_codes::EXIT_FAIL_CLOSED;
+    }
     if cfg.ci {
         println!(
             "{}",
@@ -2260,13 +2292,21 @@ fn is_executable_file(p: &Path) -> bool {
 
 #[cfg(unix)]
 static CHILD_TARGET: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+#[cfg(unix)]
+static SIGINT_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 #[cfg(unix)]
 extern "C" fn on_sigint(_sig: libc::c_int) {
     let t = CHILD_TARGET.load(std::sync::atomic::Ordering::SeqCst);
     if t != 0 {
-        // SAFETY: scalar-only kill; async-signal-safe.
-        unsafe { libc::kill(t, libc::SIGINT) };
+        let count = SIGINT_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if count == 0 {
+            // First interrupt: forward SIGINT to child/group.
+            unsafe { libc::kill(t, libc::SIGINT) };
+        } else {
+            // Escalation: second interrupt forces immediate SIGKILL.
+            unsafe { libc::kill(t, libc::SIGKILL) };
+        }
     }
 }
 
@@ -2276,7 +2316,31 @@ fn install_sigint_forwarder(root_pid: u32, tier: Option<policy::Tier>) {
         Some(policy::Tier::FsOnly) => -(root_pid as i32), // whole process group
         _ => root_pid as i32,
     };
+    SIGINT_COUNT.store(0, std::sync::atomic::Ordering::SeqCst);
     CHILD_TARGET.store(target, std::sync::atomic::Ordering::SeqCst);
+
+    // Watchdog thread: escalates to SIGKILL 500ms after first SIGINT if child remains alive.
+    std::thread::Builder::new()
+        .name("vetto-sigint-watchdog".into())
+        .spawn(move || loop {
+            if CHILD_TARGET.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                break;
+            }
+            if SIGINT_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let t = CHILD_TARGET.load(std::sync::atomic::Ordering::SeqCst);
+                if t != 0 {
+                    let pid = t.abs();
+                    if unsafe { libc::kill(pid, 0) } == 0 {
+                        unsafe { libc::kill(t, libc::SIGKILL) };
+                    }
+                }
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        })
+        .ok();
+
     // SAFETY: registering our extern handler.
     let h = on_sigint as *const () as libc::sighandler_t;
     if unsafe { libc::signal(libc::SIGINT, h) } == libc::SIG_ERR {
@@ -2687,39 +2751,4 @@ fn profiles() -> Result<()> {
         println!("  {name:<12} {desc}");
     }
     Ok(())
-}
-
-#[cfg(unix)]
-fn spawn_streaming_redactor<W: std::io::Write + Send + 'static>(
-    fd: OwnedFd,
-    mut dest: W,
-) -> std::thread::JoinHandle<()> {
-    std::thread::Builder::new()
-        .name("vetto-stream-redactor".into())
-        .spawn(move || {
-            use std::io::Read;
-            let mut file = std::fs::File::from(fd);
-            let mut chunk = [0u8; 8192];
-            let mut redactor = pty::AnsiRedactor::new();
-            loop {
-                match file.read(&mut chunk) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let redacted = redactor.redact_chunk(&chunk[..n]);
-                        if !redacted.is_empty() {
-                            let _ = dest.write_all(&redacted);
-                            let _ = dest.flush();
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                    Err(_) => break,
-                }
-            }
-            let flushed = redactor.flush();
-            if !flushed.is_empty() {
-                let _ = dest.write_all(&flushed);
-                let _ = dest.flush();
-            }
-        })
-        .expect("spawn stream redactor thread")
 }

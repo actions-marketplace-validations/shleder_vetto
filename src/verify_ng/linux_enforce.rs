@@ -636,17 +636,22 @@ fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -
             matched.push(pid);
         } else if (env.is_empty()
             || (!contains_slice(&env, b"VETTO_RUN_NONCE=")
-                && !contains_slice(&env, b"VETTO_PROD_NONCE=")))
+                && !contains_slice(&env, b"VETTO_PROD_NONCE=")
+                && !contains_slice(&env, b"VETTO_VNG_NONCE=")))
             && pid_alive(pid as u32)
             && !pid_is_zombie(&status)
             && crate::sandbox::linux::proctrack::ppid_from_status(&status) == Some(me)
+            && pid != root_pid as i32
+            && !crate::sandbox::handle::is_active_root(pid as u32)
         {
             let my_sid = crate::sandbox::linux::proctrack::session_of(0);
             let their_sid = crate::sandbox::linux::proctrack::session_of(pid);
-            if match (my_sid, their_sid) {
-                (Some(mine), Some(theirs)) => mine != theirs,
-                _ => false,
-            } {
+            let their_pgid = unsafe { libc::getpgid(pid) };
+            let is_orphan = match (my_sid, their_sid) {
+                (Some(mine), Some(theirs)) if mine != theirs => true,
+                _ => their_pgid == root_pid as i32,
+            };
+            if is_orphan {
                 blind = true;
                 matched.push(pid);
             }

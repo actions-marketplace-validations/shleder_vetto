@@ -112,6 +112,15 @@ pub fn is_secret_shaped(path: &Path) -> bool {
     if lower == ".env" || lower.starts_with(".env.") {
         return true;
     }
+    if lower == "config"
+        && path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.eq_ignore_ascii_case(".git"))
+    {
+        return true;
+    }
     lower.ends_with(".pem")
         || lower.ends_with(".key")
         || lower.ends_with(".p12")

@@ -577,8 +577,15 @@ fn test_env_post_start_mutation_contained() {
     );
 
     let host_before: BTreeMap<String, String> = std::env::vars().collect();
-    let (out, log) =
-        run_linux_contract(&scen, &contract, script, Vec::new(), BTreeMap::new(), true);
+    let (out, log) = run_linux_contract_with_host_env(
+        &scen,
+        &contract,
+        script,
+        Vec::new(),
+        BTreeMap::new(),
+        true,
+        Some(host_before.clone()),
+    );
     let host_after: BTreeMap<String, String> = std::env::vars().collect();
 
     assert_eq!(log.len(), 1);
