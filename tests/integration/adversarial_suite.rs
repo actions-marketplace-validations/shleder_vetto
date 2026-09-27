@@ -279,7 +279,16 @@ fn timeout_tui_001_enforces_timeout_in_tui_mode() {
     #[cfg(unix)]
     let out = run_vetto_in(
         project.path(),
-        &["--timeout", "2s", "--tui", "statusline", "--", "sh", "-c", &format!("sleep 4 # {marker}")],
+        &[
+            "--timeout",
+            "2s",
+            "--tui",
+            "statusline",
+            "--",
+            "sh",
+            "-c",
+            &format!("sleep 4 # {marker}"),
+        ],
     );
     #[cfg(unix)]
     let _ = Command::new("pkill").args(["-9", "-f", &marker]).status();
@@ -364,7 +373,13 @@ fn sigint_escalate_001_terminates_trapped_child() {
     let project = TempProject::new("sigint-escalate");
     let marker = format!("vetto-sigint-escalate-{}", std::process::id());
     let mut child = Command::new(vetto_bin())
-        .args(["--ci", "--", "sh", "-c", &format!("trap '' INT; sleep 2 # {marker}")])
+        .args([
+            "--ci",
+            "--",
+            "sh",
+            "-c",
+            &format!("trap '' INT; sleep 2 # {marker}"),
+        ])
         .current_dir(project.path())
         .env("HOME", test_home())
         .stdout(Stdio::null())
