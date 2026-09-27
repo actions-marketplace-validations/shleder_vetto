@@ -8,6 +8,7 @@
 mod common;
 
 mod adv_isolation;
+mod adversarial_suite;
 #[cfg(target_os = "linux")]
 mod anti_ssrf;
 mod cli_auto_enable;

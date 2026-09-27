@@ -697,6 +697,19 @@ fn child_stdio_setup(stdio: &StdioMode) -> Result<(), String> {
             dup2_all(slave_fd)
         }
         StdioMode::Captured { stdout_w, stderr_w } => {
+            let is_tty = unsafe { libc::isatty(libc::STDIN_FILENO) } == 1;
+            if is_tty {
+                let devnull = unsafe {
+                    libc::open(
+                        b"/dev/null\0".as_ptr().cast(),
+                        libc::O_RDONLY | libc::O_CLOEXEC,
+                    )
+                };
+                if devnull >= 0 {
+                    let _ = dup2_to(devnull, 0);
+                    unsafe { libc::close(devnull) };
+                }
+            }
             dup2_to(stdout_w, 1)?;
             dup2_to(stderr_w, 2)?;
             Ok(())

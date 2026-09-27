@@ -111,6 +111,28 @@ static long run_probe(const char *name) {
     if (strcmp(name, "userfaultfd") == 0)
         return syscall(SYS_userfaultfd, O_CLOEXEC | O_NONBLOCK);
 #endif
+#ifdef SYS_unshare
+    if (strcmp(name, "unshare") == 0)
+        return syscall(SYS_unshare, 0x10000000);
+#endif
+#ifdef SYS_setns
+    if (strcmp(name, "setns") == 0)
+        return syscall(SYS_setns, -1, 0);
+#endif
+#ifdef SYS_clone3
+    if (strcmp(name, "clone3") == 0)
+        return syscall(SYS_clone3, NULL, 0);
+#endif
+    if (strcmp(name, "socket_raw") == 0) {
+        long r = syscall(SYS_socket, 2, 3, 0);
+        int saved = errno;
+        if (r == -1 && saved == EACCES) {
+            printf("blocked:socket_raw:EACCES\n");
+            return 0;
+        }
+        errno = saved;
+        return r;
+    }
 
     fprintf(stderr, "unsupported probe: %s\n", name);
     return -2;

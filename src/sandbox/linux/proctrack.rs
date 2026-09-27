@@ -117,11 +117,13 @@ pub fn sweep_reparented(deadline_ms: u64, root_pid: i32) -> usize {
                     return false;
                 }
                 // Foreign-session processes (concurrent sandboxes, harness
-                // helpers) are spared: only setsid-detached escapers of
-                // THIS sandbox qualify. Skip conservatively on lookup error.
+                // helpers) are spared: setsid-detached escapers or shared-session
+                // orphan grandchildren (their_pgid != my_pgid || their_pgid == root_pid)
+                // qualify for evacuation.
+                let their_pgid = unsafe { libc::getpgid(*pid) };
                 match (my_sid, session_of(*pid)) {
-                    (Some(mine), Some(theirs)) => mine != theirs,
-                    _ => false,
+                    (Some(mine), Some(theirs)) if mine != theirs => true,
+                    _ => their_pgid == root_pid,
                 }
             })
             .collect();

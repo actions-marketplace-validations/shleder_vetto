@@ -5,19 +5,41 @@ use std::path::PathBuf;
 
 use super::types::Policy;
 
-const SYSTEM_WRITE_ROOTS: [&str; 8] = [
-    "/", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/boot",
+pub const SYSTEM_WRITE_ROOTS: [&str; 12] = [
+    "/",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/etc",
+    "/boot",
+    "C:\\",
+    "C:\\Windows",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
 ];
 
-pub fn check(policy: &mut Policy) {
+pub fn check(policy: &mut Policy) -> anyhow::Result<()> {
     // Writing to system locations is almost always a misconfiguration.
+    let home = home_dir();
     for w in &policy.allow_write {
         let canonical = std::fs::canonicalize(w).unwrap_or_else(|_| w.clone());
-        if SYSTEM_WRITE_ROOTS.contains(&canonical.to_string_lossy().as_ref()) {
-            policy.warnings.push(format!(
-                "allow_write includes system path '{}' — this effectively disables filesystem isolation",
+        let can_str = canonical.to_string_lossy();
+        if SYSTEM_WRITE_ROOTS.contains(&can_str.as_ref()) {
+            anyhow::bail!(
+                "fail-closed: allow_write includes dangerous system path '{}' (exit 125)",
                 w.display()
-            ));
+            );
+        }
+        if let Some(h) = &home {
+            let is_yolo = policy.metadata.name.contains("yolo");
+            if &canonical == h && !is_yolo {
+                policy.warnings.push(format!(
+                    "allow_write includes $HOME '{}' — user files and configuration are mutable",
+                    w.display()
+                ));
+            }
         }
     }
 
@@ -47,6 +69,8 @@ pub fn check(policy: &mut Policy) {
         }
         exists
     });
+
+    Ok(())
 }
 
 fn home_dir() -> Option<std::path::PathBuf> {

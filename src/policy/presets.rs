@@ -230,6 +230,7 @@ pub fn standard_secret_deny_paths() -> Vec<String> {
         "$PROJECT/**/*.pfx".into(),
         "$PROJECT/*.kdbx".into(),
         "$PROJECT/**/*.kdbx".into(),
+        "$PROJECT/.git/config".into(),
         "$PROJECT/.[eE][nN][vV]".into(),
         "$PROJECT/.[eE][nN][vV].*".into(),
         "$PROJECT/**/.[eE][nN][vV]".into(),

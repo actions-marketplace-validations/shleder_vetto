@@ -39,10 +39,12 @@ pub fn run(
     tier: &str,
     net: &str,
     profile: &str,
-) -> i32 {
+    timeout: Option<Duration>,
+) -> (i32, bool) {
     let mut rx = bus.subscribe();
     let mut app_state = AppState::new(tier, net, profile);
     let master = pty_master.as_raw_fd();
+    let deadline = timeout.map(|d| Instant::now() + d);
 
     let _ = terminal::enable_raw_mode();
     let _ = pty::set_nonblocking(master, true);
@@ -59,6 +61,20 @@ pub fn run(
     let mut redactor = pty::AnsiRedactor::new();
 
     let exit_code = loop {
+        if let Some(dl) = deadline {
+            if Instant::now() >= dl {
+                handle.terminate();
+                let drain_start = Instant::now();
+                while drain_start.elapsed() < Duration::from_millis(200) {
+                    if handle.try_wait().is_some() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                restore_terminal(outer.0);
+                return (crate::exit_codes::EXIT_TIMEOUT, true);
+            }
+        }
         // Outer resize -> resize inner pty (the kernel then signals the
         // agent's foreground group on the pty; we do not signal manually).
         if let Some((rows, cols)) = pty::resizer::sync_to_outer(master) {
@@ -122,7 +138,7 @@ pub fn run(
     };
 
     restore_terminal(outer.0);
-    exit_code
+    (exit_code, false)
 }
 
 /// Alternate-screen scrollable event overlay.

@@ -494,6 +494,7 @@ impl RawStringList {
 pub struct MergedPolicy {
     pub metadata: PolicyMetadata,
     pub limits: ResourceLimits,
+    pub active_preset: Option<crate::policy::presets::Preset>,
     pub allow_write: Vec<String>,
     pub allow_read: Vec<String>,
     pub deny_write: Vec<String>,
@@ -644,6 +645,35 @@ impl MergedPolicy {
         }
 
         if let Some(filesystem) = &layer.filesystem {
+            if source_kind == PolicySourceKind::Repository
+                || source_kind == PolicySourceKind::RepositoryFragment
+            {
+                if let Some(allow_write) = &filesystem.allow_write {
+                    let home = std::env::var_os("HOME")
+                        .or_else(|| std::env::var_os("USERPROFILE"))
+                        .map(PathBuf::from);
+                    for w in allow_write.clone().into_vec() {
+                        let p = Path::new(&w);
+                        let canonical =
+                            std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+                        let can_str = canonical.to_string_lossy();
+                        if crate::policy::checker::SYSTEM_WRITE_ROOTS.contains(&can_str.as_ref()) {
+                            bail!(
+                                "fail-closed: repository policy cannot grant write access to system root '{}' (exit 125)",
+                                w
+                            );
+                        }
+                        if let Some(ref h) = home {
+                            if &canonical == h || w == "$HOME" || w == "~" {
+                                bail!(
+                                    "fail-closed: repository policy cannot grant write access to $HOME '{}' (exit 125)",
+                                    w
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             if let Some(allow_write) = &filesystem.allow_write {
                 self.allow_write.extend(allow_write.clone().into_vec());
             }
@@ -713,71 +743,78 @@ impl MergedPolicy {
             }
         }
 
-        if let Some(network) = &layer.network {
-            if let Some(mode) = &network.mode {
-                self.network_mode = Some(mode.clone());
-            }
-            if let Some(allow) = &network.allow {
-                self.network_allow.extend(allow.clone().into_vec());
-            }
-            if let Some(deny) = &network.deny {
-                self.deny_network.extend(deny.clone().into_vec());
-            }
-            if let Some(deny_network) = &network.deny_network {
-                self.deny_network.extend(deny_network.clone().into_vec());
-            }
-            for presets in [
-                &network.net_preset,
-                &network.net_presets,
-                &network.preset,
-                &network.presets,
-            ]
-            .into_iter()
-            .flatten()
-            {
-                for preset_name in presets.clone().into_vec() {
-                    let domains = expand_net_preset(&preset_name)?;
-                    self.network_allow.extend(domains);
+        let is_repo = source_kind == PolicySourceKind::Repository
+            || source_kind == PolicySourceKind::RepositoryFragment;
+        let skip_network =
+            is_repo && self.active_preset == Some(crate::policy::presets::Preset::Paranoid);
+
+        if !skip_network {
+            if let Some(network) = &layer.network {
+                if let Some(mode) = &network.mode {
+                    self.network_mode = Some(mode.clone());
+                }
+                if let Some(allow) = &network.allow {
+                    self.network_allow.extend(allow.clone().into_vec());
+                }
+                if let Some(deny) = &network.deny {
+                    self.deny_network.extend(deny.clone().into_vec());
+                }
+                if let Some(deny_network) = &network.deny_network {
+                    self.deny_network.extend(deny_network.clone().into_vec());
+                }
+                for presets in [
+                    &network.net_preset,
+                    &network.net_presets,
+                    &network.preset,
+                    &network.presets,
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    for preset_name in presets.clone().into_vec() {
+                        let domains = expand_net_preset(&preset_name)?;
+                        self.network_allow.extend(domains);
+                    }
+                }
+                if let Some(allow_cidr) = &network.allow_cidr {
+                    self.allow_cidr.extend(allow_cidr.clone().into_vec());
+                }
+                if let Some(allow_cidrs) = &network.allow_cidrs {
+                    self.allow_cidr.extend(allow_cidrs.clone().into_vec());
+                }
+                for quotas in [&network.net_quota, &network.quota].into_iter().flatten() {
+                    for (domain, val) in quotas {
+                        let bytes = parse_quota_bytes(val)?;
+                        let clean = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+                        self.net_quota.insert(clean, bytes);
+                    }
+                }
+                if let Some(ports) = &network.net_ports {
+                    if let Some(connect) = &ports.allow_tcp_connect {
+                        self.net_connect_ports.extend(connect);
+                    }
+                    if let Some(bind) = &ports.allow_tcp_bind {
+                        self.net_bind_ports.extend(bind);
+                    }
+                }
+                if let Some(connect) = &network.allow_tcp_connect {
+                    self.net_connect_ports.extend(connect);
+                }
+                if let Some(bind) = &network.allow_tcp_bind {
+                    self.net_bind_ports.extend(bind);
+                }
+                if let Some(deny_unix) = &network.deny_unix_sockets {
+                    self.deny_unix_sockets.extend(deny_unix.clone().into_vec());
                 }
             }
-            if let Some(allow_cidr) = &network.allow_cidr {
-                self.allow_cidr.extend(allow_cidr.clone().into_vec());
-            }
-            if let Some(allow_cidrs) = &network.allow_cidrs {
-                self.allow_cidr.extend(allow_cidrs.clone().into_vec());
-            }
-            for quotas in [&network.net_quota, &network.quota].into_iter().flatten() {
-                for (domain, val) in quotas {
-                    let bytes = parse_quota_bytes(val)?;
-                    let clean = domain.trim().trim_end_matches('.').to_ascii_lowercase();
-                    self.net_quota.insert(clean, bytes);
-                }
-            }
-            if let Some(ports) = &network.net_ports {
+
+            if let Some(ports) = &layer.net_ports {
                 if let Some(connect) = &ports.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
                 }
                 if let Some(bind) = &ports.allow_tcp_bind {
                     self.net_bind_ports.extend(bind);
                 }
-            }
-            if let Some(connect) = &network.allow_tcp_connect {
-                self.net_connect_ports.extend(connect);
-            }
-            if let Some(bind) = &network.allow_tcp_bind {
-                self.net_bind_ports.extend(bind);
-            }
-            if let Some(deny_unix) = &network.deny_unix_sockets {
-                self.deny_unix_sockets.extend(deny_unix.clone().into_vec());
-            }
-        }
-
-        if let Some(ports) = &layer.net_ports {
-            if let Some(connect) = &ports.allow_tcp_connect {
-                self.net_connect_ports.extend(connect);
-            }
-            if let Some(bind) = &ports.allow_tcp_bind {
-                self.net_bind_ports.extend(bind);
             }
         }
 
@@ -962,6 +999,12 @@ impl Default for LayeredPolicyLoader {
 }
 
 fn read_layer_file(path: &Path, require_signed: bool) -> Result<String> {
+    if !is_usable_file(path) {
+        bail!(
+            "fail-closed: policy file '{}' must be a regular file and not a symlink",
+            path.display()
+        );
+    }
     if require_signed {
         super::crypto::verify_policy_file(path, None, None).with_context(|| {
             format!(
@@ -1139,6 +1182,7 @@ impl LayeredPolicyLoader {
         // Tier 3b: Security Preset (paranoid, balanced, yolo)
         // -------------------------------------------------------------------
         if let Some(preset) = options.preset {
+            merged.active_preset = Some(preset);
             let layer = crate::policy::presets::preset_layer(preset, options.agent.as_deref());
             let label = format!("preset:{}", preset.as_str());
             merge_layer(
@@ -1314,7 +1358,9 @@ impl LayeredPolicyLoader {
                     if let Ok(entries) = std::fs::read_dir(&fragments_dir) {
                         for entry in entries.flatten() {
                             let path = entry.path();
-                            if path.is_file() && path.extension().is_some_and(|ext| ext == "toml") {
+                            if is_usable_file(&path)
+                                && path.extension().is_some_and(|ext| ext == "toml")
+                            {
                                 fragment_files.push(path);
                             }
                         }
@@ -1888,7 +1934,7 @@ fn build_policy(
         tmpfs_tmp: merged.tmpfs_tmp.unwrap_or(true),
         warnings,
     };
-    checker::check(&mut policy);
+    checker::check(&mut policy)?;
     Ok(policy)
 }
 

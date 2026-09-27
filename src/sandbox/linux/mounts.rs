@@ -418,6 +418,10 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
         if proj_env.exists() {
             mask_path(&proj_env, proj_env.is_dir())?;
         }
+        let git_config = root.join(".git").join("config");
+        if git_config.exists() {
+            mask_path(&git_config, git_config.is_dir())?;
+        }
     }
 
     Ok(())

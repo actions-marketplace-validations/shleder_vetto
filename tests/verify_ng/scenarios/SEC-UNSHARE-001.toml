@@ -1,0 +1,22 @@
+# SEC-UNSHARE-001 — unshare/clone3 namespace creation denial via seccomp filter.
+id = "SEC-UNSHARE-001"
+category = "spawn"
+severity = "blocker"
+required_caps = ["spawn"]
+quorum = 1
+
+[strength]
+linux-full = "STRONG"
+linux-seccomp = "STRONG"
+linux-fsonly = "PARTIAL"
+macos = "NOT_APPLICABLE"
+windows = "NOT_APPLICABLE"
+
+known_limitation = "Proves denial of unshare/setns/clone3 namespace creation via seccomp filter on Linux."
+residual_risk = "On linux-fsonly, seccomp filtering may not be active; kernel namespace creation might succeed if unprivileged user namespaces are enabled."
+
+[evidence.host_facts]
+wait_status = "child process calling unshare returns EPERM"
+
+[evidence.constrained_channel]
+errno_class = "EPERM"

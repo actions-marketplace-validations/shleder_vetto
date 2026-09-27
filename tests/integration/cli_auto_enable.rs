@@ -69,10 +69,11 @@ fn test_direct_agent_invocation_auto_enables_shim() {
         stderr(&out)
     );
 
-    // 1. Verify that the shim was automatically created
-    assert!(shim_path.exists(), "shim file must be auto-created");
-    let shim_content = std::fs::read_to_string(&shim_path).expect("read shim");
-    assert!(shim_content.contains("VETTO_WRAPPED"));
+    // 1. Verify that the shim was NOT automatically created (pure CLI preprocessing)
+    assert!(
+        !shim_path.exists(),
+        "shim file must not be auto-created on direct agent invocation"
+    );
 
     // 2. Verify that the agent executed under the sandbox
     let text = stdout(&out);
@@ -82,7 +83,7 @@ fn test_direct_agent_invocation_auto_enables_shim() {
         text
     );
 
-    // 3. Subsequent invocation uses already-enabled shim without error
+    // 3. Subsequent invocation succeeds without auto-creating shims
     let out2 = Command::new(vetto_bin())
         .args(["--tui=none", "--net=off", "claude"])
         .current_dir(proj_dir)
@@ -102,6 +103,10 @@ fn test_direct_agent_invocation_auto_enables_shim() {
         stdout(&out2).contains("claude agent running under vetto"),
         "agent must execute on subsequent run: {}",
         stdout(&out2)
+    );
+    assert!(
+        !shim_path.exists(),
+        "shim file must still not exist after subsequent invocation"
     );
 }
 
