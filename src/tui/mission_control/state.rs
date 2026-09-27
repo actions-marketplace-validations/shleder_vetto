@@ -236,7 +236,8 @@ impl DashboardState {
         }
 
         self.poll_fleet_state();
-        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty() {
+        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty()
+        {
             self.selected_fleet_worker = self.fleet_workers.len() - 1;
         }
 
@@ -565,7 +566,8 @@ impl DashboardState {
         }
 
         self.poll_fleet_state();
-        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty() {
+        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty()
+        {
             self.selected_fleet_worker = self.fleet_workers.len() - 1;
         }
         self.set_status(format!("Terminated worker '{}' and released slot", wid));

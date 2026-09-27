@@ -321,9 +321,7 @@ impl Drop for FleetLock {
 }
 
 fn atomic_save_state(target_path: &Path, state: &FleetState) -> Result<()> {
-    let parent = target_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."));
+    let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)
         .with_context(|| format!("create parent directory for {}", target_path.display()))?;
 
@@ -350,8 +348,13 @@ fn atomic_save_state(target_path: &Path, state: &FleetState) -> Result<()> {
             .with_context(|| format!("fsync temp file {}", tmp_path.display()))?;
     }
 
-    std::fs::rename(&tmp_path, target_path)
-        .with_context(|| format!("atomic rename {} -> {}", tmp_path.display(), target_path.display()))?;
+    std::fs::rename(&tmp_path, target_path).with_context(|| {
+        format!(
+            "atomic rename {} -> {}",
+            tmp_path.display(),
+            target_path.display()
+        )
+    })?;
 
     #[cfg(unix)]
     {
@@ -374,7 +377,10 @@ fn resolve_and_provision_cgroup_scope(
     // 1. Primary candidate: cgroup_root.join(format!("{worker_id}.scope"))
     let primary_scope = cgroup_root.join(format!("{worker_id}.scope"));
     if std::fs::create_dir_all(&primary_scope).is_ok() {
-        let _ = std::fs::write(primary_scope.join("cpu.weight"), format!("{}\n", cpu_weight));
+        let _ = std::fs::write(
+            primary_scope.join("cpu.weight"),
+            format!("{}\n", cpu_weight),
+        );
         let _ = std::fs::write(
             primary_scope.join("memory.max"),
             format!("{}\n", memory_limit_bytes),
@@ -389,7 +395,10 @@ fn resolve_and_provision_cgroup_scope(
             .join("vetto-fleet")
             .join(format!("{worker_id}.scope"));
         if std::fs::create_dir_all(&fallback_scope).is_ok() {
-            let _ = std::fs::write(fallback_scope.join("cpu.weight"), format!("{}\n", cpu_weight));
+            let _ = std::fs::write(
+                fallback_scope.join("cpu.weight"),
+                format!("{}\n", cpu_weight),
+            );
             let _ = std::fs::write(
                 fallback_scope.join("memory.max"),
                 format!("{}\n", memory_limit_bytes),
@@ -406,7 +415,10 @@ fn resolve_and_provision_cgroup_scope(
             .join("vetto-fleet")
             .join(format!("{worker_id}.scope"));
         if std::fs::create_dir_all(&runtime_scope).is_ok() {
-            let _ = std::fs::write(runtime_scope.join("cpu.weight"), format!("{}\n", cpu_weight));
+            let _ = std::fs::write(
+                runtime_scope.join("cpu.weight"),
+                format!("{}\n", cpu_weight),
+            );
             let _ = std::fs::write(
                 runtime_scope.join("memory.max"),
                 format!("{}\n", memory_limit_bytes),
@@ -522,9 +534,7 @@ impl FleetManager {
             .state_file
             .clone()
             .unwrap_or_else(default_fleet_state_path);
-        let parent = state_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."));
+        let parent = state_path.parent().unwrap_or_else(|| Path::new("."));
         let lock_path = parent.join(".workers.lock");
         let _lock = FleetLock::acquire(&lock_path)?;
 
@@ -586,7 +596,8 @@ impl FleetManager {
 
         let worker_id = format!("agent-{:02}", slot_id);
 
-        let scope_path = if self.config.workspace_root.is_some() || self.config.state_file.is_some() {
+        let scope_path = if self.config.workspace_root.is_some() || self.config.state_file.is_some()
+        {
             resolve_and_provision_cgroup_scope(
                 &self.config.cgroup_root,
                 &worker_id,
@@ -658,9 +669,9 @@ impl FleetManager {
             .lock()
             .map_err(|_| anyhow::anyhow!("fleet manager lock poisoned"))?;
 
-        let worker = workers
-            .get_mut(worker_id)
-            .ok_or_else(|| anyhow::anyhow!("Worker scope '{}' not found in active fleet", worker_id))?;
+        let worker = workers.get_mut(worker_id).ok_or_else(|| {
+            anyhow::anyhow!("Worker scope '{}' not found in active fleet", worker_id)
+        })?;
 
         worker.pid = Some(pid);
         worker.status = "running".to_string();
@@ -932,8 +943,7 @@ mod tests {
 
     #[test]
     fn test_fleet_persistence_save_and_load() {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("vetto-fleet-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("vetto-fleet-test-{}", std::process::id()));
         let state_file = tmp_dir.join("workers.json");
         let lock_file = tmp_dir.join(".workers.lock");
         let workspace_root = tmp_dir.join("workspaces");
@@ -976,9 +986,7 @@ mod tests {
         assert_eq!(w.status, "allocated");
         assert_eq!(w.pid, None);
 
-        fleet
-            .bind_worker_pid(&w.worker_id, 4242)
-            .expect("bind pid");
+        fleet.bind_worker_pid(&w.worker_id, 4242).expect("bind pid");
         let updated = fleet.get_worker(&w.worker_id).expect("get worker");
         assert_eq!(updated.pid, Some(4242));
         assert_eq!(updated.status, "running");
@@ -1018,16 +1026,12 @@ mod tests {
         assert!(!released.contains(&live.worker_id));
 
         assert_eq!(fleet.active_count(), 1);
-        let remaining = fleet
-            .get_worker(&live.worker_id)
-            .expect("live remains");
+        let remaining = fleet.get_worker(&live.worker_id).expect("live remains");
         assert_eq!(remaining.status, "running");
         assert!(fleet.get_worker(&dead.worker_id).is_none());
 
         // Freshly allocated worker without PID stays within 60s grace period
-        let fresh = fleet
-            .allocate_worker("fresh-proc")
-            .expect("allocate fresh");
+        let fresh = fleet.allocate_worker("fresh-proc").expect("allocate fresh");
         assert_eq!(fresh.status, "allocated");
         let released2 = fleet.reconcile_live_workers().expect("reconcile 2");
         assert!(!released2.contains(&fresh.worker_id));

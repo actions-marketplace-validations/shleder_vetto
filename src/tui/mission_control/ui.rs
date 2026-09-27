@@ -159,10 +159,7 @@ fn render_tabs(f: &mut Frame, state: &DashboardState, area: Rect) {
             " [5] SECURITY STREAM ({}) ",
             state.security_events.len()
         )),
-        Line::from(format!(
-            " [6] FLEET SWARM ({}) ",
-            state.fleet_workers.len()
-        )),
+        Line::from(format!(" [6] FLEET SWARM ({}) ", state.fleet_workers.len())),
     ];
 
     let tabs = Tabs::new(tab_titles)
@@ -1550,7 +1547,9 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
     let p3 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
             "  2.0 GiB per worker ",
-            Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled("hard limit", Style::default().fg(theme.muted)),
     ])])
@@ -1568,7 +1567,9 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
     let p4 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
             "  CLONE_NEWIPC + CLONE_NEWPID ",
-            Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.success)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled("enforced", Style::default().fg(theme.muted)),
     ])])
@@ -1649,9 +1650,7 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
                 "running" | "active" => Style::default()
                     .fg(theme.success)
                     .add_modifier(Modifier::BOLD),
-                "allocated" => Style::default()
-                    .fg(theme.info)
-                    .add_modifier(Modifier::BOLD),
+                "allocated" => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
                 "exited" | "stale" => Style::default()
                     .fg(theme.danger)
                     .add_modifier(Modifier::BOLD),
@@ -1667,7 +1666,10 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
                 ),
                 Span::styled(&w.agent_name, Style::default().fg(theme.info)),
                 Span::styled(pid_str, Style::default().fg(theme.accent)),
-                Span::styled(w.ephemeral_port.to_string(), Style::default().fg(theme.muted)),
+                Span::styled(
+                    w.ephemeral_port.to_string(),
+                    Style::default().fg(theme.muted),
+                ),
                 Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
                 Span::styled(scope_str, Style::default().fg(theme.muted)),
                 Span::styled(limits_str, Style::default().fg(theme.warning)),
@@ -1693,35 +1695,51 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
             Row::new(vec![
                 Span::styled(
                     "  WORKER ID",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "AGENT",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "PID",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "PORT",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "COW BRANCH",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "CGROUP SCOPE",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "LIMITS",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     "STATUS",
-                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.muted)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ])
             .bottom_margin(1),
@@ -1964,21 +1982,25 @@ mod tests {
         let mut state = DashboardState::new(None);
         state.active_tab = MissionTab::Fleet;
 
-        state.fleet_workers.push(crate::multi::fleet::AgentWorkerScope {
-            worker_id: "agent-01".to_string(),
-            agent_name: "claude".to_string(),
-            scope_path: std::path::PathBuf::from("/sys/fs/cgroup/vetto-fleet/agent-01.scope"),
-            cow_branch_name: "agent-01".to_string(),
-            ephemeral_port: 49201,
-            cpu_weight: 100,
-            memory_limit_bytes: 2 * 1024 * 1024 * 1024,
-            pids_max: 128,
-            ipc_isolated: true,
-            allocated_at: chrono::Utc::now(),
-            pid: Some(4242),
-            status: "running".to_string(),
-            workspace_dir: std::path::PathBuf::from("/home/user/.vetto/fleet/workspaces/agent-01"),
-        });
+        state
+            .fleet_workers
+            .push(crate::multi::fleet::AgentWorkerScope {
+                worker_id: "agent-01".to_string(),
+                agent_name: "claude".to_string(),
+                scope_path: std::path::PathBuf::from("/sys/fs/cgroup/vetto-fleet/agent-01.scope"),
+                cow_branch_name: "agent-01".to_string(),
+                ephemeral_port: 49201,
+                cpu_weight: 100,
+                memory_limit_bytes: 2 * 1024 * 1024 * 1024,
+                pids_max: 128,
+                ipc_isolated: true,
+                allocated_at: chrono::Utc::now(),
+                pid: Some(4242),
+                status: "running".to_string(),
+                workspace_dir: std::path::PathBuf::from(
+                    "/home/user/.vetto/fleet/workspaces/agent-01",
+                ),
+            });
 
         terminal.draw(|f| draw(f, &state)).unwrap();
 

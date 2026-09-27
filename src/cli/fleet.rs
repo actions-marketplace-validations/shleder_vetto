@@ -90,11 +90,7 @@ pub struct FleetSpawnArgs {
     pub detach: bool,
 
     /// Command and arguments passed to the agent; everything after `--`
-    #[arg(
-        last = true,
-        value_name = "ARGS",
-        allow_hyphen_values = true
-    )]
+    #[arg(last = true, value_name = "ARGS", allow_hyphen_values = true)]
     pub args: Vec<String>,
 }
 
@@ -271,13 +267,13 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let mut spawned = Vec::with_capacity(count);
+    let mut spawned: Vec<(
+        AgentWorkerScope,
+        crate::sandbox::production::SpawnedProductionExecution,
+    )> = Vec::with_capacity(count);
     for scope in &allocated_scopes {
         let mut env_extra = HashMap::new();
-        env_extra.insert(
-            "VETTO_FLEET_WORKER_ID".to_string(),
-            scope.worker_id.clone(),
-        );
+        env_extra.insert("VETTO_FLEET_WORKER_ID".to_string(), scope.worker_id.clone());
         env_extra.insert(
             "VETTO_FLEET_PORT".to_string(),
             scope.ephemeral_port.to_string(),
@@ -312,21 +308,21 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
         };
 
         let tier = backend.tier().unwrap_or(crate::policy::Tier::Full);
-        let policy =
-            match crate::policy::loader::load(profile, None, &current_dir, &home_dir, tier) {
-                Ok(p) => p,
-                Err(e) => {
-                    for (s, mut ex) in spawned {
-                        ex.handle.terminate();
-                        let _ = fleet.release_worker(&s.worker_id);
-                    }
-                    for s in &allocated_scopes {
-                        let _ = fleet.release_worker(&s.worker_id);
-                    }
-                    let _ = fleet.save_persistent();
-                    return Err(e);
+        let policy = match crate::policy::loader::load(profile, None, &current_dir, &home_dir, tier)
+        {
+            Ok(p) => p,
+            Err(e) => {
+                for (s, mut ex) in spawned {
+                    ex.handle.terminate();
+                    let _ = fleet.release_worker(&s.worker_id);
                 }
-            };
+                for s in &allocated_scopes {
+                    let _ = fleet.release_worker(&s.worker_id);
+                }
+                let _ = fleet.save_persistent();
+                return Err(e);
+            }
+        };
 
         let stdio = crate::sandbox::StdioMode::Inherit;
         let scenario_id = format!("fleet:{}", scope.worker_id);
@@ -670,7 +666,8 @@ mod tests {
         let cli1 = TestCli::try_parse_from(&["test", "status"]).expect("parse status");
         assert_eq!(cli1.command, FleetCommand::Status { json: false });
 
-        let cli2 = TestCli::try_parse_from(&["test", "status", "--json"]).expect("parse status --json");
+        let cli2 =
+            TestCli::try_parse_from(&["test", "status", "--json"]).expect("parse status --json");
         assert_eq!(cli2.command, FleetCommand::Status { json: true });
     }
 
@@ -714,7 +711,14 @@ mod tests {
         }
 
         let cli2 = TestCli::try_parse_from(&[
-            "test", "spawn", "--count", "2", "--", "sh", "-c", "echo test",
+            "test",
+            "spawn",
+            "--count",
+            "2",
+            "--",
+            "sh",
+            "-c",
+            "echo test",
         ])
         .expect("parse spawn trailing");
         match cli2.command {
@@ -783,8 +787,12 @@ mod tests {
         let mut verified = 0;
         for i in 0..workers {
             for j in (i + 1)..workers {
-                assert!(fleet.verify_isolation(&scopes[i].worker_id, &scopes[j].worker_id).is_ok());
-                assert!(barrier.verify_signal_isolation(&scopes[i].worker_id, &scopes[j].worker_id).is_ok());
+                assert!(fleet
+                    .verify_isolation(&scopes[i].worker_id, &scopes[j].worker_id)
+                    .is_ok());
+                assert!(barrier
+                    .verify_signal_isolation(&scopes[i].worker_id, &scopes[j].worker_id)
+                    .is_ok());
                 assert!(barrier.verify_ipc_isolation(&scopes[i].worker_id).is_ok());
                 assert!(barrier.verify_ipc_isolation(&scopes[j].worker_id).is_ok());
                 verified += 1;
