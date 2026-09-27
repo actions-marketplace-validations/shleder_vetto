@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
 
+## [0.5.5] - 2026-09-27
+
+### Added
+- **Dedicated Sandbox Profiles for High-Volume Token Leaderboard Runtimes**:
+  - Embedded first-class sandbox profiles under `profiles/agents/` for the top 6 token leaderboard coding runtimes: Hermes Agent (`hermes.toml`), Kilo Code (`kilo.toml`), pi (`pi.toml`), Command Code (`command_code.toml`), Freebuff (`freebuff.toml`), and DeepSeek Harness (`deepseek_harness.toml`).
+  - Extended built-in agent profile registry (`AGENT_PROFILE_NAMES`) from 18 to 24 supported runtimes across `src/policy/defaults.rs`, `src/policy/presets.rs`, and `src/onboard.rs`.
+  - Configured zero-config network allowlists for upstream model and cloud providers (Nous Research, Together, Cohere, Groq, DeepSeek, OpenAI, Anthropic, OpenRouter).
+  - Wired auto-detection (`AGENT_SPECS`), transparent PATH-shims (`vetto enable <agent>`), candidate binary discovery, and doctor executable probes (`command_for_agent`).
+  - Updated comprehensive documentation across `README.md` and `docs/agents.md` designating all 24 runtimes as first-class presets.
+
+### Fixed
+- **Packaging Parity**:
+  - Synchronized version 0.5.5 across all package manifests, specs, and localized documentation suites.
+
 ## [0.5.4] - 2026-09-27
 
 ### Added

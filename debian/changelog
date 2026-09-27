@@ -1,3 +1,9 @@
+vetto (0.5.5-1) unstable; urgency=medium
+
+  * Dedicated token leaderboard agent profiles and 24-agent roster.
+
+ -- vetto contributors <noreply@github.com>  Sun, 27 Sep 2026 19:52:43 +0000
+
 vetto (0.5.4-1) unstable; urgency=medium
 
   * Adversarial stress hardening, vulnerability remediation & 12-scenario test suite.
