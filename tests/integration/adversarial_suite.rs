@@ -274,12 +274,25 @@ fn timeout_tui_001_enforces_timeout_in_tui_mode() {
         return;
     }
     let project = TempProject::new("timeout-tui");
+    #[cfg(unix)]
+    let marker = format!("vetto-timeout-tui-{}", std::process::id());
     let start = Instant::now();
     #[cfg(unix)]
     let out = run_vetto_in(
         project.path(),
-        &["--timeout", "2s", "--tui", "statusline", "--", "sleep", "4"],
+        &[
+            "--timeout",
+            "2s",
+            "--tui",
+            "statusline",
+            "--",
+            "sh",
+            "-c",
+            &format!("sleep 4 # {marker}"),
+        ],
     );
+    #[cfg(unix)]
+    let _ = Command::new("pkill").args(["-9", "-f", &marker]).status();
     #[cfg(not(unix))]
     let out = run_vetto_in(
         project.path(),
@@ -346,6 +359,7 @@ fn clearenv_orphan_001_evacuates_orphans_with_cleared_env() {
             }
         }
     }
+    let _ = Command::new("pkill").args(["-9", "-f", &marker]).status();
     assert!(
         pgrep.stdout.is_empty(),
         "clearenv orphan survived vetto extinction: {}",
@@ -358,8 +372,15 @@ fn clearenv_orphan_001_evacuates_orphans_with_cleared_env() {
 #[cfg(unix)]
 fn sigint_escalate_001_terminates_trapped_child() {
     let project = TempProject::new("sigint-escalate");
+    let marker = format!("vetto-sigint-escalate-{}", std::process::id());
     let mut child = Command::new(vetto_bin())
-        .args(["--ci", "--", "sh", "-c", "trap '' INT; sleep 2"])
+        .args([
+            "--ci",
+            "--",
+            "sh",
+            "-c",
+            &format!("trap '' INT; sleep 2 # {marker}"),
+        ])
         .current_dir(project.path())
         .env("HOME", test_home())
         .stdout(Stdio::null())
@@ -389,6 +410,7 @@ fn sigint_escalate_001_terminates_trapped_child() {
     }
     let _ = child.kill();
     let _ = child.wait();
+    let _ = Command::new("pkill").args(["-9", "-f", &marker]).status();
     assert!(exited, "trapped child must be killed via escalated SIGKILL");
 }
 

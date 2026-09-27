@@ -753,6 +753,7 @@ pub fn run_one_with_backend(
     // `Configured` to `Enforced`. Then verify host-observable state from
     // /proc while the child lives (unobserved stays `Enforced`).
     backend.note_spawned(pid);
+    crate::sandbox::handle::register_active_root(pid);
     let verification = super::linux_enforce::verify_child_host(pid);
     backend.note_host_verified(&verification);
     let proc_environ = super::environment::capture_proc_environ(pid);
@@ -817,6 +818,7 @@ pub fn run_one_with_backend(
     );
     // Teardown releases backend-held state (idempotent). The cloned report
     // stays on the outcome for audit; teardown never upgrades the verdict.
+    crate::sandbox::handle::unregister_active_root(pid);
     backend.teardown();
     outcome
 }
