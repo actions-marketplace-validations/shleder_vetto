@@ -1079,7 +1079,7 @@ pub(crate) fn forbidden_destination(ip: IpAddr) -> bool {
         IpAddr::V4(ip) => forbidden_ipv4(ip),
         IpAddr::V6(ip) => {
             let octets = ip.octets();
-            let is_metadata = is_cloud_metadata(ip);
+            let is_metadata = is_cloud_metadata(IpAddr::V6(ip));
             let is_unspecified = octets.iter().all(|&b| b == 0);
             let is_loopback = octets[..15].iter().all(|&b| b == 0) && octets[15] == 1;
             let is_link_local = octets[0] == 0xfe && (octets[1] & 0xc0) == 0x80;
