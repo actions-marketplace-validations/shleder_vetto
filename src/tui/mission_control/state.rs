@@ -1,9 +1,13 @@
 //! Mission Control Dashboard State Management.
 
+use std::collections::{HashSet, VecDeque};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 
 use crate::doctor::preflight::{execute_preflight_diagnostics, PreflightReport};
 use crate::onboard::SUPPORTED_AGENTS;
@@ -12,11 +16,40 @@ use crate::rescue::snapshot::{list_snapshots, rollback_snapshot, SnapshotMetadat
 use super::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecurityEventType {
+    AccessDenial,   // Landlock/Seccomp
+    BlockedNetwork, // NetRelay / Anti-SSRF drop
+    SecretMasked,   // Inode tmpfs overlay
+    QuotaExceeded,  // Network quota
+}
+
+impl SecurityEventType {
+    pub fn badge(&self) -> &'static str {
+        match self {
+            Self::AccessDenial => "DENIAL",
+            Self::BlockedNetwork => "NET_DROP",
+            Self::SecretMasked => "SECRET",
+            Self::QuotaExceeded => "QUOTA",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SecurityEventItem {
+    pub ts: DateTime<Utc>,
+    pub event_type: SecurityEventType,
+    pub subject: String,
+    pub detail: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissionTab {
     Agents,
     Sandbox,
     Doctor,
     Sessions,
+    SecurityStream,
 }
 
 impl MissionTab {
@@ -26,15 +59,17 @@ impl MissionTab {
             Self::Sandbox => 1,
             Self::Doctor => 2,
             Self::Sessions => 3,
+            Self::SecurityStream => 4,
         }
     }
 
     pub fn from_index(idx: usize) -> Self {
-        match idx % 4 {
+        match idx % 5 {
             0 => Self::Agents,
             1 => Self::Sandbox,
             2 => Self::Doctor,
             3 => Self::Sessions,
+            4 => Self::SecurityStream,
             _ => unreachable!(),
         }
     }
@@ -44,7 +79,7 @@ impl MissionTab {
     }
 
     pub fn prev(&self) -> Self {
-        Self::from_index(self.index() + 3)
+        Self::from_index(self.index() + 4)
     }
 }
 
@@ -69,6 +104,9 @@ pub struct DashboardState {
     pub doctor_report: Option<PreflightReport>,
     pub snapshots: Vec<SnapshotMetadata>,
     pub selected_snapshot: usize,
+    pub security_events: VecDeque<SecurityEventItem>,
+    pub selected_event: usize,
+    pub seen_event_keys: HashSet<(i64, String, String)>,
     pub theme: Theme,
     pub status_message: Option<(String, Instant)>,
     pub pending_launch_agent: Option<String>,
@@ -85,17 +123,22 @@ impl DashboardState {
         let snapshots = list_snapshots().unwrap_or_default();
         let doctor_report = Some(execute_preflight_diagnostics());
 
-        Self {
+        let mut state = Self {
             active_tab: MissionTab::Agents,
             installed_agents,
             selected_agent: 0,
             doctor_report,
             snapshots,
             selected_snapshot: 0,
+            security_events: VecDeque::with_capacity(500),
+            selected_event: 0,
+            seen_event_keys: HashSet::new(),
             theme,
             status_message: None,
             pending_launch_agent: None,
-        }
+        };
+        state.poll_security_events();
+        state
     }
 
     /// Dynamically scans for installed AI coding agents on the host system.
@@ -177,7 +220,134 @@ impl DashboardState {
             self.doctor_report = Some(execute_preflight_diagnostics());
         }
 
+        self.poll_security_events();
+        if self.selected_event >= self.security_events.len() && !self.security_events.is_empty() {
+            self.selected_event = self.security_events.len() - 1;
+        }
+
         self.set_status("State refreshed");
+    }
+
+    /// Reads recorded security events from ~/.vetto/logs/*.jsonl and appends them to ring buffer.
+    pub fn poll_security_events(&mut self) {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from);
+
+        let Some(home) = home else { return };
+        let logs_dir = home.join(".vetto").join("logs");
+        if !logs_dir.exists() {
+            return;
+        }
+
+        let mut log_files: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&logs_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                    log_files.push(path);
+                }
+            }
+        }
+
+        log_files.sort_by_key(|p| {
+            std::fs::metadata(p)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        });
+
+        // Scan up to 5 most recent log files
+        let slice_start = log_files.len().saturating_sub(5);
+        for log_file in &log_files[slice_start..] {
+            let Ok(file) = File::open(log_file) else {
+                continue;
+            };
+            let reader = BufReader::new(file);
+
+            for line in reader.lines() {
+                let Ok(line) = line else { continue };
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+
+                let Ok(ev) = serde_json::from_str::<crate::events::Event>(trimmed) else {
+                    continue;
+                };
+
+                let item = match ev {
+                    crate::events::Event::BlockedAttempt {
+                        ts,
+                        pid,
+                        comm,
+                        path,
+                        source,
+                    } => Some(SecurityEventItem {
+                        ts,
+                        event_type: SecurityEventType::AccessDenial,
+                        subject: path,
+                        detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
+                        source,
+                    }),
+                    crate::events::Event::NetRequest {
+                        ts,
+                        host,
+                        port,
+                        allowed,
+                    } if !allowed => Some(SecurityEventItem {
+                        ts,
+                        event_type: SecurityEventType::BlockedNetwork,
+                        subject: format!("{host}:{port}"),
+                        detail: "Outbound egress blocked fail-closed (Anti-SSRF / broker policy)".to_string(),
+                        source: "net_relay".to_string(),
+                    }),
+                    crate::events::Event::SecretMasked { ts, path } => Some(SecurityEventItem {
+                        ts,
+                        event_type: SecurityEventType::SecretMasked,
+                        subject: path,
+                        detail: "Inode masked with 0000 mode tmpfs overlay (INV-08)".to_string(),
+                        source: "vfs_overlays".to_string(),
+                    }),
+                    crate::events::Event::NetQuotaExceeded {
+                        ts,
+                        host,
+                        limit_bytes,
+                        used_bytes,
+                    } => Some(SecurityEventItem {
+                        ts,
+                        event_type: SecurityEventType::QuotaExceeded,
+                        subject: host,
+                        detail: format!("Bandwidth quota exceeded: {used_bytes}/{limit_bytes} bytes"),
+                        source: "net_quota".to_string(),
+                    }),
+                    crate::events::Event::Notice { ts, message } => {
+                        let lower = message.to_ascii_lowercase();
+                        if lower.contains("blocked") || lower.contains("ssrf") || lower.contains("denied") {
+                            Some(SecurityEventItem {
+                                ts,
+                                event_type: SecurityEventType::BlockedNetwork,
+                                subject: message.clone(),
+                                detail: message,
+                                source: "net_relay".to_string(),
+                            })
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(item) = item {
+                    let key = (item.ts.timestamp_millis(), item.subject.clone(), item.detail.clone());
+                    if self.seen_event_keys.insert(key) {
+                        self.security_events.push_front(item);
+                        if self.security_events.len() > 500 {
+                            self.security_events.pop_back();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn toggle_shim(&mut self) -> Result<()> {
@@ -221,6 +391,13 @@ impl DashboardState {
                     self.selected_snapshot = self.snapshots.len() - 1;
                 }
             }
+            MissionTab::SecurityStream if !self.security_events.is_empty() => {
+                if self.selected_event > 0 {
+                    self.selected_event -= 1;
+                } else {
+                    self.selected_event = self.security_events.len() - 1;
+                }
+            }
             _ => {}
         }
     }
@@ -239,6 +416,13 @@ impl DashboardState {
                     self.selected_snapshot += 1;
                 } else {
                     self.selected_snapshot = 0;
+                }
+            }
+            MissionTab::SecurityStream if !self.security_events.is_empty() => {
+                if self.selected_event + 1 < self.security_events.len() {
+                    self.selected_event += 1;
+                } else {
+                    self.selected_event = 0;
                 }
             }
             _ => {}

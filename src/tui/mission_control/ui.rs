@@ -50,6 +50,7 @@ pub fn draw(f: &mut Frame, state: &DashboardState) {
         MissionTab::Sandbox => render_tab_sandbox(f, state, chunks[3]),
         MissionTab::Doctor => render_tab_doctor(f, state, chunks[3]),
         MissionTab::Sessions => render_tab_sessions(f, state, chunks[3]),
+        MissionTab::SecurityStream => render_tab_security_stream(f, state, chunks[3]),
     }
 
     render_footer(f, state, chunks[4]);
@@ -153,6 +154,10 @@ fn render_tabs(f: &mut Frame, state: &DashboardState, area: Rect) {
         Line::from(" [2] SANDBOX VFS "),
         Line::from(" [3] KERNEL DOCTOR "),
         Line::from(format!(" [4] SESSIONS ({}) ", state.snapshots.len())),
+        Line::from(format!(
+            " [5] SECURITY STREAM ({}) ",
+            state.security_events.len()
+        )),
     ];
 
     let tabs = Tabs::new(tab_titles)
@@ -441,10 +446,15 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
 fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
     let theme = &state.theme;
 
+    let sandbox_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
+        .split(area);
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(area);
+        .split(sandbox_chunks[0]);
 
     let left_lines = vec![
         Line::styled(
@@ -667,6 +677,349 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
             .wrap(Wrap { trim: true }),
         cols[1],
     );
+
+    // Render compact security events mini-stream at the bottom of the Sandbox tab
+    let mini_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            format!(
+                " LIVE SECURITY EVENT MINI-STREAM ({} RECORDED) — PRESS [5] FOR FULL STREAM ",
+                state.security_events.len()
+            ),
+            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+        ));
+
+    if state.security_events.is_empty() {
+        let empty_p = Paragraph::new(vec![
+            Line::styled(
+                "  ● LIVE PROTECTION ACTIVE — 0 ACCESS DENIALS OR BLOCKED EGRESS DETECTED",
+                Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+            ),
+            Line::styled(
+                "    All network socket requests and credential file accesses strictly constrained.",
+                Style::default().fg(theme.muted),
+            ),
+        ])
+        .block(mini_block);
+        f.render_widget(empty_p, sandbox_chunks[1]);
+    } else {
+        let rows = state
+            .security_events
+            .iter()
+            .take(6)
+            .map(|ev| {
+                let badge_style = match ev.event_type {
+                    super::state::SecurityEventType::AccessDenial => {
+                        Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::BlockedNetwork => {
+                        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::SecretMasked => {
+                        Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::QuotaExceeded => {
+                        Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
+                    }
+                };
+
+                Row::new(vec![
+                    Span::styled(ev.ts.format("%H:%M:%S").to_string(), Style::default().fg(theme.muted)),
+                    Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
+                    Span::styled(&ev.subject, Style::default().fg(theme.text).add_modifier(Modifier::BOLD)),
+                    Span::styled(&ev.source, Style::default().fg(theme.info)),
+                    Span::styled(&ev.detail, Style::default().fg(theme.muted)),
+                ])
+            });
+
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(10),
+                Constraint::Length(12),
+                Constraint::Length(30),
+                Constraint::Length(15),
+                Constraint::Min(20),
+            ],
+        )
+        .header(
+            Row::new(vec![
+                Span::styled("TIME", Style::default().fg(theme.muted)),
+                Span::styled("TYPE", Style::default().fg(theme.muted)),
+                Span::styled("SUBJECT", Style::default().fg(theme.muted)),
+                Span::styled("SOURCE", Style::default().fg(theme.muted)),
+                Span::styled("DETAILS", Style::default().fg(theme.muted)),
+            ])
+            .bottom_margin(0),
+        )
+        .block(mini_block);
+
+        f.render_widget(table, sandbox_chunks[1]);
+    }
+}
+
+fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect) {
+    let theme = &state.theme;
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4), // Metrics header counters
+            Constraint::Min(10),   // Events table
+            Constraint::Length(7), // Event detail panel
+        ])
+        .split(area);
+
+    // 1. Metric counters
+    let count_denials = state
+        .security_events
+        .iter()
+        .filter(|e| e.event_type == super::state::SecurityEventType::AccessDenial)
+        .count();
+    let count_net_blocked = state
+        .security_events
+        .iter()
+        .filter(|e| e.event_type == super::state::SecurityEventType::BlockedNetwork)
+        .count();
+    let count_secrets = state
+        .security_events
+        .iter()
+        .filter(|e| e.event_type == super::state::SecurityEventType::SecretMasked)
+        .count();
+    let count_quota = state
+        .security_events
+        .iter()
+        .filter(|e| e.event_type == super::state::SecurityEventType::QuotaExceeded)
+        .count();
+
+    let metric_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(chunks[0]);
+
+    // Box 1: Filesystem / Syscall Denials
+    let block1 = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(" DENIED FILES / SYSCALLS ", Style::default().fg(theme.muted)));
+    let p1 = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                format!("  {count_denials} "),
+                Style::default().fg(if count_denials > 0 { theme.danger } else { theme.success }).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("attempts contained", Style::default().fg(theme.muted)),
+        ]),
+    ]).block(block1);
+    f.render_widget(p1, metric_cols[0]);
+
+    // Box 2: Blocked Egress (Anti-SSRF)
+    let block2 = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(" BLOCKED EGRESS (ANTI-SSRF) ", Style::default().fg(theme.muted)));
+    let p2 = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                format!("  {count_net_blocked} "),
+                Style::default().fg(if count_net_blocked > 0 { theme.danger } else { theme.success }).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("targets dropped fail-closed", Style::default().fg(theme.muted)),
+        ]),
+    ]).block(block2);
+    f.render_widget(p2, metric_cols[1]);
+
+    // Box 3: Secrets Protected
+    let block3 = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(" SECRETS PROTECTED (INV-08) ", Style::default().fg(theme.muted)));
+    let p3 = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                format!("  {count_secrets} "),
+                Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("credentials masked mode 0000", Style::default().fg(theme.muted)),
+        ]),
+    ]).block(block3);
+    f.render_widget(p3, metric_cols[2]);
+
+    // Box 4: Total Stream Records
+    let block4 = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(" TOTAL EVENTS IN BUFFER ", Style::default().fg(theme.muted)));
+    let p4 = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                format!("  {} / 500 ", state.security_events.len()),
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!("({count_quota} quota)", count_quota = count_quota), Style::default().fg(theme.muted)),
+        ]),
+    ]).block(block4);
+    f.render_widget(p4, metric_cols[3]);
+
+    // 2. Events table
+    let table_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " LIVE SECURITY EVENT STREAM (ANTI-SSRF & SANDBOX POLICY ENFORCEMENT) ",
+            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+        ));
+
+    if state.security_events.is_empty() {
+        let empty_lines = vec![
+            Line::from(""),
+            Line::styled(
+                "  ● LIVE PROTECTION ACTIVE — 0 SECURITY EVENTS RECORDED",
+                Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(""),
+            Line::styled(
+                "  All agent file access is bounded by Landlock LSM and Inode Masking.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::styled(
+                "  All outbound network requests targeting private subnets, cloud metadata (169.254.169.254, 100.100.100.200),",
+                Style::default().fg(theme.muted),
+            ),
+            Line::styled(
+                "  or non-allowlisted domains are dropped fail-closed and logged here in real time.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::from(""),
+            Line::styled(
+                "  Press 'r' to refresh log ingestion, or run an agent under Vetto to observe events.",
+                Style::default().fg(theme.text),
+            ),
+        ];
+        f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
+    } else {
+        let rows = state
+            .security_events
+            .iter()
+            .enumerate()
+            .map(|(idx, ev)| {
+                let is_selected = idx == state.selected_event;
+
+                let badge_style = match ev.event_type {
+                    super::state::SecurityEventType::AccessDenial => {
+                        Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::BlockedNetwork => {
+                        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::SecretMasked => {
+                        Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
+                    }
+                    super::state::SecurityEventType::QuotaExceeded => {
+                        Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
+                    }
+                };
+
+                let row_style = if is_selected {
+                    Style::default().bg(theme.selection_bg)
+                } else {
+                    Style::default()
+                };
+
+                let marker = if is_selected { "▶ " } else { "  " };
+
+                Row::new(vec![
+                    Span::styled(format!("{marker}{}", ev.ts.format("%H:%M:%S")), Style::default().fg(theme.muted)),
+                    Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
+                    Span::styled(&ev.subject, if is_selected { Style::default().fg(theme.selection_fg).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme.text) }),
+                    Span::styled(&ev.source, Style::default().fg(theme.info)),
+                    Span::styled(&ev.detail, Style::default().fg(theme.muted)),
+                ])
+                .style(row_style)
+            });
+
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(12),
+                Constraint::Length(12),
+                Constraint::Length(32),
+                Constraint::Length(16),
+                Constraint::Min(30),
+            ],
+        )
+        .header(
+            Row::new(vec![
+                Span::styled("  TIME (UTC)", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
+                Span::styled("TYPE", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
+                Span::styled("SUBJECT / TARGET", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
+                Span::styled("SUBSYSTEM", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
+                Span::styled("DETAILS / POLICY ACTION", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
+            ])
+            .bottom_margin(1),
+        )
+        .block(table_block);
+
+        f.render_widget(table, chunks[1]);
+    }
+
+    // 3. Event Detail Panel
+    let detail_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(" EVENT INSPECTION & AUDIT DETAILS ", Style::default().fg(theme.logo)));
+
+    if let Some(selected) = state.security_events.get(state.selected_event) {
+        let badge_style = match selected.event_type {
+            super::state::SecurityEventType::AccessDenial => {
+                Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)
+            }
+            super::state::SecurityEventType::BlockedNetwork => {
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+            }
+            super::state::SecurityEventType::SecretMasked => {
+                Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
+            }
+            super::state::SecurityEventType::QuotaExceeded => {
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
+            }
+        };
+
+        let detail_lines = vec![
+            Line::from(vec![
+                Span::styled("  TIMESTAMP: ", Style::default().fg(theme.muted)),
+                Span::styled(selected.ts.to_rfc3339(), Style::default().fg(theme.text).add_modifier(Modifier::BOLD)),
+                Span::styled("   EVENT TYPE: ", Style::default().fg(theme.muted)),
+                Span::styled(format!("[{}]", selected.event_type.badge()), badge_style),
+                Span::styled("   SUBSYSTEM: ", Style::default().fg(theme.muted)),
+                Span::styled(&selected.source, Style::default().fg(theme.info).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled("  TARGET / SUBJECT: ", Style::default().fg(theme.muted)),
+                Span::styled(&selected.subject, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled("  ENFORCEMENT ACTION: ", Style::default().fg(theme.muted)),
+                Span::styled(&selected.detail, Style::default().fg(theme.text)),
+            ]),
+        ];
+        f.render_widget(Paragraph::new(detail_lines).block(detail_block), chunks[2]);
+    } else {
+        let empty_p = Paragraph::new(vec![
+            Line::styled(
+                "  No event selected. Use [↑/↓] or [k/j] to navigate security events when available.",
+                Style::default().fg(theme.muted),
+            ),
+        ])
+        .block(detail_block);
+        f.render_widget(empty_p, chunks[2]);
+    }
 }
 
 fn render_tab_doctor(f: &mut Frame, state: &DashboardState, area: Rect) {
@@ -1055,7 +1408,7 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
         ]),
         Line::from(vec![
             Span::styled(
-                "[1-4]",
+                "[1-5]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
             Span::styled(" Tabs  ", Style::default().fg(theme.text)),
@@ -1171,5 +1524,44 @@ mod tests {
             row_1_has_content,
             "Expected row 1 to contain compact header"
         );
+    }
+
+    #[test]
+    fn test_render_security_stream_tab() {
+        let backend = TestBackend::new(120, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::SecurityStream;
+
+        state.security_events.push_back(super::super::state::SecurityEventItem {
+            ts: chrono::Utc::now(),
+            event_type: super::super::state::SecurityEventType::BlockedNetwork,
+            subject: "169.254.169.254:80".to_string(),
+            detail: "Egress blocked (Anti-SSRF)".to_string(),
+            source: "net_relay".to_string(),
+        });
+        state.security_events.push_back(super::super::state::SecurityEventItem {
+            ts: chrono::Utc::now(),
+            event_type: super::super::state::SecurityEventType::SecretMasked,
+            subject: "/home/user/.ssh/id_rsa".to_string(),
+            detail: "Inode masked mode 0000".to_string(),
+            source: "vfs_overlays".to_string(),
+        });
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..120)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("SECURITY STREAM"));
+        assert!(content.contains("BLOCKED EGRESS (ANTI-SSRF)"));
+        assert!(content.contains("169.254.169.254:80"));
     }
 }
