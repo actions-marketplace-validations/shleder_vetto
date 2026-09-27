@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
+
+## [0.5.3] - 2026-09-27
+
+### Added
+- **Fleet Concurrency & Multi-Agent Swarm Orchestration (Phase 3)**:
+  - Persistent `FleetManager` state in `~/.vetto/fleet/workers.json` with flock synchronization, live PID reconciliation (`kill(pid, 0)`), per-worker CoW workspace branches (`~/.vetto/fleet/workspaces/<worker_id>`), and cgroups v2 scope isolation (`/sys/fs/cgroup/vetto-fleet/<worker_id>.scope`).
+  - First-class `vetto fleet` CLI subcommand suite: `status` (`--json`), `spawn` (`--count N`), `verify` (`--workers N --json`), and `kill` (`<worker_id>` or `--all`).
+  - `MultiRuntime` lifecycle integration with dynamic worker scope allocation, `root_pid` binding, and pairwise isolation verification across ephemeral ports, CoW branches, and process namespaces.
+  - TUI Mission Control 6th tab `[6: FLEET SWARM]` (`MissionTab::Fleet`, hotkey `6`, Ratatui modulo-6 tab cycling) with 4 analytical metric cards, live worker allocation table, and interactive hotkeys `v` (isolation verification probe) and `x` (worker cleanup).
+  - Dedicated integration test suite in `tests/integration/fleet_concurrency.rs` validating concurrent worker spawns, lifecycle cleanup, and pairwise isolation.
+
+### Removed
+- **Terminal Mockup Cleanup**: Purged static terminal mockup asset `assets/demo.svg` across repository and all 6 localized documentation suites.
+
+### Fixed
+- **Sibling Sandbox Process Isolation**: Corrected orphan cleanup sweep in `linux_enforce.rs` and `handle.rs` to prevent premature signal propagation to concurrent sibling sandbox instances.
+- **Packaging Parity**: Synchronized version 0.5.3 across all 52 package manifests and documentation.
+
 ## [0.5.2] - 2026-09-27
 
 ### Added
