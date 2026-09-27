@@ -25,6 +25,7 @@ use crate::error::VettoError;
 #[cfg(unix)]
 use crate::events::Event;
 use crate::events::EventBus;
+use crate::multi::fleet::{AgentWorkerScope, FleetManager};
 use crate::multi::isolation::IsolationBarrier;
 use crate::multi::{AgentSpec, Manifest, MultiAggregator, MultiEventStream, VirtualPortPool};
 #[cfg(unix)]
@@ -84,6 +85,8 @@ pub struct MultiSession {
     /// Host-observed root PID of this agent's child (owned by the boundary
     /// spawn, used by the wait thread for the nonce sweep).
     pub root_pid: u32,
+    /// Allocated FleetManager worker scope for this agent.
+    pub worker_scope: Option<AgentWorkerScope>,
 }
 
 #[cfg(unix)]
@@ -94,6 +97,7 @@ struct PendingSession {
     stdout_r: OwnedFd,
     stderr_r: OwnedFd,
     allocated_ports: Vec<u16>,
+    worker_scope: AgentWorkerScope,
 }
 
 impl MultiSession {
@@ -126,6 +130,16 @@ impl MultiSession {
             .map(|output| output.text())
             .unwrap_or_default()
     }
+
+    /// Returns the fleet worker ID if assigned to this session.
+    pub fn worker_id(&self) -> Option<&str> {
+        self.worker_scope.as_ref().map(|s| s.worker_id.as_str())
+    }
+
+    /// Returns a reference to the allocated worker scope if available.
+    pub fn worker_scope(&self) -> Option<&AgentWorkerScope> {
+        self.worker_scope.as_ref()
+    }
 }
 
 pub struct MultiRuntime {
@@ -135,16 +149,88 @@ pub struct MultiRuntime {
     pub aggregator: MultiAggregator,
     pub port_pool: VirtualPortPool,
     pub isolation_barrier: IsolationBarrier,
+    pub fleet_manager: FleetManager,
     pub report_dir: Option<PathBuf>,
 }
 
 impl MultiRuntime {
+    /// Creates a new MultiRuntime with a default FleetManager.
+    pub fn new(
+        manifest: Manifest,
+        sessions: Vec<MultiSession>,
+        stream: MultiEventStream,
+        aggregator: MultiAggregator,
+        port_pool: VirtualPortPool,
+        isolation_barrier: IsolationBarrier,
+        report_dir: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            manifest,
+            sessions,
+            stream,
+            aggregator,
+            port_pool,
+            isolation_barrier,
+            fleet_manager: FleetManager::new_default(),
+            report_dir,
+        }
+    }
+
+    /// Creates a new MultiRuntime with an explicit FleetManager.
+    pub fn with_fleet_manager(
+        manifest: Manifest,
+        sessions: Vec<MultiSession>,
+        stream: MultiEventStream,
+        aggregator: MultiAggregator,
+        port_pool: VirtualPortPool,
+        isolation_barrier: IsolationBarrier,
+        fleet_manager: FleetManager,
+        report_dir: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            manifest,
+            sessions,
+            stream,
+            aggregator,
+            port_pool,
+            isolation_barrier,
+            fleet_manager,
+            report_dir,
+        }
+    }
+
+    /// Returns a reference to the runtime's FleetManager.
+    pub fn fleet_manager(&self) -> &FleetManager {
+        &self.fleet_manager
+    }
+
+    /// Returns a mutable reference to the runtime's FleetManager.
+    pub fn fleet_manager_mut(&mut self) -> &mut FleetManager {
+        &mut self.fleet_manager
+    }
     /// Prepare and launch all agents. The preflight phase deliberately owns
     /// no child handles: invalid policy/network/command input is rejected
     /// before the first fork. Once spawning begins, any failure terminates
-    /// every already-created sandbox before returning the error.
+    /// every already-created sandbox and releases allocated worker scopes
+    /// before returning the error.
     #[cfg(unix)]
     pub fn launch(manifest: Manifest, project: PathBuf, home: PathBuf) -> Result<Self> {
+        let fleet_manager = if std::env::var_os("VETTO_FLEET_PERSISTENT").is_some() {
+            FleetManager::load_persistent().unwrap_or_else(|_| FleetManager::new_default())
+        } else {
+            FleetManager::new_default()
+        };
+        Self::launch_with_fleet(manifest, project, home, fleet_manager)
+    }
+
+    /// Prepare and launch all agents with a custom or persistent FleetManager.
+    #[cfg(unix)]
+    pub fn launch_with_fleet(
+        manifest: Manifest,
+        project: PathBuf,
+        home: PathBuf,
+        fleet_manager: FleetManager,
+    ) -> Result<Self> {
         manifest.validate()?;
 
         // Configure supervisor process as sub-reaper so orphaned child processes
@@ -155,18 +241,76 @@ impl MultiRuntime {
         let isolation_barrier = IsolationBarrier::new();
 
         let mut prepared = Vec::with_capacity(manifest.agents.len());
+        let mut allocated_worker_ids = Vec::with_capacity(manifest.agents.len());
+
         for (idx, spec) in manifest.agents.iter().enumerate() {
-            let net = crate::config::parse_net_mode(&spec.net)
-                .with_context(|| format!("agent '{}' network mode", spec.name))?;
-            let backend = Backend::detect(net.clone(), spec.observe_seccomp)
-                .with_context(|| format!("establish sandbox backend for agent '{}'", spec.name))?;
+            let worker_scope = match fleet_manager.allocate_worker(&spec.name) {
+                Ok(scope) => {
+                    allocated_worker_ids.push(scope.worker_id.clone());
+                    scope
+                }
+                Err(err) => {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err).with_context(|| {
+                        format!("allocate fleet worker scope for agent '{}'", spec.name)
+                    });
+                }
+            };
+
+            let net = match crate::config::parse_net_mode(&spec.net) {
+                Ok(n) => n,
+                Err(err) => {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err).with_context(|| format!("agent '{}' network mode", spec.name));
+                }
+            };
+
+            let backend = match Backend::detect(net.clone(), spec.observe_seccomp) {
+                Ok(b) => b,
+                Err(err) => {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err).with_context(|| {
+                        format!("establish sandbox backend for agent '{}'", spec.name)
+                    });
+                }
+            };
+
             let tier = backend.tier().unwrap_or(policy::Tier::Full);
-            let policy =
-                policy::loader::load(&spec.profile, spec.policy.as_deref(), &project, &home, tier)
-                    .with_context(|| format!("load policy for agent '{}'", spec.name))?;
+            let policy = match policy::loader::load(
+                &spec.profile,
+                spec.policy.as_deref(),
+                &project,
+                &home,
+                tier,
+            ) {
+                Ok(p) => p,
+                Err(err) => {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err)
+                        .with_context(|| format!("load policy for agent '{}'", spec.name));
+                }
+            };
+
             let mut command = spec.command.clone();
-            command[0] = resolve_in_path(&command[0])
-                .with_context(|| format!("resolve command for agent '{}'", spec.name))?;
+            command[0] = match resolve_in_path(&command[0]) {
+                Ok(c) => c,
+                Err(err) => {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err)
+                        .with_context(|| format!("resolve command for agent '{}'", spec.name));
+                }
+            };
+
             // Do not silently permit a policy to exclude the executable.
             if !policy.in_read_scope(Path::new(&command[0])) {
                 tracing::warn!(
@@ -187,14 +331,35 @@ impl MultiRuntime {
                 policy,
                 command,
                 allocated_ports,
+                worker_scope,
             });
+        }
+
+        // Full pairwise isolation verification across all allocated worker scopes before fork
+        for i in 0..prepared.len() {
+            for j in (i + 1)..prepared.len() {
+                if let Err(err) = fleet_manager.verify_isolation(
+                    &prepared[i].worker_scope.worker_id,
+                    &prepared[j].worker_scope.worker_id,
+                ) {
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err).with_context(|| {
+                        format!(
+                            "pairwise fleet isolation verification failed between '{}' and '{}'",
+                            prepared[i].spec.name, prepared[j].spec.name
+                        )
+                    });
+                }
+            }
         }
 
         // Single-threaded fork phase (only serialization: fork-safety).
         // Agents run concurrently afterwards; each owns its execution.
         let mut pending = Vec::with_capacity(prepared.len());
-        for prepared in prepared {
-            match spawn_one(prepared, &project) {
+        for prep in prepared {
+            match spawn_one(prep, &project, &fleet_manager) {
                 Ok(session) => pending.push(session),
                 Err(error) => {
                     for session in pending.iter_mut() {
@@ -203,9 +368,35 @@ impl MultiRuntime {
                         // terminates; explicit first for prompt teardown).
                         session.execution.handle.terminate();
                     }
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
                     return Err(anyhow::Error::new(VettoError::Sandbox(format!(
                         "multi-agent launch aborted; no unsandboxed fallback: {error:#}"
                     ))));
+                }
+            }
+        }
+
+        // Full pairwise isolation verification across all allocated worker scopes before activation
+        for i in 0..pending.len() {
+            for j in (i + 1)..pending.len() {
+                if let Err(err) = fleet_manager.verify_isolation(
+                    &pending[i].worker_scope.worker_id,
+                    &pending[j].worker_scope.worker_id,
+                ) {
+                    for session in pending.iter_mut() {
+                        session.execution.handle.terminate();
+                    }
+                    for wid in &allocated_worker_ids {
+                        let _ = fleet_manager.release_worker(wid);
+                    }
+                    return Err(err).with_context(|| {
+                        format!(
+                            "pre-activation fleet isolation verification failed between '{}' and '{}'",
+                            pending[i].spec.name, pending[j].spec.name
+                        )
+                    });
                 }
             }
         }
@@ -216,7 +407,13 @@ impl MultiRuntime {
         crate::multi::spawn_aggregator(&stream, aggregator.clone());
         let mut sessions = Vec::with_capacity(pending.len());
         for pending in pending {
-            let session = activate_pending(pending, &project, &stream, &isolation_barrier);
+            let session = activate_pending(
+                pending,
+                &project,
+                &stream,
+                &isolation_barrier,
+                &fleet_manager,
+            );
             sessions.push(session);
         }
 
@@ -228,11 +425,24 @@ impl MultiRuntime {
             aggregator,
             port_pool,
             isolation_barrier,
+            fleet_manager,
         })
     }
 
     #[cfg(not(unix))]
     pub fn launch(_manifest: Manifest, _project: PathBuf, _home: PathBuf) -> Result<Self> {
+        Err(anyhow::Error::new(VettoError::UnsupportedPlatform(
+            "multi-agent",
+        )))
+    }
+
+    #[cfg(not(unix))]
+    pub fn launch_with_fleet(
+        _manifest: Manifest,
+        _project: PathBuf,
+        _home: PathBuf,
+        _fleet_manager: FleetManager,
+    ) -> Result<Self> {
         Err(anyhow::Error::new(VettoError::UnsupportedPlatform(
             "multi-agent",
         )))
@@ -313,10 +523,15 @@ struct Prepared {
     policy: policy::Policy,
     command: Vec<String>,
     allocated_ports: Vec<u16>,
+    worker_scope: AgentWorkerScope,
 }
 
 #[cfg(unix)]
-fn spawn_one(prepared: Prepared, project: &Path) -> Result<PendingSession> {
+fn spawn_one(
+    prepared: Prepared,
+    project: &Path,
+    fleet_manager: &FleetManager,
+) -> Result<PendingSession> {
     let Prepared {
         spec,
         net,
@@ -324,6 +539,7 @@ fn spawn_one(prepared: Prepared, project: &Path) -> Result<PendingSession> {
         policy,
         command,
         allocated_ports,
+        worker_scope,
     } = prepared;
     let backend = backend.ok_or_else(|| anyhow::anyhow!("sandbox backend was consumed"))?;
     let (stdout_r, stdout_w) = pipe2()?;
@@ -335,7 +551,20 @@ fn spawn_one(prepared: Prepared, project: &Path) -> Result<PendingSession> {
     // nonce or spawn ledger is ever shared across agents. `prepare` fails
     // closed with no spawn possible; `spawn` consumes the preparation so one
     // backend cannot be prepared while another is spawned.
-    let extra = relay_env(&net);
+    let mut extra = relay_env(&net);
+    extra.insert(
+        "VETTO_FLEET_WORKER_ID".to_string(),
+        worker_scope.worker_id.clone(),
+    );
+    extra.insert(
+        "VETTO_FLEET_PORT".to_string(),
+        worker_scope.ephemeral_port.to_string(),
+    );
+    extra.insert(
+        "VETTO_FLEET_WORKSPACE".to_string(),
+        worker_scope.workspace_dir.to_string_lossy().into_owned(),
+    );
+
     let unprepared = crate::sandbox::production::UnpreparedProductionExecution::new(
         backend,
         policy,
@@ -361,6 +590,18 @@ fn spawn_one(prepared: Prepared, project: &Path) -> Result<PendingSession> {
         .spawn()
         .with_context(|| format!("spawn agent '{}' inside its sandbox", spec.name))?;
 
+    let root_pid = execution.handle.root_pid;
+    if let Err(err) = fleet_manager.bind_worker_pid(&worker_scope.worker_id, root_pid) {
+        let mut exec = execution;
+        exec.handle.terminate();
+        return Err(err).with_context(|| {
+            format!(
+                "bind worker PID {} for agent '{}' ({})",
+                root_pid, spec.name, worker_scope.worker_id
+            )
+        });
+    }
+
     drop(stdout_w);
     drop(stderr_w);
 
@@ -371,6 +612,7 @@ fn spawn_one(prepared: Prepared, project: &Path) -> Result<PendingSession> {
         stdout_r,
         stderr_r,
         allocated_ports,
+        worker_scope,
     })
 }
 
@@ -380,6 +622,7 @@ fn activate_pending(
     project: &Path,
     stream: &MultiEventStream,
     isolation_barrier: &IsolationBarrier,
+    fleet_manager: &FleetManager,
 ) -> MultiSession {
     #[cfg(not(target_os = "linux"))]
     let _ = project;
@@ -393,6 +636,7 @@ fn activate_pending(
         stdout_r,
         stderr_r,
         allocated_ports,
+        worker_scope,
     } = pending;
     let contract = execution.contract().clone();
     let production = contract
@@ -510,6 +754,8 @@ fn activate_pending(
     let wait_bus = bus.clone();
     let agent_name = spec.name.clone();
     let barrier_clone = isolation_barrier.clone();
+    let fleet_clone = fleet_manager.clone();
+    let worker_id = worker_scope.worker_id.clone();
 
     std::thread::Builder::new()
         .name(format!("vetto-multi-wait-{}", spec.name))
@@ -550,6 +796,9 @@ fn activate_pending(
                 .unwrap_or(None)
                 .unwrap_or(code);
 
+            // Release the worker scope in FleetManager upon completion
+            let _ = fleet_clone.release_worker(&worker_id);
+
             wait_bus.publish(Event::SessionEnded {
                 ts: crate::events::types::now(),
                 exit_code: finished_exit_code,
@@ -571,6 +820,7 @@ fn activate_pending(
         allocated_ports,
         prod_nonce,
         root_pid,
+        worker_scope: Some(worker_scope),
     }
 }
 
@@ -684,8 +934,8 @@ fn resolve_in_path(command: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
     use super::*;
+    use crate::multi::fleet::FleetConfig;
     use crate::multi::parse_manifest_str;
     use std::path::Path;
 
@@ -720,6 +970,148 @@ mod tests {
             crate::exit_codes::map_error_to_exit_code(&err),
             crate::exit_codes::EXIT_FAIL_CLOSED
         );
+    }
+
+    #[test]
+    fn test_multi_runtime_new_initializes_default_fleet_manager() {
+        let manifest = Manifest {
+            version: 1,
+            agents: Vec::new(),
+            report_dir: None,
+        };
+        let runtime = MultiRuntime::new(
+            manifest,
+            Vec::new(),
+            MultiEventStream::new(),
+            MultiAggregator::new(Vec::<String>::new()),
+            VirtualPortPool::default(),
+            IsolationBarrier::new(),
+            None,
+        );
+        assert_eq!(runtime.fleet_manager.active_count(), 0);
+        assert_eq!(
+            runtime.fleet_manager.config().max_agents,
+            crate::multi::DEFAULT_MAX_AGENTS
+        );
+        assert!(runtime.fleet_manager.config().ipc_isolation);
+    }
+
+    #[test]
+    fn test_multi_runtime_with_fleet_manager() {
+        let manifest = Manifest {
+            version: 1,
+            agents: Vec::new(),
+            report_dir: None,
+        };
+        let config = FleetConfig {
+            max_agents: 16,
+            cpu_weight: 200,
+            memory_limit_bytes: 1024 * 1024 * 1024,
+            pids_max: 64,
+            base_port: 50000,
+            ipc_isolation: true,
+            state_file: None,
+            workspace_root: None,
+            ..Default::default()
+        };
+        let custom_fleet = FleetManager::new(config);
+        let runtime = MultiRuntime::with_fleet_manager(
+            manifest,
+            Vec::new(),
+            MultiEventStream::new(),
+            MultiAggregator::new(Vec::<String>::new()),
+            VirtualPortPool::default(),
+            IsolationBarrier::new(),
+            custom_fleet,
+            None,
+        );
+        assert_eq!(runtime.fleet_manager.active_count(), 0);
+        assert_eq!(runtime.fleet_manager.config().max_agents, 16);
+        assert_eq!(runtime.fleet_manager.config().cpu_weight, 200);
+        assert_eq!(runtime.fleet_manager.config().base_port, 50000);
+    }
+
+    #[test]
+    fn test_multi_session_worker_scope_accessors() {
+        let fleet = FleetManager::new_default();
+        let scope = fleet.allocate_worker("agent-test").expect("allocate");
+        let worker_id_expected = scope.worker_id.clone();
+
+        let session = MultiSession {
+            spec: AgentSpec {
+                name: "agent-test".into(),
+                command: vec!["true".into()],
+                profile: "default".into(),
+                policy: None,
+                net: "off".into(),
+                observe_seccomp: false,
+                report_dir: None,
+                debug_ports: None,
+            },
+            bus: EventBus::new(),
+            stats: StatsCollector::spawn(&EventBus::new()),
+            output: Arc::new(Mutex::new(OutputBuffers::default())),
+            execution: Arc::new(Mutex::new(None)),
+            finished: Arc::new(AtomicBool::new(false)),
+            started: Instant::now(),
+            allocated_ports: vec![49201],
+            prod_nonce: "nonce-123".into(),
+            root_pid: 12345,
+            worker_scope: Some(scope.clone()),
+        };
+
+        assert_eq!(session.worker_id(), Some(worker_id_expected.as_str()));
+        assert_eq!(session.worker_scope(), Some(&scope));
+    }
+
+    #[test]
+    fn test_fleet_pairwise_isolation_verification_logic() {
+        let fleet = FleetManager::new_default();
+        let scope1 = fleet.allocate_worker("agent-one").expect("scope 1");
+        let scope2 = fleet.allocate_worker("agent-two").expect("scope 2");
+
+        assert_ne!(scope1.worker_id, scope2.worker_id);
+        assert_ne!(scope1.ephemeral_port, scope2.ephemeral_port);
+        assert_ne!(scope1.cow_branch_name, scope2.cow_branch_name);
+        assert_ne!(scope1.scope_path, scope2.scope_path);
+
+        fleet
+            .verify_isolation(&scope1.worker_id, &scope2.worker_id)
+            .expect("pairwise isolation must pass between distinct workers");
+
+        // Release one worker
+        fleet
+            .release_worker(&scope1.worker_id)
+            .expect("release worker 1");
+        assert_eq!(fleet.active_count(), 1);
+
+        // Verification with released worker fails
+        assert!(fleet
+            .verify_isolation(&scope1.worker_id, &scope2.worker_id)
+            .is_err());
+    }
+
+    #[test]
+    fn test_fleet_env_extra_generation() {
+        let fleet = FleetManager::new_default();
+        let scope = fleet.allocate_worker("test-worker").expect("scope");
+        let mut extra = std::collections::HashMap::new();
+        extra.insert("VETTO_FLEET_WORKER_ID".to_string(), scope.worker_id.clone());
+        extra.insert(
+            "VETTO_FLEET_PORT".to_string(),
+            scope.ephemeral_port.to_string(),
+        );
+        extra.insert(
+            "VETTO_FLEET_WORKSPACE".to_string(),
+            scope.workspace_dir.to_string_lossy().into_owned(),
+        );
+
+        assert_eq!(extra.get("VETTO_FLEET_WORKER_ID"), Some(&scope.worker_id));
+        assert_eq!(
+            extra.get("VETTO_FLEET_PORT"),
+            Some(&scope.ephemeral_port.to_string())
+        );
+        assert!(extra.contains_key("VETTO_FLEET_WORKSPACE"));
     }
 
     #[cfg(unix)]
@@ -759,6 +1151,7 @@ mod tests {
             aggregator: MultiAggregator::new(["one".to_string()]),
             port_pool: VirtualPortPool::default(),
             isolation_barrier: IsolationBarrier::new(),
+            fleet_manager: FleetManager::new_default(),
             report_dir: Some(root.join("combined")),
         };
 
