@@ -8,7 +8,7 @@
 set -eu
 
 GITHUB_REPO="shleder/vetto"
-DEFAULT_FALLBACK_VERSION="0.5.1"
+DEFAULT_FALLBACK_VERSION="0.5.2"
 
 # Initialize colors if stdout is connected to a terminal
 if [ -t 1 ]; then
@@ -50,7 +50,7 @@ Usage:
 Options:
   -d, --dir DIR          Install binary into custom directory DIR
   -s, --system           Install system-wide to /usr/local/bin
-  -v, --version VERSION  Install specific Vetto version (e.g. 0.5.1)
+  -v, --version VERSION  Install specific Vetto version (e.g. 0.5.2)
   -h, --help             Show this help message
 
 Environment Variables:

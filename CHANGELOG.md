@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
+## [0.5.2] - 2026-09-27
+
+### Added
+- **Anti-SSRF Bypass Hardening**: Hardened L7 semantic relay (`src/sandbox/linux/net_relay.rs`) to drop all outbound HTTP/HTTPS requests and 3xx redirect destinations targeting cloud metadata endpoints (`169.254.169.254` for AWS/GCP/Azure/OpenStack/Hetzner, `100.100.100.200` for Alibaba Cloud) and RFC 1918 private subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`) fail-closed at the socket connection and upstream proxy boundary.
+- **TUI Live Security Event Stream (`[5: SECURITY STREAM]`)**: Enhanced TUI Mission Control with a dedicated 5th tab featuring a real-time 500-event ring-buffer stream, 4 analytical metric cards (Blocked SSRF, Denied Files, Blocked Nets, Total Events), interactive event table, and policy inspection drawer.
+- **Dedicated Anti-SSRF Integration Test Suite**: Added `tests/integration/anti_ssrf.rs` covering direct metadata connections, private IP literal drops under wildcard `*` allowlists, and HTTP 302 redirect loops to metadata endpoints.
+- **English Architectural Specification & Wizard Translations**: Translated all verification-ng specifications (`docs/architecture/verify-ng.md`), threat model callouts (`docs/threat-model.md`), interactive wizard prompts (`src/cli/wizard.rs`), evidence docstrings, and all 16 adversarial TOML test scenarios (`tests/verify_ng/scenarios/*.toml`) into technical systems English.
+
+### Fixed
+- **Packaging Parity**: Synchronized version 0.5.2 across all 24 package manifests (Cargo, npm, Homebrew, Chocolatey, RPM, AUR, Nix, VS Code extension, Helm, K8s, docs).
+
 ## [0.5.1] - 2026-09-27
 
 ### Added

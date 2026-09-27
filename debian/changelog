@@ -1,3 +1,9 @@
+vetto (0.5.2-1) unstable; urgency=medium
+
+  * Anti-SSRF bypass protection, TUI live security event stream, and English architecture documentation.
+
+ -- vetto contributors <noreply@github.com>  Sun, 27 Sep 2026 08:39:01 +0000
+
 vetto (0.5.1-1) unstable; urgency=medium
 
   * Frontier 2026 AI coding CLI agents (omp, zcode, kimi, grok) and Gemini CLI purge.
