@@ -76,7 +76,7 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                         }
 
                         match key.code {
-                            // Tab switching [1-5]
+                            // Tab switching [1-6]
                             KeyCode::Char('1') => state.active_tab = MissionTab::Agents,
                             KeyCode::Char('2') => state.active_tab = MissionTab::Sandbox,
                             KeyCode::Char('3') => {
@@ -92,6 +92,10 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                                 state.active_tab = MissionTab::SecurityStream;
                                 state.poll_security_events();
                             }
+                            KeyCode::Char('6') => {
+                                state.active_tab = MissionTab::Fleet;
+                                state.poll_fleet_state();
+                            }
 
                             // Tab cycling (Tab / BackTab)
                             KeyCode::Tab => {
@@ -103,6 +107,9 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                                         crate::doctor::preflight::execute_preflight_diagnostics(),
                                     );
                                 }
+                                if state.active_tab == MissionTab::Fleet {
+                                    state.poll_fleet_state();
+                                }
                             }
                             KeyCode::BackTab => {
                                 state.active_tab = state.active_tab.prev();
@@ -113,11 +120,36 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                                         crate::doctor::preflight::execute_preflight_diagnostics(),
                                     );
                                 }
+                                if state.active_tab == MissionTab::Fleet {
+                                    state.poll_fleet_state();
+                                }
                             }
 
                             // Vertical navigation (Up/k, Down/j)
                             KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
                             KeyCode::Down | KeyCode::Char('j') => state.select_next(),
+
+                            // 'v': Trigger isolation verification probe on Fleet tab
+                            KeyCode::Char('v') => {
+                                if state.active_tab == MissionTab::Fleet {
+                                    state.trigger_fleet_verify_probe();
+                                } else {
+                                    state.set_status(
+                                        "Verify probe [v] is only available on Fleet tab ([6])",
+                                    );
+                                }
+                            }
+
+                            // 'x': Terminate selected worker on Fleet tab
+                            KeyCode::Char('x') => {
+                                if state.active_tab == MissionTab::Fleet {
+                                    state.terminate_selected_worker();
+                                } else {
+                                    state.set_status(
+                                        "Terminate [x] is only available on Fleet tab ([6])",
+                                    );
+                                }
+                            }
 
                             // Space: Toggle shim for selected agent
                             KeyCode::Char(' ') => {

@@ -50,6 +50,7 @@ pub enum MissionTab {
     Doctor,
     Sessions,
     SecurityStream,
+    Fleet,
 }
 
 impl MissionTab {
@@ -60,16 +61,18 @@ impl MissionTab {
             Self::Doctor => 2,
             Self::Sessions => 3,
             Self::SecurityStream => 4,
+            Self::Fleet => 5,
         }
     }
 
     pub fn from_index(idx: usize) -> Self {
-        match idx % 5 {
+        match idx % 6 {
             0 => Self::Agents,
             1 => Self::Sandbox,
             2 => Self::Doctor,
             3 => Self::Sessions,
             4 => Self::SecurityStream,
+            5 => Self::Fleet,
             _ => unreachable!(),
         }
     }
@@ -79,7 +82,7 @@ impl MissionTab {
     }
 
     pub fn prev(&self) -> Self {
-        Self::from_index(self.index() + 4)
+        Self::from_index(self.index() + 5)
     }
 }
 
@@ -110,6 +113,9 @@ pub struct DashboardState {
     pub theme: Theme,
     pub status_message: Option<(String, Instant)>,
     pub pending_launch_agent: Option<String>,
+    pub fleet_workers: Vec<crate::multi::fleet::AgentWorkerScope>,
+    pub selected_fleet_worker: usize,
+    pub fleet_probe_status: Option<String>,
 }
 
 impl DashboardState {
@@ -136,8 +142,12 @@ impl DashboardState {
             theme,
             status_message: None,
             pending_launch_agent: None,
+            fleet_workers: Vec::new(),
+            selected_fleet_worker: 0,
+            fleet_probe_status: None,
         };
         state.poll_security_events();
+        state.poll_fleet_state();
         state
     }
 
@@ -225,7 +235,23 @@ impl DashboardState {
             self.selected_event = self.security_events.len() - 1;
         }
 
+        self.poll_fleet_state();
+        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty() {
+            self.selected_fleet_worker = self.fleet_workers.len() - 1;
+        }
+
         self.set_status("State refreshed");
+    }
+
+    /// Reads persistent fleet state from ~/.vetto/fleet/workers.json, reconciles live workers,
+    /// and populates fleet_workers.
+    pub fn poll_fleet_state(&mut self) {
+        if let Ok(fleet) = crate::multi::fleet::FleetManager::load_persistent() {
+            let _ = fleet.reconcile_live_workers();
+            self.fleet_workers = fleet.active_workers();
+        } else {
+            self.fleet_workers = Vec::new();
+        }
     }
 
     /// Reads recorded security events from ~/.vetto/logs/*.jsonl and appends them to ring buffer.
@@ -408,6 +434,13 @@ impl DashboardState {
                     self.selected_event = self.security_events.len() - 1;
                 }
             }
+            MissionTab::Fleet if !self.fleet_workers.is_empty() => {
+                if self.selected_fleet_worker > 0 {
+                    self.selected_fleet_worker -= 1;
+                } else {
+                    self.selected_fleet_worker = self.fleet_workers.len() - 1;
+                }
+            }
             _ => {}
         }
     }
@@ -435,6 +468,13 @@ impl DashboardState {
                     self.selected_event = 0;
                 }
             }
+            MissionTab::Fleet if !self.fleet_workers.is_empty() => {
+                if self.selected_fleet_worker + 1 < self.fleet_workers.len() {
+                    self.selected_fleet_worker += 1;
+                } else {
+                    self.selected_fleet_worker = 0;
+                }
+            }
             _ => {}
         }
     }
@@ -450,6 +490,85 @@ impl DashboardState {
             res.files_restored, snap.session_id
         ));
         Ok(())
+    }
+
+    pub fn trigger_fleet_verify_probe(&mut self) {
+        let fleet = crate::multi::fleet::FleetManager::new_default();
+        let mut worker_ids = Vec::with_capacity(4);
+        for i in 1..=4 {
+            match fleet.allocate_worker(&format!("probe-{:02}", i)) {
+                Ok(scope) => worker_ids.push(scope.worker_id),
+                Err(err) => {
+                    let msg = format!("FAIL: unable to allocate probe worker: {err}");
+                    self.fleet_probe_status = Some(msg.clone());
+                    self.set_status(msg);
+                    return;
+                }
+            }
+        }
+
+        let mut pairs_checked = 0;
+        for i in 0..worker_ids.len() {
+            for j in (i + 1)..worker_ids.len() {
+                if let Err(err) = fleet.verify_isolation(&worker_ids[i], &worker_ids[j]) {
+                    let msg = format!(
+                        "FAIL: isolation check between {} and {}: {err}",
+                        worker_ids[i], worker_ids[j]
+                    );
+                    self.fleet_probe_status = Some(msg.clone());
+                    self.set_status(msg);
+                    return;
+                }
+                pairs_checked += 1;
+            }
+        }
+
+        let msg = format!(
+            "PASS: {} workers / {} pairs disjoint and isolated",
+            worker_ids.len(),
+            pairs_checked
+        );
+        self.fleet_probe_status = Some(msg.clone());
+        self.set_status(msg);
+    }
+
+    pub fn terminate_selected_worker(&mut self) {
+        if self.fleet_workers.is_empty() {
+            self.set_status("No active fleet worker selected to terminate");
+            return;
+        }
+
+        let index = self
+            .selected_fleet_worker
+            .min(self.fleet_workers.len().saturating_sub(1));
+        let worker = self.fleet_workers[index].clone();
+        let wid = worker.worker_id.clone();
+
+        if let Some(pid) = worker.pid {
+            let _ = crate::cli::kill::kill_pid(pid, true);
+        }
+
+        let cgroup_kill = worker.scope_path.join("cgroup.kill");
+        if cgroup_kill.exists() {
+            let _ = std::fs::write(&cgroup_kill, "1\n");
+        }
+        if worker.scope_path.exists() {
+            let _ = std::fs::remove_dir(&worker.scope_path);
+        }
+        if !worker.workspace_dir.as_os_str().is_empty() && worker.workspace_dir.exists() {
+            let _ = std::fs::remove_dir_all(&worker.workspace_dir);
+        }
+
+        if let Ok(fleet) = crate::multi::fleet::FleetManager::load_persistent() {
+            let _ = fleet.release_worker(&wid);
+            let _ = fleet.save_persistent();
+        }
+
+        self.poll_fleet_state();
+        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty() {
+            self.selected_fleet_worker = self.fleet_workers.len() - 1;
+        }
+        self.set_status(format!("Terminated worker '{}' and released slot", wid));
     }
 }
 

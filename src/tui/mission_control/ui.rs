@@ -51,6 +51,7 @@ pub fn draw(f: &mut Frame, state: &DashboardState) {
         MissionTab::Doctor => render_tab_doctor(f, state, chunks[3]),
         MissionTab::Sessions => render_tab_sessions(f, state, chunks[3]),
         MissionTab::SecurityStream => render_tab_security_stream(f, state, chunks[3]),
+        MissionTab::Fleet => render_tab_fleet(f, state, chunks[3]),
     }
 
     render_footer(f, state, chunks[4]);
@@ -157,6 +158,10 @@ fn render_tabs(f: &mut Frame, state: &DashboardState, area: Rect) {
         Line::from(format!(
             " [5] SECURITY STREAM ({}) ",
             state.security_events.len()
+        )),
+        Line::from(format!(
+            " [6] FLEET SWARM ({}) ",
+            state.fleet_workers.len()
         )),
     ];
 
@@ -1469,24 +1474,318 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
     }
 }
 
+fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
+    let theme = &state.theme;
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4), // 4 summary metric cards
+            Constraint::Min(8),    // Live Fleet Worker Allocation Table
+        ])
+        .split(area);
+
+    // Top section: 4 summary metric cards
+    let metric_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(chunks[0]);
+
+    // 1) "ACTIVE FLEET WORKERS" -> format!("{}/64", state.fleet_workers.len())
+    let card1_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " ACTIVE FLEET WORKERS ",
+            Style::default().fg(theme.muted),
+        ));
+    let card1_val = format!("{}/64", state.fleet_workers.len());
+    let p1 = Paragraph::new(vec![Line::from(vec![
+        Span::styled(
+            format!("  {card1_val} "),
+            Style::default()
+                .fg(if state.fleet_workers.is_empty() {
+                    theme.text
+                } else {
+                    theme.success
+                })
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("provisioned / cap", Style::default().fg(theme.muted)),
+    ])])
+    .block(card1_block);
+    f.render_widget(p1, metric_cols[0]);
+
+    // 2) "FAIR-SHARE CPU" -> "cpu.weight: 100"
+    let card2_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " FAIR-SHARE CPU ",
+            Style::default().fg(theme.muted),
+        ));
+    let p2 = Paragraph::new(vec![Line::from(vec![
+        Span::styled(
+            "  cpu.weight: 100 ",
+            Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("cgroups v2", Style::default().fg(theme.muted)),
+    ])])
+    .block(card2_block);
+    f.render_widget(p2, metric_cols[1]);
+
+    // 3) "MEMORY CEILING" -> "2.0 GiB per worker"
+    let card3_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " MEMORY CEILING ",
+            Style::default().fg(theme.muted),
+        ));
+    let p3 = Paragraph::new(vec![Line::from(vec![
+        Span::styled(
+            "  2.0 GiB per worker ",
+            Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("hard limit", Style::default().fg(theme.muted)),
+    ])])
+    .block(card3_block);
+    f.render_widget(p3, metric_cols[2]);
+
+    // 4) "ISOLATION STATUS" -> "CLONE_NEWIPC + CLONE_NEWPID"
+    let card4_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " ISOLATION STATUS ",
+            Style::default().fg(theme.muted),
+        ));
+    let p4 = Paragraph::new(vec![Line::from(vec![
+        Span::styled(
+            "  CLONE_NEWIPC + CLONE_NEWPID ",
+            Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("enforced", Style::default().fg(theme.muted)),
+    ])])
+    .block(card4_block);
+    f.render_widget(p4, metric_cols[3]);
+
+    // Bottom section: Live Fleet Worker Allocation Table
+    let table_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " LIVE FLEET WORKER ALLOCATION TABLE (FAIR-SHARE MULTI-AGENT SWARM) ",
+            Style::default().fg(theme.logo),
+        ));
+
+    if state.fleet_workers.is_empty() {
+        let empty_lines = vec![
+            Line::from(""),
+            Line::styled(
+                "  ● No active fleet workers. Spawn workers via 'vetto fleet spawn <agent>' or 'v' to run verification probe.",
+                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(""),
+            Line::styled(
+                if let Some(ref probe_status) = state.fleet_probe_status {
+                    format!("  Last Isolation Probe: {probe_status}")
+                } else {
+                    "  Press 'v' to execute a live 4-worker / 6-pair isolation verification probe.".to_string()
+                },
+                Style::default().fg(
+                    if state
+                        .fleet_probe_status
+                        .as_ref()
+                        .map(|s| s.starts_with("PASS"))
+                        .unwrap_or(false)
+                    {
+                        theme.success
+                    } else {
+                        theme.muted
+                    },
+                ),
+            ),
+            Line::from(""),
+            Line::styled(
+                "  Each worker runs with isolated cgroup limits, ephemeral CoW branch, disjoint port, and private IPC/PID namespaces.",
+                Style::default().fg(theme.muted),
+            ),
+        ];
+        f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
+    } else {
+        let rows = state.fleet_workers.iter().enumerate().map(|(idx, w)| {
+            let is_selected = idx == state.selected_fleet_worker;
+            let row_style = if is_selected {
+                Style::default().bg(theme.selection_bg)
+            } else {
+                Style::default()
+            };
+            let prefix = if is_selected { "▶ " } else { "  " };
+
+            let pid_str = w
+                .pid
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            let scope_str = w
+                .scope_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or_else(|| w.scope_path.to_str().unwrap_or("-"));
+
+            let limits_str = format!(
+                "{}w/{:.1}G/{}p",
+                w.cpu_weight,
+                w.memory_limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                w.pids_max
+            );
+
+            let status_style = match w.status.to_ascii_lowercase().as_str() {
+                "running" | "active" => Style::default()
+                    .fg(theme.success)
+                    .add_modifier(Modifier::BOLD),
+                "allocated" => Style::default()
+                    .fg(theme.info)
+                    .add_modifier(Modifier::BOLD),
+                "exited" | "stale" => Style::default()
+                    .fg(theme.danger)
+                    .add_modifier(Modifier::BOLD),
+                _ => Style::default().fg(theme.muted),
+            };
+
+            Row::new(vec![
+                Span::styled(
+                    format!("{prefix}{}", w.worker_id),
+                    Style::default()
+                        .fg(if is_selected { theme.logo } else { theme.text })
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(&w.agent_name, Style::default().fg(theme.info)),
+                Span::styled(pid_str, Style::default().fg(theme.accent)),
+                Span::styled(w.ephemeral_port.to_string(), Style::default().fg(theme.muted)),
+                Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
+                Span::styled(scope_str, Style::default().fg(theme.muted)),
+                Span::styled(limits_str, Style::default().fg(theme.warning)),
+                Span::styled(format!("[{}]", w.status.to_ascii_uppercase()), status_style),
+            ])
+            .style(row_style)
+        });
+
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(14), // WORKER ID
+                Constraint::Length(12), // AGENT
+                Constraint::Length(8),  // PID
+                Constraint::Length(8),  // PORT
+                Constraint::Length(14), // COW BRANCH
+                Constraint::Length(22), // CGROUP SCOPE
+                Constraint::Length(18), // LIMITS
+                Constraint::Min(10),    // STATUS
+            ],
+        )
+        .header(
+            Row::new(vec![
+                Span::styled(
+                    "  WORKER ID",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "AGENT",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "PID",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "PORT",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "COW BRANCH",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "CGROUP SCOPE",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "LIMITS",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "STATUS",
+                    Style::default().fg(theme.muted).add_modifier(Modifier::BOLD),
+                ),
+            ])
+            .bottom_margin(1),
+        )
+        .block(table_block);
+
+        f.render_widget(table, chunks[1]);
+    }
+}
+
 fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
     let theme = &state.theme;
 
     let status_text = state.active_status().unwrap_or(
-        "Theme: ARASAKA RED  |  Bare 'vetto' interactive TTY dashboard  |  Press 't' to toggle palette"
+        "Theme: ARASAKA RED  |  Bare 'vetto' interactive TTY dashboard  |  Press 't' to toggle palette",
     );
 
-    let lines = vec![
-        Line::from(vec![
-            Span::styled("STATUS: ", Style::default().fg(theme.muted)),
+    let key_hints = if state.active_tab == MissionTab::Fleet {
+        vec![
             Span::styled(
-                status_text,
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                "[1-6]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
-        ]),
-        Line::from(vec![
+            Span::styled(" Tabs  ", Style::default().fg(theme.text)),
             Span::styled(
-                "[1-5]",
+                "[v]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Verify Probe  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[x]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Terminate  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[j/k]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Navigate  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[Tab]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Switch Tab  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[t]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Theme  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[r]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Refresh  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[q/Esc]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Quit", Style::default().fg(theme.text)),
+        ]
+    } else {
+        vec![
+            Span::styled(
+                "[1-6]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
             Span::styled(" Tabs  ", Style::default().fg(theme.text)),
@@ -1525,7 +1824,18 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
             Span::styled(" Quit", Style::default().fg(theme.text)),
+        ]
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("STATUS: ", Style::default().fg(theme.muted)),
+            Span::styled(
+                status_text,
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            ),
         ]),
+        Line::from(key_hints),
     ];
 
     let footer_block = Block::default()
@@ -1645,5 +1955,75 @@ mod tests {
         assert!(content.contains("SECURITY STREAM"));
         assert!(content.contains("BLOCKED EGRESS (ANTI-SSRF)"));
         assert!(content.contains("169.254.169.254:80"));
+    }
+
+    #[test]
+    fn test_render_fleet_swarm_tab() {
+        let backend = TestBackend::new(140, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::Fleet;
+
+        state.fleet_workers.push(crate::multi::fleet::AgentWorkerScope {
+            worker_id: "agent-01".to_string(),
+            agent_name: "claude".to_string(),
+            scope_path: std::path::PathBuf::from("/sys/fs/cgroup/vetto-fleet/agent-01.scope"),
+            cow_branch_name: "agent-01".to_string(),
+            ephemeral_port: 49201,
+            cpu_weight: 100,
+            memory_limit_bytes: 2 * 1024 * 1024 * 1024,
+            pids_max: 128,
+            ipc_isolated: true,
+            allocated_at: chrono::Utc::now(),
+            pid: Some(4242),
+            status: "running".to_string(),
+            workspace_dir: std::path::PathBuf::from("/home/user/.vetto/fleet/workspaces/agent-01"),
+        });
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("FLEET SWARM"));
+        assert!(content.contains("ACTIVE FLEET WORKERS"));
+        assert!(content.contains("cpu.weight: 100"));
+        assert!(content.contains("2.0 GiB per worker"));
+        assert!(content.contains("CLONE_NEWIPC + CLONE_NEWPID"));
+        assert!(content.contains("agent-01"));
+        assert!(content.contains("claude"));
+        assert!(content.contains("4242"));
+        assert!(content.contains("49201"));
+    }
+
+    #[test]
+    fn test_render_fleet_swarm_tab_empty() {
+        let backend = TestBackend::new(140, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::Fleet;
+        state.fleet_workers.clear();
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("FLEET SWARM"));
+        assert!(content.contains("No active fleet workers"));
     }
 }
