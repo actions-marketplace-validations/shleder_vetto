@@ -113,6 +113,12 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "zcode" => Some("zcode".to_string()),
         "kimi" => Some("kimi".to_string()),
         "grok" => Some("grok".to_string()),
+        "hermes" => Some("hermes".to_string()),
+        "kilo" => Some("kilo".to_string()),
+        "pi" => Some("pi".to_string()),
+        "command_code" => Some("command-code".to_string()),
+        "freebuff" => Some("freebuff".to_string()),
+        "deepseek_harness" => Some("deepseek-harness".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }
@@ -457,6 +463,22 @@ mod tests {
         assert!(!result.tested_registry);
         assert!(result.conflicts.is_none());
         assert!(result.summary().contains("registry not tested"));
+    }
+
+    #[test]
+    fn command_for_agent_resolves_all_builtin_agents() {
+        assert_eq!(command_for_agent("hermes"), Some("hermes".to_string()));
+        assert_eq!(command_for_agent("kilo"), Some("kilo".to_string()));
+        assert_eq!(command_for_agent("pi"), Some("pi".to_string()));
+        assert_eq!(
+            command_for_agent("command_code"),
+            Some("command-code".to_string())
+        );
+        assert_eq!(command_for_agent("freebuff"), Some("freebuff".to_string()));
+        assert_eq!(
+            command_for_agent("deepseek_harness"),
+            Some("deepseek-harness".to_string())
+        );
     }
 
     #[test]

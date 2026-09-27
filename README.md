@@ -79,7 +79,7 @@ curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 Enable zero-configuration sandboxing for your coding agent once. Vetto installs a non-destructive shim in `~/.vetto/shims` with priority in `PATH`:
 
 ```bash
-vetto enable claude   # supports codex, opencode, cursor, aider, antigravity, and 18 profiles
+vetto enable claude   # supports codex, opencode, cursor, aider, antigravity, and 24 profiles
 claude                # runs normally — fully sandboxed at the kernel boundary
 ```
 
@@ -160,7 +160,7 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 
 ## Multi-Agent Compatibility Roster
 
-Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 18 leading agent runtimes:
+Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 24 leading agent runtimes:
 
 | Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
 | :--- | :--- | :--- | :--- |
@@ -181,6 +181,12 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **Devin** | `devin` | `api.devin.ai`, `cognition.ai` | `~/.devin`, `~/.config/devin` |
 | **GitHub Copilot** | `copilot` | `api.github.com`, Copilot endpoints | `~/.config/github-copilot` |
 | **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch caches |
+| **Hermes Agent** | `hermes` | `nousresearch.com`, Together, OpenAI, Anthropic | `~/.hermes`, `~/.config/hermes` |
+| **Kilo Code** | `kilo` | `api.kilo.ai`, OpenAI, Anthropic, OpenRouter | `~/.kilo`, `~/.config/kilo` |
+| **pi** | `pi` | `api.groq.com`, OpenAI, Anthropic, OpenRouter | `~/.pi`, `~/.config/pi` |
+| **Command Code** | `command_code` | `api.cohere.com`, Cohere AI, OpenAI, Anthropic | `~/.command-code`, `~/.config/command-code` |
+| **Freebuff** | `freebuff` | `api.deepseek.com`, OpenAI, Anthropic | `~/.freebuff`, `~/.config/freebuff` |
+| **DeepSeek Harness** | `deepseek_harness` | `api.deepseek.com`, OpenAI, Anthropic | `~/.deepseek`, `~/.config/deepseek` |
 
 ---
 

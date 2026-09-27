@@ -25,16 +25,16 @@ unproven rather than assumed.
 | OpenHands | `openhands` | Containerized or local | statusline or none | `openhands` | Model endpoints | not in CI |
 | Cognition Devin | `devin` | Cloud agent CLI | statusline | `devin` | Devin API endpoints | not in CI |
 | Hugging Face smolagents | `smolagents`, `vetto eval` | No OS isolation (threads) | none / full | `smolagents` | Hugging Face Hub + model providers | covered in CI |
-| Hermes Agent (#1 Leaderboard) | `hermes`, `hermes-agent` | Unbounded Python runtime | statusline or full | `hermes` | Model provider + target repo write boundary | planned |
-| Kilo Code (#3 Leaderboard) | `kilo`, `kilo-code` | Extension/CLI boundary | full | `kilo` | Workspace root containment & tmpfs secret overlay | planned |
-| pi (#5 Leaderboard) | `pi` | Minimalist terminal runtime | statusline | `pi` | Model provider endpoints | planned |
-| Command Code (#8 Leaderboard) | `command-code` | Autonomous loop | full | `command-code` | Strict timeout & process group eviction | planned |
-| Freebuff (#9 Leaderboard) | `freebuff` | Multi-model agent runtime | statusline | `freebuff` | L7 proxy SNI filtering | planned |
-| DeepSeek Harness (#10 Leaderboard) | `deepseek-harness` | Batch benchmark runner | none or statusline | `deepseek-harness` | Fair-share cgroups v2 fleet containment | planned |
+| Hermes Agent (#1 Leaderboard) | `hermes`, `hermes-agent` | Unbounded Python runtime | statusline or full | `hermes` | Model provider + target repo write boundary | first-class preset |
+| Kilo Code (#3 Leaderboard) | `kilo`, `kilo-code` | Extension/CLI boundary | full | `kilo` | Workspace root containment & tmpfs secret overlay | first-class preset |
+| pi (#5 Leaderboard) | `pi` | Minimalist terminal runtime | statusline | `pi` | Model provider endpoints | first-class preset |
+| Command Code (#8 Leaderboard) | `command-code` | Autonomous loop | full | `command_code` | Strict timeout & process group eviction | first-class preset |
+| Freebuff (#9 Leaderboard) | `freebuff` | Multi-model agent runtime | statusline | `freebuff` | L7 proxy SNI filtering | first-class preset |
+| DeepSeek Harness (#10 Leaderboard) | `deepseek-harness` | Batch benchmark runner | none or statusline | `deepseek_harness` | Fair-share cgroups v2 fleet containment | first-class preset |
 | Custom process | any executable | unknown | statusline or none | `custom` | Default remains `off` | process contract covered |
 
-## High-Volume Token Leaderboard Targets (Upcoming Dedicated Support)
-The production token leaderboard (September 2026) tracks massive usage across emerging autonomous runtimes. Vetto provides daemon-less kernel isolation (sub-4ms cold start, Landlock LSM ABI 1-6, tmpfs secret masking, cgroups v2 tree extinction) for these high-throughput agents:
+## High-Volume Token Leaderboard Presets
+The production token leaderboard (September 2026) tracks massive usage across emerging autonomous runtimes. Vetto provides native zero-config sandbox profiles (`profiles/agents/*.toml`), automatic network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through (sub-4ms cold start, Landlock LSM ABI 1-6, tmpfs secret masking, cgroups v2 tree extinction) for these high-throughput agents:
 - **Hermes Agent** (1.7T tokens) — Autonomous tool-use loop fencer.
 - **Kilo Code** (793B tokens) — Workspace containment and secret masking.
 - **pi** (397B tokens) — Minimalist terminal sandbox with stdio buffer protection.

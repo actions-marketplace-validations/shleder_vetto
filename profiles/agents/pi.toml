@@ -1,0 +1,68 @@
+[metadata]
+name = "pi"
+description = "Compatibility profile for pi minimalist terminal agent (#5 Token Leaderboard)."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.pi",
+    "$HOME/.config/pi",
+    "$HOME/.cache/pi",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.pi",
+    "$HOME/.config/pi",
+    "$HOME/.cache/pi",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+
+[environment]
+pass_through = [
+    "PI_*",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GROQ_API_KEY",
+    "OPENROUTER_API_KEY",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "api.openai.com",
+    "api.anthropic.com",
+    "api.groq.com",
+    "openrouter.ai",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+]
