@@ -13,19 +13,19 @@ linux-fsonly = "NOT_APPLICABLE"
 linux-seccomp = "NOT_APPLICABLE"
 macos = "NOT_APPLICABLE"
 
-known_limitation = "Windows evidence — host-fact-only, пока нет HANDLE-capture в backend (требует отдельного backend-ревью, вне verify-ng). Per-domain egress без admin — UNPROVABLE (WFP требует elevation). WSL-interop — см. WIN-WSL-001 (UNSUPPORTED)."
-residual_risk = "UNC/mapped-drive алиасы — см. WIN-UNC-001 (PARTIAL/advisory). WFP allowlist без admin недоказуем и обязан fail-closed."
+known_limitation = "Windows evidence is host-fact-only until HANDLE-capture in backend (requires separate backend review, outside verify-ng). Per-domain egress without admin is UNPROVABLE (WFP requires elevation). WSL interop: see WIN-WSL-001 (UNSUPPORTED)."
+residual_risk = "UNC/mapped-drive aliases: see WIN-UNC-001 (PARTIAL/advisory). WFP allowlist without admin is unprovable and must fail-closed."
 
 [evidence.host_facts]
-job-sweep = "Job Object kill-on-close: external host observe после close обязан найти ноль residual процессов"
-token-fact = "host-side token/integrity snapshot: Low integrity + restricted token удержаны (не self-report процесса)"
-acl-postmortem = "host stat внешних таргетов после wait: absent/unchanged"
-no-pipe-collection = "windows evidence собирается host-фактами; pipe-drain stub возвращает not-EOF и дает INCONCLUSIVE, никогда PASS"
+job-sweep = "Job Object kill-on-close: external host observe after close must find zero residual processes"
+token-fact = "host-side token/integrity snapshot: Low integrity + restricted token held (not process self-report)"
+acl-postmortem = "host stat of external targets after wait: absent/unchanged"
+no-pipe-collection = "Windows evidence is collected via host facts; pipe-drain stub returns not-EOF yielding INCONCLUSIVE, never PASS"
 
 [evidence.constrained_channel]
-errno_class = "запрещённые доступы обязаны вернуть ACCESS_DENIED с nonce сессии (narrow hint; вердикт только по host-фактам)"
+errno_class = "denied accesses must return ACCESS_DENIED with session nonce (narrow hint; verdict based on host facts only)"
 vectors = ["powershell-escape", "cmd-escape", "winapi-direct", "unc-alias", "mapped-drive", "wsl-interop-probe", "token-escape", "job-escape", "acl-bypass"]
 
 [evidence.not_applicable]
-linux-full = "Windows-only battery; на Linux требуется probe-доказательство отсутствия windows-capability"
-macos = "Windows-only battery; на macOS требуется probe-доказательство отсутствия windows-capability"
+linux-full = "Windows-only battery; on Linux requires probe proof of missing Windows capability"
+macos = "Windows-only battery; on macOS requires probe proof of missing Windows capability"

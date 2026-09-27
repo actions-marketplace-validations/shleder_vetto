@@ -269,7 +269,7 @@ fn test_proc_esc_001_linux_fsonly_detached_grandchild_gap_never_pass() {
     assert_eq!(log.len(), 1);
 
     // CRITICAL: Master Task Section 6 invariant:
-    // Linux FS-ONLY: documented detached-grandchild gap — НЕ объявлять PASS!
+    // Linux FS-ONLY: documented detached-grandchild gap — DO NOT declare PASS!
     assert_ne!(
         out.result.verdict,
         Verdict::Pass,

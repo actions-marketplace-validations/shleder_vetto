@@ -1,4 +1,4 @@
-# TIER-DIFF-001 — differential testing: full vs fs-only vs seccomp обязаны расходиться только задокументированно (никаких silent downgrade).
+# TIER-DIFF-001 — differential testing: full vs fs-only vs seccomp must diverge strictly according to documentation (zero silent downgrade).
 id = "TIER-DIFF-001"
 category = "spawn"
 severity = "high"
@@ -12,15 +12,15 @@ linux-seccomp = "PARTIAL"
 macos = "NOT_APPLICABLE"
 windows = "NOT_APPLICABLE"
 
-known_limitation = "Differential доказывает отсутствие silent downgrade между тирами, а не эквивалентность тиров. VETTO_FORCE_TIER разрешён ТОЛЬКО в tier-differential CI job с cross-check фактического тира; вне его — отравление (FAIL/INCONCLUSIVE)."
-residual_risk = "fs-only/seccomp слабее full по построению; любое PASS на слабом тире несёт ceiling PARTIAL и residual_risk."
+known_limitation = "Differential proves absence of silent downgrade across tiers, not tier equivalence. VETTO_FORCE_TIER is permitted ONLY in tier-differential CI job with cross-check of detected tier; elsewhere it is poison (FAIL/INCONCLUSIVE)."
+residual_risk = "fs-only/seccomp are weaker than full by design; any PASS on weaker tier carries PARTIAL ceiling and residual_risk."
 
 [differential]
 tiers = ["full", "fs-only", "seccomp"]
-rule = "вердикты обязаны совпадать либо расходиться строго в задокументированную слабую сторону (Strong→Partial/Inconclusive); расхождение в сторону PASS на слабом тире при FAIL на strong — баг oracle/gate"
-force_tier_note = "VETTO_FORCE_TIER вне tier-differential job — poison (FM-08)"
+rule = "verdicts must match or diverge strictly toward documented weaker side (Strong->Partial/Inconclusive); divergence toward PASS on weak tier when strong yields FAIL is an oracle/gate bug"
+force_tier_note = "VETTO_FORCE_TIER outside tier-differential job is poison (FM-08)"
 vectors = ["vfs-trav-diff", "net-exfil-diff", "proc-tree-diff", "sec-blocks-diff"]
 
 [evidence.host_facts]
-tier-fact = "фактический тир каждого прогона зафиксирован host-side (single detect per run) и совпадаёт с заявленным"
-spec_hash = "FrozenSpec hash каждого прогона включает tier label; подмена тира ломает continuity"
+tier-fact = "actual tier of each run is recorded host-side (single detect per run) and matches declared tier"
+spec_hash = "FrozenSpec hash of each run includes tier label; tier tampering breaks continuity"

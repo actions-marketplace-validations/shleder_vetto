@@ -1,4 +1,4 @@
-# FUZZ-CORPUS-001 — fuzzing стратегия в форме сценария: корпус path/env/argv мутаций, fail-closed oracle, без production-fuzz кода.
+# FUZZ-CORPUS-001 — fuzzing strategy as a scenario: path/env/argv mutation corpus, fail-closed oracle, zero production-fuzz code.
 id = "FUZZ-CORPUS-001"
 category = "spawn"
 severity = "high"
@@ -11,15 +11,15 @@ linux-fsonly = "PARTIAL"
 macos = "PARTIAL"
 windows = "PARTIAL"
 
-known_limitation = "Сценарий фиксирует контракт fuzz-корпуса и oracle-правила, а не сам fuzzer. Любой crash/hang/нарушение границы дает FAIL/INCONCLUSIVE, никогда PASS. Корпус хранится вне репозитория enforcement (только docs/scenarios здесь)."
-residual_risk = "Fuzzing находит векторы, но не доказывает их отсутствие; новые находки обязаны стать новыми векторами/quorum в реестре."
+known_limitation = "Scenario specifies fuzz corpus contract and oracle rules, not the fuzzer itself. Any crash/hang/boundary violation yields FAIL/INCONCLUSIVE, never PASS. Corpus stored outside enforcement repo (only docs/scenarios here)."
+residual_risk = "Fuzzing discovers vectors but does not prove absence; new findings must become new vectors/quorum in registry."
 
 [fuzz]
 corpus = ["path-alias-mutations", "env-key-mutations", "argv0-mutations", "cwd-mutations", "locale-encoding-mutations", "symlink-forest-mutations"]
-oracle_rule = "любое нарушение host-fact границы или расхождение nonce/control дает FAIL/INCONCLUSIVE; PASS требует host-fact + control + quorum как обычно"
-seed_policy = "детерминированные seeds в CI; ночные расширенные прогоны — только CI-runner/VM"
+oracle_rule = "any violation of host-fact boundary or nonce/control mismatch yields FAIL/INCONCLUSIVE; PASS requires host-fact + control + quorum as usual"
+seed_policy = "deterministic seeds in CI; nightly extended runs on CI-runner/VM only"
 vectors = ["path-fuzz", "env-fuzz", "argv-fuzz", "symlink-fuzz"]
 
 [execution]
-local_allowed = "малый seed-набор локально; полный корпус — CI"
+local_allowed = "small seed set locally; full corpus on CI"
 only_disposable_vm = false

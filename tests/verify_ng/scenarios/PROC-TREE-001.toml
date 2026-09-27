@@ -12,13 +12,13 @@ linux-fsonly = "PARTIAL"
 macos = "PARTIAL"
 
 known_limitation = "Proves process-tree containment for the covered escape shapes only; hostile scheduler delaying reparent past the sweep budget yields INCONCLUSIVE, never PASS."
-residual_risk = "fs-only setsid orphans и macOS watchdog races — известный residual; вердикт FAIL/INCONCLUSIVE, destructive-варианты только в disposable VM."
+residual_risk = "fs-only setsid orphans and macOS watchdog races are known residuals; verdict FAIL/INCONCLUSIVE, destructive variants only in disposable VM."
 
 [evidence.host_facts]
-tree_sweep = "external sweep после terminate обязан найти ноль residual процессов"
-sibling-scan = "никакой sibling/detached процесс вне дерева не должен пережить сессию (host-side observe)"
-handles = "унаследованные дескрипторы/handle не дают пережить kill-on-close (host-side check)"
+tree_sweep = "external sweep after terminate must find zero residual processes"
+sibling-scan = "no sibling/detached process outside tree may survive session (host-side observe)"
+handles = "inherited descriptors/handles do not permit survival past kill-on-close (host-side check)"
 
 [evidence.constrained_channel]
-errno_class = "ptrace/process_vm/pidfd-инъекции обязаны вернуть EPERM с nonce сессии (где применимо)"
+errno_class = "ptrace/process_vm/pidfd injections must return EPERM with session nonce (where applicable)"
 vectors = ["setsid-daemon", "double-fork", "background-nohup", "sibling-spawn", "fd-handle-inherit", "job-escape-win"]

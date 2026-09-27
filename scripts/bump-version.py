@@ -82,11 +82,16 @@ def update_versions_md(new_ver, next_ver, desc="Automated bump"):
     today = time.strftime("%Y-%m-%d", time.gmtime())
     new_row = f"| **{new_ver}** | **{today}** | {desc} | GitHub release v{new_ver}, npm {new_ver}, crates.io {new_ver}, Homebrew tap {new_ver} |\n"
     
-    # Insert before ## Следующая версия
-    if "## Следующая версия:" in content:
-        parts = content.split("## Следующая версия:")
+    # Insert before ## Next Version: or ## Следующая версия:
+    next_marker = None
+    if "## Next Version:" in content:
+        next_marker = "## Next Version:"
+    elif "## Следующая версия:" in content:
+        next_marker = "## Следующая версия:"
+    if next_marker:
+        parts = content.split(next_marker)
         next_section = re.sub(r'\*\*[0-9\.]+\*\*', f'**{next_ver}**', parts[1], count=1)
-        new_content = parts[0] + new_row + "\n## Следующая версия:" + next_section
+        new_content = parts[0] + new_row + f"\n{next_marker}" + next_section
         with open(VERSIONS_MD, "w") as f:
             f.write(new_content)
         print("Updated VERSIONS.md")
@@ -197,8 +202,8 @@ def main():
     update_file(os.path.join(REPO_ROOT, "docs", "integrations", "opencode.md"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "docs", "integrations", "claude-code.md"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "docs", "field-testing.md"), rf'current `{re.escape(current)}` package', f'current `{target}` package')
-    update_file(os.path.join(REPO_ROOT, "docs", "architecture", "verify-ng.md"), r'Статус реализации \(' + re.escape(current) + r', факт\)', f'Статус реализации ({target}, факт)')
-    update_file(os.path.join(REPO_ROOT, "docs", "threat-model.md"), r'Статус модели угроз \(' + re.escape(current) + r', факт\)', f'Статус модели угроз ({target}, факт)')
+    update_file(os.path.join(REPO_ROOT, "docs", "architecture", "verify-ng.md"), r'(?:Implementation Status|Статус реализации) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Implementation Status ({target}, verified)')
+    update_file(os.path.join(REPO_ROOT, "docs", "threat-model.md"), r'(?:Threat Model Status|Статус модели угроз) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Threat Model Status ({target}, verified)')
     update_file(os.path.join(REPO_ROOT, "docs", "telemetry.md"), rf'"vetto_version":\s*"{re.escape(current)}"', f'"vetto_version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "docs", "telemetry.md"), r'\(e\.g\. `' + re.escape(current) + r'`\)', f'(e.g. `{target}`)')
 

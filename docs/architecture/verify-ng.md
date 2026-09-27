@@ -1,254 +1,254 @@
 # verify-ng — Adversarial Security Verification
 
-> Статус реализации (0.5.1, факт): Stage 2 correction — non-self-authorizing
-> challenge-response для `Aux`-pipeline сценариев на unix: host буферит
-> свежий 128-бит challenge в host-downlink pre-spawn и НИЧЕГО PASS-capable
-> в env не выдаёт; child обязан прочитать challenge и вернуть rotation
-> (`challenge`+nonce, последние 8 символов в начало) на host-uplink.
-> Только точный rotated response чеканит `VerifiedControl` → `HOST_FACT
-> control` с provenance (`ExecutionIdentity`: scenario + session nonce +
-> registry + frozen). Echo/challenge/nonce/stale/duplicates — мимо.
-> Oracle чист (без IO): provenance == текущей identity, иначе INCONCLUSIVE.
-> Покрыто: `POSITIVE/ECHO/SELF-AUTH/FORGE/REPLAY/WRONG-SCENARIO/
+> Implementation Status (0.5.1, verified): Stage 2 correction — non-self-authorizing
+> challenge-response for `Aux`-pipeline scenarios on unix: host buffers
+> fresh 128-bit challenge in host-downlink pre-spawn and provides NOTHING
+> PASS-capable in env; child must read challenge and return rotation
+> (`challenge`+nonce, last 8 characters moved to front) to host-uplink.
+> Only the exact rotated response mints `VerifiedControl` → `HOST_FACT
+> control` with provenance (`ExecutionIdentity`: scenario + session nonce +
+> registry + frozen). Echo/challenge/nonce/stale/duplicates are rejected.
+> Oracle is pure (zero IO): provenance == current identity, otherwise INCONCLUSIVE.
+> Covered: `POSITIVE/ECHO/SELF-AUTH/FORGE/REPLAY/WRONG-SCENARIO/
 > WRONG-REGISTRY/DUPLICATE-001`, `TEST-HOST-EVIDENCE-REPLAY-001`,
 > `CONTROL-SPLIT-001` (A behavior → PASS, B forged file → INCONCLUSIVE),
 > violation-dominates (→ FAIL), blocker-ceiling (→ INCONCLUSIVE).
-> Блокеры на direct-exec остаются INCONCLUSIVE/FAIL (containment не
-> доказывается, direct — не sandbox); non-Unix — control-unobserved.
-> `vetto verify-ng --lint` без спавна; CLI по-прежнему не исполняет
-> registry-suite, backend-wired сьюты — следующий этап. Всё ниже про
-> PASS-вердикты блокеров описывает дизайн, а не текущее поведение CLI.
+> Blockers on direct-exec remain INCONCLUSIVE/FAIL (containment is not
+> proven, direct is not a sandbox); non-Unix — control-unobserved.
+> `vetto verify-ng --lint` without spawning; CLI still does not execute
+> registry-suite; backend-wired suites are next stage. Everything below
+> regarding blocker PASS-verdicts describes design, not current CLI behavior.
 
-Измерительный harness поверх sandbox-бэкендов. Enforcement остаётся в
-`src/sandbox/*`; этот модуль только измеряет и отчитывается. Не является
-частью security boundary.
+Measurement harness on top of sandbox backends. Enforcement remains in
+`src/sandbox/*`; this module only measures and reports. Not a part of
+the security boundary.
 
-## Две оси
+## Two Axes
 
 - `Verdict`: `PASS` / `FAIL` / `INCONCLUSIVE` / `NOT_APPLICABLE`
-  (`src/verify_ng/model.rs`). Fail-closed: не-PASS в blocker-категории
-  блокирует релиз. `NOT_APPLICABLE` требует probe-доказательства отсутствия
-  capability, иначе блокирует как `N/A-without-evidence`.
-- `ClaimStrength`: `STRONG` / `PARTIAL` / `UNSUPPORTED` — статическое
-  свойство пары (сценарий, платформа-тир) в registry. Нет «Partial-PASS»:
-  отчёт несёт обе оси.
+  (`src/verify_ng/model.rs`). Fail-closed: non-PASS in blocker category
+  blocks release. `NOT_APPLICABLE` requires probe evidence of missing
+  capability, otherwise blocks as `N/A-without-evidence`.
+- `ClaimStrength`: `STRONG` / `PARTIAL` / `UNSUPPORTED` — static property
+  of the (scenario, platform-tier) pair in the registry. There is no
+  "Partial-PASS": reports carry both axes.
 
-## Уровни evidence
+## Evidence Tiers
 
-1. `HOST_FACT` — наблюдено доверенным хостом после wait (post-mortem stat,
-   wait-status, sweep, canary-сравнение, spec-hash, verified
-   challenge-response). Единственный уровень, поддерживающий PASS.
-   Позитивный контроль требует provenance, в точности равной текущей
-   `ExecutionIdentity`, плюс корректно выполненного поведения (rotation
-   свежего challenge, не echo): иначе oracle даёт INCONCLUSIVE
-   (echo/replay/wrong-scenario/wrong-registry отвергаются).
-2. `CONSTRAINED` — узкий nonce-bound сигнал изнутри (errno-класс + nonce).
-   Поддерживает FAIL, никогда PASS в одиночку.
-3. `SELF_REPORT` — stdout-маркеры атаки. Только hint для triage.
+1. `HOST_FACT` — observed by trusted host after wait (post-mortem stat,
+   wait-status, sweep, canary comparison, spec-hash, verified
+   challenge-response). The only tier capable of supporting PASS.
+   Positive control requires provenance exactly matching current
+   `ExecutionIdentity`, plus correctly executed behavior (rotation of
+   fresh challenge, not echo): otherwise oracle yields INCONCLUSIVE
+   (echo/replay/wrong-scenario/wrong-registry are rejected).
+2. `CONSTRAINED` — narrow nonce-bound signal from inside (errno class + nonce).
+   Supports FAIL, never PASS alone.
+3. `SELF_REPORT` — stdout markers of attack. Triage hint only.
 
-## Nonce-связка (FM-02)
+## Nonce Binding (FM-02)
 
-Engine выдаёт nonce сессии. Негативная проба и позитивный контроль обязаны
-его использовать; хост сверяет совпадение. Расхождение — INCONCLUSIVE.
-Ловушки `ORACLE-DECEIT-001` / `CONTROL-SPLIT-001` — постоянные regression.
+Engine generates session nonce. Negative probe and positive control must
+use it; host verifies match. Discrepancy yields INCONCLUSIVE.
+Traps `ORACLE-DECEIT-001` / `CONTROL-SPLIT-001` are permanent regressions.
 
 ## FrozenSpec (FM-03)
 
-Один `detect` на сценарий; хэш считается один раз из той же `&Policy`-ссылки,
-что уходит в `Backend::spawn`; сериализация каноническая (сортировка,
-`NetMode::label`, tier, backend-describe, argv/env/cwd, nonce, хэш реестра,
-плюс `policy_bytes` — канонический рендеринг всей `Policy`, а не только
-разложенных path-списков). Повторная заморозка перед spawn обязана совпасть
-(`verify_spec_continuity`).
+One `detect` per scenario; hash is computed once from the same `&Policy` reference
+passed to `Backend::spawn`; canonical serialization (sorting, `NetMode::label`,
+tier, backend-describe, argv/env/cwd, nonce, registry hash, plus `policy_bytes` —
+canonical rendering of entire `Policy`, not just decomposed path lists).
+Re-freeze before spawn must match (`verify_spec_continuity`).
 
-## Spawn-контракт (FM-09)
+## Spawn Contract (FM-09)
 
-Все `Backend::spawn` — под `SPAWN_SERIAL` от detect до fork-возврата.
-Блокирующий `wait()` в runner запрещён; только `try_wait`-poll +
+All `Backend::spawn` under `SPAWN_SERIAL` from detect to fork-return.
+Blocking `wait()` in runner is forbidden; only `try_wait`-poll +
 `kill_on_deadline` + deadline-aware drain (`collector::drain_with_deadline`).
 
-## Cleanup-матрица (FM-05)
+## Cleanup Matrix (FM-05)
 
 - Linux FULL — Strong (PIDns teardown).
 - Windows Job — Strong (kill-on-close).
-- Linux FS-ONLY / macOS — BestEffort (group-kill + sweep-бюджет 2с);
-  destructive-сьюты там только в disposable VM.
+- Linux FS-ONLY / macOS — BestEffort (group-kill + sweep budget 2s);
+  destructive suites only in disposable VM.
 
 ## Fixture (FM-06)
 
-Один spawn — один сценарий. Хэш payload до/после; мутация — INCONCLUSIVE.
-HOME изолирован на прогон. `env_extra` engine-контролируем.
+One spawn — one scenario. Payload hash before/after; mutation yields INCONCLUSIVE.
+HOME is isolated per run. `env_extra` is engine-controlled.
 
 ## Redaction (FM-07)
 
-Все detail-строки через `redact_text`: секреты → `[REDACTED]`, control-байты
-чистятся, лимит `MAX_DETAIL`. HOME-префикс маскируется.
+All detail strings pass through `redact_text`: secrets → `[REDACTED]`, control bytes
+stripped, `MAX_DETAIL` limit. HOME prefix masked.
 
-## Diagnostic env (FM-08)
+## Diagnostic Env (FM-08)
 
-`VETTO_SEATBELT_MODE`, `VETTO_NO_MAC_LIMITS`, `VETTO_CHILD_TRACE` (и
-`VETTO_FORCE_TIER` вне tier-differential job) — отравление: FAIL на
-блокерах, INCONCLUSIVE на aux. Детект до spawn.
+`VETTO_SEATBELT_MODE`, `VETTO_NO_MAC_LIMITS`, `VETTO_CHILD_TRACE` (and
+`VETTO_FORCE_TIER` outside tier-differential job) — poison: FAIL on
+blockers, INCONCLUSIVE on aux. Detected before spawn.
 
 ## Gate (FM-12)
 
-`exit::evaluate_gate`: canary (`VFS-TRAV-001`, `ENV-LEAK-001`, `PROC-ESC-001`)
-обязаны PASS; ноль INCONCLUSIVE в I1–I6; NOT_APPLICABLE только с evidence;
-минимум PASS по каждой blocker-категории. Пустой сьют — gate FAIL
+`exit::evaluate_gate`: canaries (`VFS-TRAV-001`, `ENV-LEAK-001`, `PROC-ESC-001`)
+must PASS; zero INCONCLUSIVE in I1–I6; NOT_APPLICABLE only with evidence;
+minimum PASS for each blocker category. Empty suite yields gate FAIL
 (`GATE-VACUUM-001`).
 
-> Итерация 2: gate-минимум по `fs-write` закрывается сценарием
-> `VFS-WRITE-001` (blocker, `linux-full`/`linux-fsonly` STRONG). Без его PASS
-> gate остаётся красным по правилу per-category minimum — vacuum по записи
-> невозможен.
+> Iteration 2: gate minimum for `fs-write` is satisfied by scenario
+> `VFS-WRITE-001` (blocker, `linux-full`/`linux-fsonly` STRONG). Without its PASS
+> gate remains red under the per-category minimum rule — write vacuum
+> is impossible.
 
-## Сьюты итерации 2 (карта покрытия Prompt 01)
+## Iteration 2 Suites (Prompt 01 Coverage Map)
 
-Linux suite (полностью, fail-closed/escape/exfil приоритет):
+Linux suite (complete, fail-closed/escape/exfil priority):
 
-- `VFS-WRITE-001` (blocker, fs-write) — STRONG на full/fs-only. Закрывает
-  пустую blocker-категорию `fs-write` и правило gate-minimum.
-- `VFS-PROC-001` (blocker, fs-read) — `/proc|/sys|/dev`/fd-инъекции.
-- `NET-EXFIL-001` (blocker, net, quorum 3) — мультивекторная эксфильтрация:
-  curl, python-socket, native TCP4/6, DNS, alt-HTTP, UDS/IPC, raw-syscall.
-- `SHELL-ESC-001` (blocker, spawn) — alt-shell/interpreter/PATH-confusion.
+- `VFS-WRITE-001` (blocker, fs-write) — STRONG on full/fs-only. Closes
+  empty blocker category `fs-write` and gate-minimum rule.
+- `VFS-PROC-001` (blocker, fs-read) — `/proc|/sys|/dev`/fd injections.
+- `NET-EXFIL-001` (blocker, net, quorum 3) — multi-vector exfiltration:
+  curl, python-socket, native TCP4/6, DNS, alt-HTTP, UDS/IPC, raw syscall.
+- `SHELL-ESC-001` (blocker, spawn) — alt-shell/interpreter/PATH confusion.
 - `ENV-SECRETS-001` (blocker, secrets) — env/fd/argv/SSH-Git-cloud canary.
 - `PROC-TREE-001` (blocker, proc) — sibling/detached/handles escape.
 - `RACE-TOCTOU-001` (blocker, spawn, quorum 3) — freeze-spawn + symlink-swap
-  TOCTOU, медиана ≥3 прогонов.
-- `SEC-BLOCKS-001` (blocker, spawn) — seccomp/syscall denial по native ABI
+  TOCTOU, median ≥3 runs.
+- `SEC-BLOCKS-001` (blocker, spawn) — seccomp/syscall denial on native ABI
   (ptrace/process_vm/pidfd, mount/pivot, io_uring, userfaultfd, bpf/perf).
-- `RES-EXHAUST-001` (high, proc) — fork/pids/IO/disk/mem; полный вариант
-  только disposable VM.
-- `STRESS-SWEEP-001` (high, proc) — stress/race контракт: медиана, кворум,
-  sweep-бюджеты.
-- `FUZZ-CORPUS-001` (high, spawn) — контракт fuzz-корпуса (path/env/argv/cwd/
-  symlink мутации) и oracle-правила без production-fuzz кода.
+- `RES-EXHAUST-001` (high, proc) — fork/pids/IO/disk/mem; full variant
+  only in disposable VM.
+- `STRESS-SWEEP-001` (high, proc) — stress/race contract: median, quorum,
+  sweep budgets.
+- `FUZZ-CORPUS-001` (high, spawn) — fuzz corpus contract (path/env/argv/cwd/
+  symlink mutations) and oracle rules without production-fuzz code.
 - `TIER-DIFF-001` (high, spawn) — differential full vs fs-only vs seccomp:
-  расхождение только в задокументированную слабую сторону, без silent
+  divergence strictly toward documented weaker side, no silent
   downgrade.
 
 Windows suite (host-fact-only):
 
 - `WIN-ESC-001` (blocker, proc) — PowerShell/cmd/API, token, integrity, Job,
-  ACL; evidence строго host-fact-only (pipe-drain stub даёт not-EOF →
-  INCONCLUSIVE, никогда PASS).
-- `WIN-NET-001` (blocker, net) — `--net=off` через AppContainer capabilities
-  (PARTIAL); per-domain без admin UNPROVABLE и обязан fail-closed.
-- `WIN-UNC-001` (high, fs-read) — PARTIAL/advisory до маппинга алиасов.
-- `WIN-WSL-001` (high, fs-read) — UNSUPPORTED baseline; любой PASS — баг.
+  ACL; evidence strictly host-fact-only (pipe-drain stub yields not-EOF →
+  INCONCLUSIVE, never PASS).
+- `WIN-NET-001` (blocker, net) — `--net=off` via AppContainer capabilities
+  (PARTIAL); per-domain without admin is UNPROVABLE and must fail-closed.
+- `WIN-UNC-001` (high, fs-read) — PARTIAL/advisory until alias mapping.
+- `WIN-WSL-001` (high, fs-read) — UNSUPPORTED baseline; any PASS is a bug.
 
-macOS suite (потолок MAC-SHAPE):
+macOS suite (MAC-SHAPE ceiling):
 
-- `MAC-ESC-001` (high, fs-read) — Shape-A + tail-deny побайтово; read вне
-  tail-deny успешен по построению (подтверждение потолка PARTIAL, не FAIL).
-- `MAC-PROC-001` (high, proc) — kqueue watchdog + group-kill + sweep 2с
-  (BestEffort); destructive только в VM.
-- `MAC-SHAPE-001` — побайтовый gate профиля.
+- `MAC-ESC-001` (high, fs-read) — Shape-A + tail-deny byte-for-byte; read outside
+  tail-deny succeeds by design (confirmation of PARTIAL ceiling, not FAIL).
+- `MAC-PROC-001` (high, proc) — kqueue watchdog + group-kill + sweep 2s
+  (BestEffort); destructive only in VM.
+- `MAC-SHAPE-001` — byte-for-byte profile gate.
 
-Уровни запуска: smoke (малые квоты/seed-наборы, локально) → core → platform
-→ destructive/adversarial (только disposable VM/CI-runner) → stress/race
-(медиана) → regression (ловушки) → release-gate. Без elevated privileges
-локально запускается только smoke/core на Strong тирах; всё destructive,
-RES-EXHAUST полный, fuzz-корпус полный — CI-runner/VM.
+Execution tiers: smoke (small quotas/seed sets, local) → core → platform
+→ destructive/adversarial (disposable VM/CI-runner only) → stress/race
+(median) → regression (traps) → release-gate. Without elevated privileges
+only smoke/core on Strong tiers run locally; all destructive,
+full RES-EXHAUST, and full fuzz corpus run on CI-runner/VM.
 
-## Race/stress стратегия
+## Race/Stress Strategy
 
-`RACE-TOCTOU-001` + `STRESS-SWEEP-001`: медиана ≥3 (на практике runs=5),
-кворум векторов на прогон, sweep-бюджет 2с на BestEffort тирах, ретраи не
-превращают FAIL в PASS, расхождение прогонов — INCONCLUSIVE (блокирует gate
-в I1–I6 через ноль-INCONCLUSIVE правило). Параллельные spawn только через
-`SPAWN_SERIAL` (detect→fork-возврат); параллелится подготовка и judging.
+`RACE-TOCTOU-001` + `STRESS-SWEEP-001`: median ≥3 (in practice runs=5),
+quorum of vectors per run, sweep budget 2s on BestEffort tiers, retries do
+not turn FAIL into PASS, run divergence yields INCONCLUSIVE (blocks gate
+in I1–I6 via zero-INCONCLUSIVE rule). Parallel spawns only via
+`SPAWN_SERIAL` (detect→fork-return); preparation and judging are parallelized.
 
-## Fuzzing стратегия
+## Fuzzing Strategy
 
-`FUZZ-CORPUS-001` фиксирует контракт: детерминированные seeds в CI, корпус
-мутаций path/env/argv0/cwd/locale/symlink-forest, oracle-правило
-fail-closed (любое нарушение host-fact границы — FAIL/INCONCLUSIVE).
-Находки обязаны становиться новыми векторами/quorum в реестре; сам fuzzer
-— вне verify-ng (не production-код enforcement).
+`FUZZ-CORPUS-001` establishes contract: deterministic seeds in CI, mutation
+corpus for path/env/argv0/cwd/locale/symlink-forest, fail-closed oracle rule
+(any violation of host-fact boundary yields FAIL/INCONCLUSIVE).
+Findings must become new vectors/quorum in registry; fuzzer itself is outside
+verify-ng (not production enforcement code).
 
-## Differential testing стратегия
+## Differential Testing Strategy
 
-`TIER-DIFF-001` + `SEC-BLOCKS-001[not_applicable]` + `WIN-*/MAC-*` N/A-секции:
-full vs fs-only vs seccomp обязаны совпадать либо слабеть строго
-задокументированно; `VETTO_FORCE_TIER` разрешён только в tier-differential
-CI job. Кросс-OS differential — через N/A с probe-доказательством, без
-молчаливых скипов (иначе `N/A-without-evidence` блокирует gate).
+`TIER-DIFF-001` + `SEC-BLOCKS-001[not_applicable]` + `WIN-*/MAC-*` N/A sections:
+full vs fs-only vs seccomp must match or weaken strictly according to
+documentation; `VETTO_FORCE_TIER` is permitted only in tier-differential
+CI job. Cross-OS differential is handled via N/A with probe evidence, without
+silent skips (otherwise `N/A-without-evidence` blocks the gate).
 
-## Кворум и повторы (FM-13)
+## Quorum and Retries (FM-13)
 
-Multivector-сценарии требуют ≥quorum независимых согласующихся векторов,
-иначе INCONCLUSIVE. Stress — медиана ≥3 прогонов. Ретраи не превращают FAIL
-в PASS.
+Multivector scenarios require ≥quorum independent agreeing vectors,
+otherwise INCONCLUSIVE. Stress requires median of ≥3 runs. Retries never
+turn FAIL into PASS.
 
-## Потолки платформ (FM-11)
+## Platform Ceilings (FM-11)
 
-- macOS `VFS-READ` — максимум PARTIAL (Shape-A + tail-deny; `MAC-SHAPE-001`
-  сверяет профиль побайтово). Strong read-secrecy — только Linux VM.
-- Windows per-domain egress без admin — UNPROVABLE (WFP требует elevation).
-- `WIN-WSL-001` — UNSUPPORTED baseline; любой PASS — баг oracle.
-- Windows evidence — host-fact-only, пока нет HANDLE-capture в backend
-  (требует отдельного backend-ревью, не входит в этот план).
+- macOS `VFS-READ` — maximum PARTIAL (Shape-A + tail-deny; `MAC-SHAPE-001`
+  verifies profile byte-for-byte). Strong read secrecy requires Linux VM.
+- Windows per-domain egress without admin — UNPROVABLE (WFP requires elevation).
+- `WIN-WSL-001` — UNSUPPORTED baseline; any PASS is an oracle bug.
+- Windows evidence — host-fact-only until HANDLE-capture exists in backend
+  (requires dedicated backend review, out of scope for this plan).
 
 ## Pipeline (FM-14)
 
-`Engine` — единственный владелец `SandboxHandle`:
-Engine → Killer → Collector / HostEvidence → Oracle (чистая функция, без
-IO) → Reporter. Oracle не управляет сбором и не касается ОС: весь IO —
-в runner/collector/host-evidence, oracle судит готовые структуры.
-Host-owned контроль (Stage 2 correction, unix): `ControlChannel` создаёт
-до spawn downlink+uplink и буферит свежий challenge; в env — только пути
-FIFO, никакого PASS-значения. Связанные nonce + кворум из verified
-response собираются только для `Aux` pipeline-сценариев. Echo verifier
-material (challenge/nonce/env/stale/duplicates) и child-writable пути
-(`control.txt`, HOME-файлы, stdout, exit code) — не evidence.
-Без verified Aux-ответа `probe_nonce`/`control_nonce` пусты и oracle
-структурно даёт INCONCLUSIVE/FAIL; блокеры на direct-exec — всегда
-INCONCLUSIVE/FAIL (исполнение протокола наблюдается, containment — нет).
-Suite-уровень владения (`SuiteRunner`, один scenario — не более одного
-исполнения) обязателен для любого будущего backend-wired сьюта.
+`Engine` is the sole owner of `SandboxHandle`:
+Engine → Killer → Collector / HostEvidence → Oracle (pure function,
+zero IO) → Reporter. Oracle does not manage collection or interact with OS:
+all IO resides in runner/collector/host-evidence, oracle judges ready structures.
+Host-owned control (Stage 2 correction, unix): `ControlChannel` creates
+downlink+uplink prior to spawn and buffers fresh challenge; env receives only
+FIFO paths, zero PASS value. Bound nonces + quorum from verified response
+are collected only for `Aux` pipeline scenarios. Echo verifier material
+(challenge/nonce/env/stale/duplicates) and child-writable paths
+(`control.txt`, HOME files, stdout, exit code) are NOT evidence.
+Without verified Aux response `probe_nonce`/`control_nonce` are empty and
+oracle structurally yields INCONCLUSIVE/FAIL; blockers on direct-exec are
+always INCONCLUSIVE/FAIL (protocol execution is observed, containment is not).
+Suite-level ownership (`SuiteRunner`, one scenario at most one execution)
+is mandatory for any future backend-wired suite.
 
-## Что всё ещё нельзя доказать
+## What Still Cannot Be Proven
 
-См. Prompt-01 §20 и self-review §E: TLS-payload к allowed-API, целостность
-`$PROJECT` внутри, side-channels, kernel-0day, полнота логов, привязка хэша
-к живому процессу (только непрерывность владения до fork), полнота sweep
-при SIGKILL на FS-ONLY/macOS, UDS/IPC-exfil на mac/Win, статистика CI-таймингов.
+See Prompt-01 §20 and self-review §E: TLS payload to allowed APIs, internal
+`$PROJECT` integrity, side channels, kernel zero-days, log completeness, hash
+binding to a live process (continuity of ownership proven only up to fork),
+sweep completeness under SIGKILL on FS-ONLY/macOS, UDS/IPC exfiltration on
+macOS/Windows, CI timing statistics.
 
-## Stage 3C — production-интеграция (факт, только доказанное тестами)
+## Stage 3C — Production Integration (Verified, Proven by Tests Only)
 
-Единственный прод-путь: `src/sandbox/production.rs` (`ProductionRunner`).
-Прод-спавны (`src/main.rs supervise`, `src/multi/runtime.rs`,
-`src/mcp/wrap.rs`) идут только через `spawn_authoritative` /
-`execute_simple` / `execute_with_backend`; прямого `Backend::spawn` вне
-`production.rs` в прод-коде нет. Таймаут — только проверенный killer-путь
-(deadline → kill → bounded re-wait → nonce sweep), без голого blocking
-`wait()` без последующей printer-friendly sweep-очистки. Отчётность —
-только типизированные `EnforcementState`, никогда `sandboxed/secure`.
+Single production path: `src/sandbox/production.rs` (`ProductionRunner`).
+Production spawns (`src/main.rs supervise`, `src/multi/runtime.rs`,
+`src/mcp/wrap.rs`) execute exclusively via `spawn_authoritative` /
+`execute_simple` / `execute_with_backend`; direct `Backend::spawn` outside
+`production.rs` does not exist in production code. Timeout uses only verified
+killer path (deadline → kill → bounded re-wait → nonce sweep), no raw
+blocking `wait()` without subsequent printer-friendly sweep cleanup.
+Reporting strictly uses typed `EnforcementState`, never `sandboxed/secure`.
 
-### PROVEN IN PRODUCTION (через реальный прод-раннер, Linux, net=off)
+### PROVEN IN PRODUCTION (via real production runner, Linux, net=off)
 
 Filesystem (Landlock allowlist, deny/symlink/proc-root/dotdot/root-escape),
 network off (seccomp UnixOnly, TCP connect + namespace-escape), process
-(pgroup + NO_NEW_PRIVS, host-verified через /proc), tree (group-kill +
+(pgroup + NO_NEW_PRIVS, host-verified via /proc), tree (group-kill +
 nonce sub-reaper sweep, grandchild/reaped, deadline tree-kill),
-resources (RLIMIT_AS/NPROC/CPU/FSIZE, host-verified через /proc/limits),
+resources (RLIMIT_AS/NPROC/CPU/FSIZE, host-verified via /proc/limits),
 syscalls (seccomp hardening deny ptrace), fail-closed (preparation failure
-→ spawn_count==0), no-direct-bypass (backend entered ровно 1 раз),
+→ spawn_count==0), no-direct-bypass (backend entered exactly once),
 identity (policy cwd == FrozenSpec cwd == exec_root == child cwd, nonce
-уникален, env не реинтродуцирует секреты).
+is unique, env does not reintroduce secrets).
 
-### VERIFY-NG ONLY (harness доказывает, прод не заявляет паритет)
+### VERIFY-NG ONLY (Harness proves, production does not claim parity)
 
-Relay allowlist/strict/ask: прод сохраняет существующую relay-архитектуру
-(netns+broker); 3B `UnixOnly` не выдаётся за allowlist relay, через 3B
-границу сеть честно `unsupported`. Full-tier namespaces/mounts/pidns живут
-в существующем `Backend::spawn` (не ослаблены), 3B даёт отчётность +
-верификацию + sweep поверх.
+Relay allowlist/strict/ask: production preserves existing relay architecture
+(netns+broker); 3B `UnixOnly` does not pretend to be allowlist relay; through
+3B boundary network is honestly `unsupported`. Full-tier namespaces/mounts/pidns
+reside in existing `Backend::spawn` (not weakened); 3B provides reporting +
+verification + sweep on top.
 
 ### UNSUPPORTED
 
-macOS/Windows enforcement через 3B-границу (плейсхолдеры, всё
-`Unsupported`); cgroups/PID/user/mount-неймспейсы как новые примитивы 3C
-не добавлялись; daemon/root/containers/VM/новый policy-язык не вводились.
+macOS/Windows enforcement across 3B boundary (placeholders, all
+`Unsupported`); cgroups/PID/user/mount namespaces were not added as new
+3C primitives; daemon/root/containers/VM/new policy language were not introduced.

@@ -1,4 +1,4 @@
-# STRESS-SWEEP-001 — stress/race стратегия в форме сценария: медиана прогонов, кворум векторов, sweep-бюджеты (не нагрузка ради нагрузки).
+# STRESS-SWEEP-001 — stress/race strategy as a scenario: run median, vector quorum, sweep budgets (not load for load's sake).
 id = "STRESS-SWEEP-001"
 category = "proc"
 severity = "high"
@@ -11,15 +11,15 @@ windows = "STRONG"
 linux-fsonly = "PARTIAL"
 macos = "PARTIAL"
 
-known_limitation = "Stress доказывает стабильность вердикта под нагрузкой/гонками, а не отсутствие гонок вообще. Ретраи не превращают FAIL в PASS. Destructive-нагрузка — только disposable VM/CI-runner."
-residual_risk = "На fs-only/macOS медиана может разъехаться (scheduler delay) — вердикт INCONCLUSIVE, блокирует gate в blocker-категориях через ноль-INCONCLUSIVE правило."
+known_limitation = "Stress proves stability of verdict under load/races, not total absence of races. Retries do not turn FAIL into PASS. Destructive load only in disposable VM/CI-runner."
+residual_risk = "On fs-only/macOS, median may diverge (scheduler delay) — verdict INCONCLUSIVE, blocks gate in blocker categories via zero-INCONCLUSIVE rule."
 
 [stress]
 runs = 5
-median_rule = "медиана >=3 согласующихся прогонов; расхождение дает INCONCLUSIVE"
+median_rule = "median >=3 agreeing runs; divergence yields INCONCLUSIVE"
 sweep_budget_ms = 2000
 vectors = ["rapid-spawn-burst", "grandchild-hold-pipe", "setsid-storm", "parallel-freeze-spawn", "kill-during-drain"]
 
 [execution]
-local_allowed = "smoke-вариант (runs=3, малые бюджеты); полный — CI-runner/VM"
+local_allowed = "smoke variant (runs=3, small budgets); full on CI-runner/VM"
 only_disposable_vm = false

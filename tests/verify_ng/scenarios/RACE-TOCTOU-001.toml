@@ -1,4 +1,4 @@
-# RACE-TOCTOU-001 — race между policy construction и process start + symlink TOCTOU (stress).
+# RACE-TOCTOU-001 — race between policy construction and process start + symlink TOCTOU (stress).
 id = "RACE-TOCTOU-001"
 category = "spawn"
 severity = "blocker"
@@ -11,15 +11,15 @@ linux-fsonly = "PARTIAL"
 macos = "PARTIAL"
 windows = "PARTIAL"
 
-known_limitation = "Proves freeze-to-spawn continuity and symlink-swap TOCTOU resistance for the covered race shapes; compromised host kernel/scheduler out of scope. Медиана >=3 прогонов, ретраи не превращают FAIL в PASS."
-residual_risk = "На fs-only/macOS часть гонок наблюдается best-effort; расхождение прогонов дает INCONCLUSIVE, destructive-нагрузка только в disposable VM."
+known_limitation = "Proves freeze-to-spawn continuity and symlink-swap TOCTOU resistance for covered race shapes; compromised host kernel/scheduler out of scope. Median >=3 runs, retries do not turn FAIL into PASS."
+residual_risk = "On fs-only/macOS, portion of races observed best-effort; run divergence yields INCONCLUSIVE, destructive workload only in disposable VM."
 
 [evidence.host_facts]
-spec_hash = "FrozenSpec hash до spawn равен хэшу в момент spawn на каждом прогоне (медиана >=3)"
-postmortem = "host stat внешнего таргета после каждого прогона: absent/unchanged на всех прогонах"
-tier_match = "detected tier равен expected tier на каждом прогоне (single detect per run)"
+spec_hash = "FrozenSpec hash before spawn equals hash at spawn time on each run (median >=3)"
+postmortem = "host stat of outside target after each run: absent/unchanged across all runs"
+tier_match = "detected tier equals expected tier on each run (single detect per run)"
 
 [stress]
 runs = 5
-median_rule = "вердикт по медиане >=3 согласующихся прогонов; любое расхождение векторов дает INCONCLUSIVE"
+median_rule = "verdict by median of >=3 agreeing runs; any vector divergence yields INCONCLUSIVE"
 vectors = ["symlink-swap-race", "rename-race", "freeze-spawn-drift", "parallel-spawn-serial", "mount-view-race"]

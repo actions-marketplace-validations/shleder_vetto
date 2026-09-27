@@ -25,6 +25,7 @@ paths = [
     '''(?:^|[/\\])tests[/\\]integration[/\\]secret_masking\.rs$''',
     '''(?:^|[/\\])tests[/\\]rescue_output_schema\.rs$''',
     '''(?:^|[/\\])tests[/\\]integration[/\\]rescue\.rs$''',
+    '''(?:^|[/\\])tests[/\\]verify_ng[/\\]scenarios[/\\].*\.toml$''',
     '''(?:^|[/\\])docs[/\\]research[/\\]agent-sandbox-engineering-catalog\.md$''',
     '''(?:^|[/\\])docs[/\\]schema[/\\]agent-requirements-50\.json$''',
 ]

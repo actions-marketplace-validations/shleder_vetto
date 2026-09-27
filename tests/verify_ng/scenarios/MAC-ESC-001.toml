@@ -1,4 +1,4 @@
-# MAC-ESC-001 — macOS escape battery: профиль побайтово + tail-deny; read secrecy вне tail-deny UNPROVABLE (потолок PARTIAL).
+# MAC-ESC-001 — macOS escape battery: profile byte-for-byte + tail-deny; read secrecy outside tail-deny UNPROVABLE (ceiling PARTIAL).
 id = "MAC-ESC-001"
 category = "fs-read"
 severity = "high"
@@ -10,16 +10,16 @@ macos = "PARTIAL"
 linux-full = "NOT_APPLICABLE"
 windows = "NOT_APPLICABLE"
 
-known_limitation = "Профиль обязан совпасть с Shape-A + tail-deny побайтово (см. MAC-SHAPE-001). Strong read-secrecy на macOS native UNPROVABLE; только Linux VM. SBPL-фрагментация SIGABRTит dyld — narrow shape не существует."
-residual_risk = "Любой путь вне tail-deny читаем by construction; использовать Linux VM для strong read secrecy. Egress ограничен --net=off via (deny network*); per-domain allowlist unsupported и fail-closed."
+known_limitation = "Profile must match Shape-A + tail-deny byte-for-byte (see MAC-SHAPE-001). Strong read secrecy on native macOS is UNPROVABLE; Linux VM required. SBPL fragmentation crashes dyld with SIGABRT — narrow shape does not exist."
+residual_risk = "Any path outside tail-deny is readable by construction; use Linux VM for strong read secrecy. Egress restricted --net=off via (deny network*); per-domain allowlist unsupported and fail-closed."
 
 [evidence.host_facts]
-profile-bytes = "применённый SBPL-профиль побайтово равен Shape-A + tail-deny (MAC-SHAPE-001 gate)"
-tail-deny = "host stat tail-deny таргетов после wait: denied/отсутствуют"
-canary-inside = "positive control внутри проекта цел"
+profile-bytes = "applied SBPL profile equals Shape-A + tail-deny byte-for-byte (MAC-SHAPE-001 gate)"
+tail-deny = "host stat of tail-deny targets after wait: denied/absent"
+canary-inside = "positive control inside project intact"
 
 [evidence.constrained_channel]
-errno_class = "read вне tail-deny может УСПЕШНО вернуть байты по построению Shape-A — это не FAIL сценария, а подтверждение потолка PARTIAL; read tail-deny обязан вернуть EPERM с nonce сессии"
+errno_class = "read outside tail-deny may SUCCESSFULLY return bytes by Shape-A construction — this is not a scenario FAIL, but confirmation of PARTIAL ceiling; read of tail-deny must return EPERM with session nonce"
 vectors = ["tail-deny-read", "shape-outside-read", "seatbelt-bypass-open", "net-off-egress", "kqueue-watchdog-race"]
 
 [evidence.not_applicable]

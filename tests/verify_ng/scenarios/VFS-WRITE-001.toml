@@ -1,4 +1,4 @@
-# VFS-WRITE-001 — запись вне allowlist (negative proof + positive control).
+# VFS-WRITE-001 — writes outside allowlist (negative proof + positive control).
 id = "VFS-WRITE-001"
 category = "fs-write"
 severity = "blocker"
