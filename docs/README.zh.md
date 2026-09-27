@@ -45,8 +45,6 @@ vetto
 > 派生后台驻留进程 (Daemon)...    TERMINATED (process tree extinction, exit 125)
 ```
 
-![Blocked exfiltration attempt under vetto](../assets/demo.svg)
-
 ### 故障安全契约 (Fail-Closed Exit 125)
 
 一旦检测到隔离边界被越过或关键内核原语无法生效，进程将立即被内核强制终止，并返回**退出代码 125**。所有派生子进程和孤儿进程均通过 cgroups v2 `cgroup.kill` 同步清除。操作系统无法支持的特性将被如实报告为不支持——绝不进行隐式静默降级。

@@ -45,8 +45,6 @@ Autonomous agents execute non-deterministic code. Untrusted dependency hooks, pr
 > Spawning detached daemon...       TERMINATED (process tree extinction, exit 125)
 ```
 
-![Blocked exfiltration attempt under vetto](assets/demo.svg)
-
 ### Fail-Closed Contract (Exit 125)
 
 If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with **exit code 125**. Descendant process trees and orphaned subprocesses are reaped synchronously via cgroups v2 `cgroup.kill`. Guarantees that the underlying OS cannot enforce are reported as unsupported—security is never silently downgraded.

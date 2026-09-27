@@ -45,8 +45,6 @@ Los agentes autónomos ejecutan código no determinista. Los hooks de dependenci
 > Creando demonio en segundo plano... TERMINADO (extinción del árbol de procesos, exit 125)
 ```
 
-![Intento de exfiltración bloqueado bajo vetto](../assets/demo.svg)
-
 ### Contrato Fail-Closed (Código de Salida 125)
 
 Si se vulnera un límite de aislamiento o no se pueden aplicar las funciones necesarias del kernel, la ejecución se termina de inmediato con el **código de salida 125**. Todos los subprocesos y procesos huérfanos se eliminan sincrónicamente mediante cgroups v2 `cgroup.kill`. Las funciones no compatibles con el SO se reportan claramente como no admitidas—la seguridad nunca se degrada silenciosamente.

@@ -45,8 +45,6 @@ AIエージェントの自動検出、ワンタッチでのPATHシム切り替�
 > Spawning detached daemon...       TERMINATED (process tree extinction, exit 125)
 ```
 
-![Blocked exfiltration attempt under vetto](../assets/demo.svg)
-
 ### フェイルクローズド契約 (Exit 125)
 
 隔離境界の侵害が検知された場合、または必要なカーネル機能が適用できない場合、実行は直ちに終了し、**終了コード 125** が返されます。すべての子プロセスおよび孤児プロセスは、cgroups v2 `cgroup.kill` によって同期的に完全に終了されます。OSがサポートしていない機能は「非対応」として明確に報告され、暗黙的にセキュリティレベルが低下することはありません。

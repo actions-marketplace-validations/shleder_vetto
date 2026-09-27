@@ -45,8 +45,6 @@ Autonome Agenten führen nicht-deterministischen Code aus. Nicht vertrauenswürd
 > Starten von Hintergrund-Dienst...  BEENDET (Prozessbaum-Eliminierung, Exit 125)
 ```
 
-![Blockierter Exfiltrationsversuch unter vetto](../assets/demo.svg)
-
 ### Fail-Closed Vertrag (Exit-Code 125)
 
 Wird eine Isolationsgrenze verletzt oder können erforderliche Kernel-Primitive nicht erzwungen werden, bricht die Ausführung sofort mit **Exit-Code 125** ab. Alle Kind- und Waisenprozesse werden synchron über cgroups v2 `cgroup.kill` beendet. Nicht unterstützte OS-Funktionen werden transparent als solche gemeldet—Sicherheit wird niemals stillschweigend herabgestuft.
