@@ -201,7 +201,7 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
     }
 
     let count = args.count;
-    if count == 0 || count > 64 {
+    if !(1..=64).contains(&count) {
         bail!("Worker count must be between 1 and 64 (got {})", count);
     }
 
@@ -418,7 +418,7 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
 
 /// Executes `vetto fleet verify [--workers <N>] [--json]`.
 pub fn run_verify(workers: usize, json: bool) -> Result<()> {
-    if workers < 2 || workers > 64 {
+    if !(2..=64).contains(&workers) {
         bail!(
             "Worker count for verification must be between 2 and 64 (got {})",
             workers
@@ -651,6 +651,7 @@ pub fn run_kill(worker_id: Option<String>, all: bool) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_borrows_for_generic_args)]
 mod tests {
     use super::*;
     use clap::Parser;
@@ -663,11 +664,11 @@ mod tests {
             command: FleetCommand,
         }
 
-        let cli1 = TestCli::try_parse_from(&["test", "status"]).expect("parse status");
+        let cli1 = TestCli::try_parse_from(["test", "status"]).expect("parse status");
         assert_eq!(cli1.command, FleetCommand::Status { json: false });
 
         let cli2 =
-            TestCli::try_parse_from(&["test", "status", "--json"]).expect("parse status --json");
+            TestCli::try_parse_from(["test", "status", "--json"]).expect("parse status --json");
         assert_eq!(cli2.command, FleetCommand::Status { json: true });
     }
 
@@ -679,7 +680,7 @@ mod tests {
             command: FleetCommand,
         }
 
-        let cli = TestCli::try_parse_from(&["test", "verify", "--workers", "8", "--json"])
+        let cli = TestCli::try_parse_from(["test", "verify", "--workers", "8", "--json"])
             .expect("parse verify");
         assert_eq!(
             cli.command,
@@ -698,7 +699,7 @@ mod tests {
             command: FleetCommand,
         }
 
-        let cli = TestCli::try_parse_from(&["test", "spawn", "claude", "--count", "3", "--detach"])
+        let cli = TestCli::try_parse_from(["test", "spawn", "claude", "--count", "3", "--detach"])
             .expect("parse spawn agent");
         match cli.command {
             FleetCommand::Spawn(args) => {
@@ -710,7 +711,7 @@ mod tests {
             _ => panic!("expected spawn"),
         }
 
-        let cli2 = TestCli::try_parse_from(&[
+        let cli2 = TestCli::try_parse_from([
             "test",
             "spawn",
             "--count",
@@ -739,7 +740,7 @@ mod tests {
             command: FleetCommand,
         }
 
-        let cli1 = TestCli::try_parse_from(&["test", "kill", "agent-01"]).expect("parse kill id");
+        let cli1 = TestCli::try_parse_from(["test", "kill", "agent-01"]).expect("parse kill id");
         assert_eq!(
             cli1.command,
             FleetCommand::Kill {
@@ -748,7 +749,7 @@ mod tests {
             }
         );
 
-        let cli2 = TestCli::try_parse_from(&["test", "kill", "--all"]).expect("parse kill all");
+        let cli2 = TestCli::try_parse_from(["test", "kill", "--all"]).expect("parse kill all");
         assert_eq!(
             cli2.command,
             FleetCommand::Kill {
@@ -757,8 +758,8 @@ mod tests {
             }
         );
 
-        assert!(TestCli::try_parse_from(&["test", "kill"]).is_err());
-        assert!(TestCli::try_parse_from(&["test", "kill", "agent-01", "--all"]).is_err());
+        assert!(TestCli::try_parse_from(["test", "kill"]).is_err());
+        assert!(TestCli::try_parse_from(["test", "kill", "agent-01", "--all"]).is_err());
     }
 
     #[test]

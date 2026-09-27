@@ -177,6 +177,7 @@ impl MultiRuntime {
     }
 
     /// Creates a new MultiRuntime with an explicit FleetManager.
+    #[allow(clippy::too_many_arguments)]
     pub fn with_fleet_manager(
         manifest: Manifest,
         sessions: Vec<MultiSession>,

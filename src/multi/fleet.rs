@@ -952,7 +952,7 @@ mod tests {
         let fleet = FleetManager::new(config);
 
         let w1 = fleet.allocate_worker("agent-one").expect("allocate w1");
-        let w2 = fleet.allocate_worker("agent-two").expect("allocate w2");
+        let _w2 = fleet.allocate_worker("agent-two").expect("allocate w2");
 
         fleet
             .bind_worker_pid(&w1.worker_id, 12345)
