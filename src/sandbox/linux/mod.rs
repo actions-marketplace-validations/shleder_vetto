@@ -1407,6 +1407,7 @@ fn spawn_full(
     };
 
     let pidfd = open_pidfd(pid as u32);
+    crate::sandbox::handle::register_active_root(pid as u32);
 
     Ok(Spawned {
         handle: SandboxHandle {
@@ -1639,6 +1640,7 @@ fn spawn_fs_only(policy: &Policy, opts: SpawnOptions, observe: bool) -> Result<S
     proctrack::arm_exit_sweep(pid, pid);
 
     let pidfd = open_pidfd(pid as u32);
+    crate::sandbox::handle::register_active_root(pid as u32);
 
     Ok(Spawned {
         handle: SandboxHandle {
@@ -1813,6 +1815,7 @@ fn spawn_seccomp_only(policy: &Policy, opts: SpawnOptions, observe: bool) -> Res
     proctrack::arm_exit_sweep(pid, pid);
 
     let pidfd = open_pidfd(pid as u32);
+    crate::sandbox::handle::register_active_root(pid as u32);
 
     Ok(Spawned {
         handle: SandboxHandle {

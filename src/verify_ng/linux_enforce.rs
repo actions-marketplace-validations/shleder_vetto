@@ -572,7 +572,11 @@ fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -
         let Ok(pid) = name.parse::<i32>() else {
             continue;
         };
-        if pid <= 0 || pid as u32 == root_pid || pid as u32 == me {
+        if pid <= 0
+            || pid as u32 == root_pid
+            || pid as u32 == me
+            || crate::sandbox::handle::is_active_root(pid as u32)
+        {
             continue;
         }
         let status = match std::fs::read_to_string(format!("/proc/{pid}/status")) {
@@ -665,7 +669,11 @@ fn last_nonce_pids(nonce: &str, root_pid: u32, me: u32) -> Vec<i32> {
             let Ok(pid) = name.parse::<i32>() else {
                 continue;
             };
-            if pid <= 0 || pid as u32 == root_pid || pid as u32 == me {
+            if pid <= 0
+                || pid as u32 == root_pid
+                || pid as u32 == me
+                || crate::sandbox::handle::is_active_root(pid as u32)
+            {
                 continue;
             }
             let Ok(env) = std::fs::read(format!("/proc/{pid}/environ")) else {
