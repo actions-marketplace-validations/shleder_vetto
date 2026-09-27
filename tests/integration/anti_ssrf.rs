@@ -179,7 +179,9 @@ fn test_anti_ssrf_3xx_redirect_to_metadata_dropped() {
     );
     let output = stdout(&out);
     assert!(
-        !output.contains("meta-data") && !output.contains("ami-id") && !output.contains("instance-id"),
+        !output.contains("meta-data")
+            && !output.contains("ami-id")
+            && !output.contains("instance-id"),
         "metadata leaked via 302 redirect! stdout: {}",
         output
     );

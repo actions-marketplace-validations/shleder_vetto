@@ -939,8 +939,8 @@ fn resolve_and_connect(
             });
             return Err(());
         }
-        let is_allowed = (is_loopback_host(host) && ip.is_loopback())
-            || cidrs.iter().any(|c| c.contains(ip));
+        let is_allowed =
+            (is_loopback_host(host) && ip.is_loopback()) || cidrs.iter().any(|c| c.contains(ip));
         if !is_allowed && forbidden_destination(ip) {
             bus.publish(Event::Notice {
                 ts: crate::events::types::now(),
@@ -2759,18 +2759,30 @@ mod tests {
     #[test]
     fn test_anti_ssrf_is_cloud_metadata() {
         use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
-        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(100, 100, 100, 200))));
+        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            169, 254, 169, 254
+        ))));
+        assert!(super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            100, 100, 100, 200
+        ))));
 
         // IPv4-mapped IPv6
         let v6_mapped = Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xa9fe, 0xa9fe); // ::ffff:169.254.169.254
         assert!(super::is_cloud_metadata(IpAddr::V6(v6_mapped)));
 
         // Ordinary IPs are not cloud metadata
-        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
-        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
-        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
-        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            1, 1, 1, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            127, 0, 0, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            10, 0, 0, 1
+        ))));
+        assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(
+            192, 168, 1, 1
+        ))));
     }
 
     #[test]
@@ -2830,10 +2842,22 @@ mod tests {
     fn test_anti_ssrf_proxy_target_validation() {
         let allow_cidrs = Vec::new();
         // Proxy pointing to cloud metadata is invalid
-        assert!(!super::is_valid_proxy_target("http://169.254.169.254:8080", &allow_cidrs));
-        assert!(!super::is_valid_proxy_target("http://100.100.100.200:8080", &allow_cidrs));
+        assert!(!super::is_valid_proxy_target(
+            "http://169.254.169.254:8080",
+            &allow_cidrs
+        ));
+        assert!(!super::is_valid_proxy_target(
+            "http://100.100.100.200:8080",
+            &allow_cidrs
+        ));
         // Proxy pointing to private subnet is invalid (without allow_cidr)
-        assert!(!super::is_valid_proxy_target("http://10.0.0.1:8080", &allow_cidrs));
-        assert!(!super::is_valid_proxy_target("http://192.168.1.1:8080", &allow_cidrs));
+        assert!(!super::is_valid_proxy_target(
+            "http://10.0.0.1:8080",
+            &allow_cidrs
+        ));
+        assert!(!super::is_valid_proxy_target(
+            "http://192.168.1.1:8080",
+            &allow_cidrs
+        ));
     }
 }

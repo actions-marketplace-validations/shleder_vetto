@@ -298,7 +298,8 @@ impl DashboardState {
                         ts,
                         event_type: SecurityEventType::BlockedNetwork,
                         subject: format!("{host}:{port}"),
-                        detail: "Outbound egress blocked fail-closed (Anti-SSRF / broker policy)".to_string(),
+                        detail: "Outbound egress blocked fail-closed (Anti-SSRF / broker policy)"
+                            .to_string(),
                         source: "net_relay".to_string(),
                     }),
                     crate::events::Event::SecretMasked { ts, path } => Some(SecurityEventItem {
@@ -317,12 +318,17 @@ impl DashboardState {
                         ts,
                         event_type: SecurityEventType::QuotaExceeded,
                         subject: host,
-                        detail: format!("Bandwidth quota exceeded: {used_bytes}/{limit_bytes} bytes"),
+                        detail: format!(
+                            "Bandwidth quota exceeded: {used_bytes}/{limit_bytes} bytes"
+                        ),
                         source: "net_quota".to_string(),
                     }),
                     crate::events::Event::Notice { ts, message } => {
                         let lower = message.to_ascii_lowercase();
-                        if lower.contains("blocked") || lower.contains("ssrf") || lower.contains("denied") {
+                        if lower.contains("blocked")
+                            || lower.contains("ssrf")
+                            || lower.contains("denied")
+                        {
                             Some(SecurityEventItem {
                                 ts,
                                 event_type: SecurityEventType::BlockedNetwork,
@@ -338,7 +344,11 @@ impl DashboardState {
                 };
 
                 if let Some(item) = item {
-                    let key = (item.ts.timestamp_millis(), item.subject.clone(), item.detail.clone());
+                    let key = (
+                        item.ts.timestamp_millis(),
+                        item.subject.clone(),
+                        item.detail.clone(),
+                    );
                     if self.seen_event_keys.insert(key) {
                         self.security_events.push_front(item);
                         if self.security_events.len() > 500 {
