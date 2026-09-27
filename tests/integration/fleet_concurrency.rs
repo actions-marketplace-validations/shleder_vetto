@@ -87,26 +87,10 @@ fn test_fleet_spawn_concurrent_workers() {
     let _ = run_vetto_in(proj.path(), &["fleet", "kill", "--all"]);
 
     #[cfg(unix)]
-    let spawn_args = &[
-        "fleet",
-        "spawn",
-        "--count",
-        "3",
-        "--",
-        "sh",
-        "-c",
-        "echo worker",
-    ];
+    let spawn_args = &["fleet", "spawn", "--count", "3", "--", "true"];
     #[cfg(windows)]
     let spawn_args = &[
-        "fleet",
-        "spawn",
-        "--count",
-        "3",
-        "--",
-        "cmd.exe",
-        "/c",
-        "echo worker",
+        "fleet", "spawn", "--count", "3", "--", "cmd.exe", "/c", "exit 0",
     ];
 
     let out_spawn = run_vetto_in(proj.path(), spawn_args);

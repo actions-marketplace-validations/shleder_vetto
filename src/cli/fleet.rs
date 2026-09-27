@@ -398,10 +398,22 @@ pub fn run_spawn(args: FleetSpawnArgs) -> Result<()> {
     // Foreground execution: wait for all workers to complete and release slots
     let mut worst_exit_code = 0;
     for (scope, execution) in spawned {
+        let wid = scope.worker_id.clone();
+        let pid = execution.pid();
         let outcome = execution.wait_collect();
         let _ = fleet.release_worker(&scope.worker_id);
         if let Some(code) = outcome.exit_code {
             let mapped = crate::exit_codes::map_session_exit_code(code, outcome.timed_out, false);
+            if mapped != 0 {
+                tracing::warn!(
+                    worker_id = %wid,
+                    pid = pid,
+                    raw_exit_code = code,
+                    mapped_exit_code = mapped,
+                    diagnostic = ?outcome.diagnostic,
+                    "fleet worker exited with non-zero status"
+                );
+            }
             if mapped != 0 && worst_exit_code == 0 {
                 worst_exit_code = mapped;
             }
