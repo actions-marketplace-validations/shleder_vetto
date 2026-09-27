@@ -86,6 +86,17 @@ fn test_fleet_spawn_concurrent_workers() {
     // Clean up any stale state first
     let _ = run_vetto_in(proj.path(), &["fleet", "kill", "--all"]);
 
+    #[cfg(target_os = "windows")]
+    {
+        let doctor = doctor_output();
+        if !doctor.contains("appcontainer-api=yes")
+            || !doctor.contains("experimental-process-sandbox=yes")
+        {
+            eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable");
+            return;
+        }
+    }
+
     #[cfg(unix)]
     let spawn_args = &["fleet", "spawn", "--count", "3", "--", "true"];
     #[cfg(windows)]
