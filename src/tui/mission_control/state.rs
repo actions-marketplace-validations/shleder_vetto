@@ -1468,8 +1468,16 @@ mod tests {
 
     #[test]
     fn test_poll_security_events_incremental_tailing_and_large_file_cap() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let log_path = tmp.path().join("session-test.jsonl");
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp = std::env::temp_dir().join(format!(
+            "vetto-mission-control-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).expect("create temp test dir");
+        let log_path = tmp.join("session-test.jsonl");
 
         // Write > 512 KiB of padding comments followed by one valid event
         let mut initial = String::with_capacity(600 * 1024);
@@ -1506,7 +1514,7 @@ mod tests {
             selected_preset: 0,
         };
 
-        state.poll_security_events_from_dir(tmp.path());
+        state.poll_security_events_from_dir(&tmp);
         assert_eq!(state.security_events.len(), 1);
         assert_eq!(
             state.security_events[0].event_type,
@@ -1528,7 +1536,7 @@ mod tests {
         .expect("append line");
         drop(f);
 
-        state.poll_security_events_from_dir(tmp.path());
+        state.poll_security_events_from_dir(&tmp);
         assert_eq!(state.security_events.len(), 2);
         assert_eq!(
             state.security_events[0].event_type,
@@ -1539,6 +1547,7 @@ mod tests {
             .get(&log_path)
             .expect("updated offset");
         assert!(second_offset > first_offset);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
