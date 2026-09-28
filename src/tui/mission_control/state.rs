@@ -1486,7 +1486,7 @@ mod tests {
             initial.push_str(&comment_line);
         }
         initial.push_str(
-            r#"{"ts":"2026-09-28T12:00:00Z","type":"secret_masked","path":"/home/user/.ssh/id_ed25519"}"#,
+            r#"{"ts":"2026-09-28T12:00:00Z","event":"secret_masked","path":"/home/user/.ssh/id_ed25519"}"#,
         );
         initial.push('\n');
         std::fs::write(&log_path, &initial).expect("write initial log");
@@ -1531,7 +1531,7 @@ mod tests {
             .expect("open append");
         writeln!(
             f,
-            r#"{{"ts":"2026-09-28T12:00:05Z","type":"net_request","host":"169.254.169.254","port":80,"allowed":false}}"#
+            r#"{{"ts":"2026-09-28T12:00:05Z","event":"net_request","host":"169.254.169.254","port":80,"allowed":false}}"#
         )
         .expect("append line");
         drop(f);

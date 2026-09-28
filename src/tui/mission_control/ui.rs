@@ -2381,7 +2381,7 @@ mod tests {
 
     #[test]
     fn test_render_sandbox_tab_policy_presets_and_viewport_scrolling() {
-        let backend = TestBackend::new(140, 22);
+        let backend = TestBackend::new(140, 35);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut state = DashboardState::new(None);
         state.active_tab = MissionTab::Sandbox;
@@ -2389,7 +2389,7 @@ mod tests {
         terminal.draw(|f| draw(f, &state)).unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = (0..22)
+        let content: String = (0..35)
             .map(|y| {
                 (0..140)
                     .map(|x| buffer.get(x, y).symbol())
@@ -2404,13 +2404,14 @@ mod tests {
         assert!(content.contains("NETWORK EGRESS POLICY"));
         assert!(content.contains("balanced"));
 
-        // Now select the very last preset (index 26, "smolagents") in a 22-row viewport
-        // and verify table viewport windowing scrolls "smolagents" into the left table
+        // Now select the very last preset (index 26, "smolagents") in a 35-row viewport
+        // (17 visible table rows < 27 presets) and verify table viewport windowing scrolls
+        // "smolagents" into the left table
         state.selected_preset = state.policy_presets.len() - 1;
         terminal.draw(|f| draw(f, &state)).unwrap();
 
         let buffer2 = terminal.backend().buffer();
-        let content2: String = (0..22)
+        let content2: String = (0..35)
             .map(|y| {
                 (0..140)
                     .map(|x| buffer2.get(x, y).symbol())
