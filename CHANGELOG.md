@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
 
+## [0.5.7] - 2026-09-28
+
+### Added
+- **Interactive TUI Mission Control Dashboard (`vetto tui` / `vetto mission-control` / `TuiMode::Full`)**:
+  - Exposed explicit `vetto tui` and `vetto mission-control` (`vetto mission_control`) CLI subcommands alongside bare `vetto` TTY launch (`--theme arasaka|circuit`).
+  - **Live Active Agent Sandbox Session Monitor**: Real-time session tracking on the `Sessions & Extinction` tab displaying session ID, agent identity, recursive descendant process tree PIDs via BFS `/proc` and `cgroup.procs` discovery, Landlock LSM ABI level, cgroups v2 memory/CPU/PIDs ceilings, resolved cgroup scope path, and L7 network proxy status.
+  - **Real-Time Process Tree Extinction Visualizer**: Dedicated `PROCESS TREE EXTINCTION THEOREM (§12.1)` and `ACTIVE PROCESS TREE & TERMINATION CONTROLS` panels with instant `[x]` session termination (`cgroup.kill` + leaves-first descendant process tree signal sweep) and `[` / `]` snapshot selector.
+  - **Interactive Policy Inspector & Preset View**: Added all 27 built-in presets (3 base profiles + 24 canonical AI coding agent profiles with live network allowlists) to the `Sandbox & VFS` tab, with `[p]` preset cycling, viewport-windowed table scrolling, Landlock read/write/masked-0000 boundary inspection, L7 Anti-SSRF broker status, and seccomp-BPF syscall filter summaries.
+  - **Live Security Event Stream**: Upgraded the `Security Stream` tab with 5 real-time telemetry counters (`LANDLOCK FS DENIALS`, `SECCOMP-BPF TRAPS`, `BLOCKED L7 EGRESS`, `SECRETS (INV-08)`, `TOTAL BUFFER`), distinct `[LANDLOCK]` vs `[SECCOMP]` vs `[L7_EGRESS]` vs `[SECRET]` badges, and incremental byte-offset `.jsonl` tailing capped at 512 KiB on initial load.
+- **Full TUI (`--tui full`) Blocked Egress & Secret Telemetry**:
+  - Updated `TuiMode::Full` (`src/tui/full.rs`) header and `blocked` summary panel to reflect total blocked events across Landlock filesystem denials, blocked L7 network egress requests, and masked secrets.
+
+## [0.5.6] - 2026-09-28
+
+### Added
+- **Multi-Agent Fleet Swarm Isolation & Telemetry**:
+  - Added fair-share cgroups v2 multi-agent fleet management (`vetto fleet`), ephemeral CoW workspace branches, and disjoint port allocation across concurrent agent sandboxes.
+
 ## [0.5.5] - 2026-09-27
 
 ### Added

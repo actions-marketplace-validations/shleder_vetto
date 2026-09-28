@@ -191,6 +191,18 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                                 }
                             }
 
+                            // '[' / ']': Cycle session snapshots on Sessions tab
+                            KeyCode::Char('[') => {
+                                if state.active_tab == MissionTab::Sessions {
+                                    state.select_prev_snapshot();
+                                }
+                            }
+                            KeyCode::Char(']') => {
+                                if state.active_tab == MissionTab::Sessions {
+                                    state.select_next_snapshot();
+                                }
+                            }
+
                             // Enter: Launch selected agent in sandbox
                             KeyCode::Enter => {
                                 if state.active_tab == MissionTab::Agents {

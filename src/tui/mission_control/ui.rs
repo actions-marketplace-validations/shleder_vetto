@@ -235,10 +235,18 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
             ));
         f.render_widget(Paragraph::new(empty_lines).block(block), cols[0]);
     } else {
+        let (offset, visible) = table_viewport_window(
+            state.installed_agents.len(),
+            state.selected_agent,
+            cols[0].height,
+            3,
+        );
         let rows = state
             .installed_agents
             .iter()
             .enumerate()
+            .skip(offset)
+            .take(visible)
             .map(|(idx, agent)| {
                 let is_selected = idx == state.selected_agent;
 
@@ -458,10 +466,18 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
         .split(area);
 
     // Left Column: Policy Presets Table
+    let (preset_offset, preset_visible) = table_viewport_window(
+        state.policy_presets.len(),
+        state.selected_preset,
+        cols[0].height,
+        3,
+    );
     let rows = state
         .policy_presets
         .iter()
         .enumerate()
+        .skip(preset_offset)
+        .take(preset_visible)
         .map(|(idx, preset)| {
             let is_selected = idx == state.selected_preset;
 
@@ -875,57 +891,69 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
         ];
         f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
     } else {
-        let rows = state.security_events.iter().enumerate().map(|(idx, ev)| {
-            let is_selected = idx == state.selected_event;
+        let (ev_offset, ev_visible) = table_viewport_window(
+            state.security_events.len(),
+            state.selected_event,
+            chunks[1].height,
+            4,
+        );
+        let rows = state
+            .security_events
+            .iter()
+            .enumerate()
+            .skip(ev_offset)
+            .take(ev_visible)
+            .map(|(idx, ev)| {
+                let is_selected = idx == state.selected_event;
 
-            let badge_style = match ev.event_type {
-                super::state::SecurityEventType::AccessDenial
-                | super::state::SecurityEventType::LandlockDenial => Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::SeccompFilter => Style::default()
-                    .fg(theme.warning)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::BlockedNetwork => Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::SecretMasked => Style::default()
-                    .fg(theme.warning)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::QuotaExceeded => {
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
-                }
-            };
+                let badge_style = match ev.event_type {
+                    super::state::SecurityEventType::AccessDenial
+                    | super::state::SecurityEventType::LandlockDenial => Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::SeccompFilter => Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::BlockedNetwork => Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::SecretMasked => Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::QuotaExceeded => {
+                        Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
+                    }
+                };
 
-            let row_style = if is_selected {
-                Style::default().bg(theme.selection_bg)
-            } else {
-                Style::default()
-            };
+                let row_style = if is_selected {
+                    Style::default().bg(theme.selection_bg)
+                } else {
+                    Style::default()
+                };
 
-            let marker = if is_selected { "▶ " } else { "  " };
+                let marker = if is_selected { "▶ " } else { "  " };
 
-            Row::new(vec![
-                Span::styled(
-                    format!("{marker}{}", ev.ts.format("%H:%M:%S")),
-                    Style::default().fg(theme.muted),
-                ),
-                Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
-                Span::styled(
-                    &ev.subject,
-                    if is_selected {
-                        Style::default()
-                            .fg(theme.selection_fg)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(theme.text)
-                    },
-                ),
-                Span::styled(&ev.source, Style::default().fg(theme.info)),
-                Span::styled(&ev.detail, Style::default().fg(theme.muted)),
-            ])
-            .style(row_style)
-        });
+                Row::new(vec![
+                    Span::styled(
+                        format!("{marker}{}", ev.ts.format("%H:%M:%S")),
+                        Style::default().fg(theme.muted),
+                    ),
+                    Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
+                    Span::styled(
+                        &ev.subject,
+                        if is_selected {
+                            Style::default()
+                                .fg(theme.selection_fg)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.text)
+                        },
+                    ),
+                    Span::styled(&ev.source, Style::default().fg(theme.info)),
+                    Span::styled(&ev.detail, Style::default().fg(theme.muted)),
+                ])
+                .style(row_style)
+            });
 
         let table = Table::new(
             rows,
@@ -1312,78 +1340,94 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
             ));
         f.render_widget(Paragraph::new(empty_msg).block(block), chunks[0]);
     } else {
-        let rows = state.active_sessions.iter().enumerate().map(|(idx, s)| {
-            let is_selected = idx == state.selected_session;
-            let marker = if is_selected { "▶ " } else { "  " };
+        let (sess_offset, sess_visible) = table_viewport_window(
+            state.active_sessions.len(),
+            state.selected_session,
+            chunks[0].height,
+            3,
+        );
+        let rows = state
+            .active_sessions
+            .iter()
+            .enumerate()
+            .skip(sess_offset)
+            .take(sess_visible)
+            .map(|(idx, s)| {
+                let is_selected = idx == state.selected_session;
+                let marker = if is_selected { "▶ " } else { "  " };
 
-            let id_span = Span::styled(
-                format!("{marker}{}", s.session_id),
-                if is_selected {
-                    Style::default()
-                        .fg(theme.selection_fg)
-                        .add_modifier(Modifier::BOLD)
+                let id_span = Span::styled(
+                    format!("{marker}{}", s.session_id),
+                    if is_selected {
+                        Style::default()
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.text)
+                    },
+                );
+
+                let agent_span = Span::styled(
+                    &s.agent,
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                );
+
+                let procs_info = if s.procs.len() > 1 {
+                    format!("PID {} ({} procs)", s.pid, s.procs.len())
                 } else {
-                    Style::default().fg(theme.text)
-                },
-            );
+                    format!("PID {}", s.pid)
+                };
+                let pid_span = Span::styled(procs_info, Style::default().fg(theme.accent));
 
-            let agent_span = Span::styled(
-                &s.agent,
-                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-            );
+                let abi_span = Span::styled(
+                    format!("ABI {}", s.landlock_abi),
+                    Style::default().fg(theme.success),
+                );
 
-            let procs_info = if s.procs.len() > 1 {
-                format!("PID {} ({} procs)", s.pid, s.procs.len())
-            } else {
-                format!("PID {}", s.pid)
-            };
-            let pid_span = Span::styled(procs_info, Style::default().fg(theme.accent));
+                let limits_str = format!("{} / {}", s.cgroup_memory, s.cgroup_cpu);
+                let limits_span = Span::styled(limits_str, Style::default().fg(theme.warning));
 
-            let abi_span = Span::styled(
-                format!("ABI {}", s.landlock_abi),
-                Style::default().fg(theme.success),
-            );
+                let net_span = Span::styled(
+                    &s.net_proxy_status,
+                    Style::default().fg(
+                        if s.net_proxy_status.contains("Active")
+                            || s.net_proxy_status.contains("L7 RELAY")
+                        {
+                            theme.success
+                        } else {
+                            theme.muted
+                        },
+                    ),
+                );
 
-            let limits_str = format!("{} / {}", s.cgroup_memory, s.cgroup_cpu);
-            let limits_span = Span::styled(limits_str, Style::default().fg(theme.warning));
-
-            let net_span = Span::styled(
-                &s.net_proxy_status,
-                Style::default().fg(if s.net_proxy_status.contains("Active") {
-                    theme.success
-                } else {
-                    theme.muted
-                }),
-            );
-
-            let ext_span = Span::styled(
-                &s.extinction_status,
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            );
-
-            let row = Row::new(vec![
-                id_span,
-                agent_span,
-                pid_span,
-                abi_span,
-                limits_span,
-                net_span,
-                ext_span,
-            ]);
-
-            if is_selected {
-                row.style(
+                let ext_span = Span::styled(
+                    &s.extinction_status,
                     Style::default()
-                        .bg(theme.selection_bg)
-                        .fg(theme.selection_fg)
+                        .fg(theme.danger)
                         .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                row
-            }
-        });
+                );
+
+                let row = Row::new(vec![
+                    id_span,
+                    agent_span,
+                    pid_span,
+                    abi_span,
+                    limits_span,
+                    net_span,
+                    ext_span,
+                ]);
+
+                if is_selected {
+                    row.style(
+                        Style::default()
+                            .bg(theme.selection_bg)
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    row
+                }
+            });
 
         let table = Table::new(
             rows,
@@ -1544,10 +1588,7 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
             ]),
             Line::from(vec![
                 Span::styled("CGROUPS V2 SCOPE:   ", Style::default().fg(theme.muted)),
-                Span::styled(
-                    format!("/sys/fs/cgroup/vetto/{}", session.session_id),
-                    Style::default().fg(theme.muted),
-                ),
+                Span::styled(&session.cgroup_scope, Style::default().fg(theme.muted)),
             ]),
             Line::from(vec![
                 Span::styled("RESOURCE ALLOC:     ", Style::default().fg(theme.muted)),
@@ -1626,54 +1667,66 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
         ];
         f.render_widget(Paragraph::new(empty_msg).block(snap_block), chunks[2]);
     } else {
-        let snap_rows = state.snapshots.iter().enumerate().map(|(idx, snap)| {
-            let is_selected = idx == state.selected_snapshot;
-            let marker = if is_selected { "▶ " } else { "  " };
+        let (snap_offset, snap_visible) = table_viewport_window(
+            state.snapshots.len(),
+            state.selected_snapshot,
+            chunks[2].height,
+            3,
+        );
+        let snap_rows = state
+            .snapshots
+            .iter()
+            .enumerate()
+            .skip(snap_offset)
+            .take(snap_visible)
+            .map(|(idx, snap)| {
+                let is_selected = idx == state.selected_snapshot;
+                let marker = if is_selected { "▶ " } else { "  " };
 
-            let id_span = Span::styled(
-                format!("{marker}{}", snap.session_id),
+                let id_span = Span::styled(
+                    format!("{marker}{}", snap.session_id),
+                    if is_selected {
+                        Style::default()
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.text)
+                    },
+                );
+
+                let created_span =
+                    Span::styled(snap.created_at.as_str(), Style::default().fg(theme.muted));
+                let files_span = Span::styled(
+                    format!("{}", snap.file_count),
+                    Style::default().fg(theme.text),
+                );
+                let size_span = Span::styled(
+                    format_bytes(snap.total_size_bytes),
+                    Style::default().fg(theme.accent),
+                );
+                let proj_span = Span::styled(
+                    snap.project_dir.display().to_string(),
+                    Style::default().fg(theme.text),
+                );
+
+                let row = Row::new(vec![
+                    id_span,
+                    created_span,
+                    files_span,
+                    size_span,
+                    proj_span,
+                ]);
                 if is_selected {
-                    Style::default()
-                        .fg(theme.selection_fg)
-                        .add_modifier(Modifier::BOLD)
+                    row.style(
+                        Style::default()
+                            .bg(theme.selection_bg)
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else {
-                    Style::default().fg(theme.text)
-                },
-            );
-
-            let created_span =
-                Span::styled(snap.created_at.as_str(), Style::default().fg(theme.muted));
-            let files_span = Span::styled(
-                format!("{}", snap.file_count),
-                Style::default().fg(theme.text),
-            );
-            let size_span = Span::styled(
-                format_bytes(snap.total_size_bytes),
-                Style::default().fg(theme.accent),
-            );
-            let proj_span = Span::styled(
-                snap.project_dir.display().to_string(),
-                Style::default().fg(theme.text),
-            );
-
-            let row = Row::new(vec![
-                id_span,
-                created_span,
-                files_span,
-                size_span,
-                proj_span,
-            ]);
-            if is_selected {
-                row.style(
-                    Style::default()
-                        .bg(theme.selection_bg)
-                        .fg(theme.selection_fg)
-                        .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                row
-            }
-        });
+                    row
+                }
+            });
 
         let snap_table = Table::new(
             snap_rows,
@@ -1854,63 +1907,75 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
         ];
         f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
     } else {
-        let rows = state.fleet_workers.iter().enumerate().map(|(idx, w)| {
-            let is_selected = idx == state.selected_fleet_worker;
-            let row_style = if is_selected {
-                Style::default().bg(theme.selection_bg)
-            } else {
-                Style::default()
-            };
-            let prefix = if is_selected { "▶ " } else { "  " };
-
-            let pid_str = w
-                .pid
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "-".to_string());
-            let scope_str = w
-                .scope_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or_else(|| w.scope_path.to_str().unwrap_or("-"));
-
-            let limits_str = format!(
-                "{}w/{:.1}G/{}p",
-                w.cpu_weight,
-                w.memory_limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
-                w.pids_max
-            );
-
-            let status_style = match w.status.to_ascii_lowercase().as_str() {
-                "running" | "active" => Style::default()
-                    .fg(theme.success)
-                    .add_modifier(Modifier::BOLD),
-                "allocated" => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                "exited" | "stale" => Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-                _ => Style::default().fg(theme.muted),
-            };
-
-            Row::new(vec![
-                Span::styled(
-                    format!("{prefix}{}", w.worker_id),
+        let (fleet_offset, fleet_visible) = table_viewport_window(
+            state.fleet_workers.len(),
+            state.selected_fleet_worker,
+            chunks[1].height,
+            4,
+        );
+        let rows = state
+            .fleet_workers
+            .iter()
+            .enumerate()
+            .skip(fleet_offset)
+            .take(fleet_visible)
+            .map(|(idx, w)| {
+                let is_selected = idx == state.selected_fleet_worker;
+                let row_style = if is_selected {
+                    Style::default().bg(theme.selection_bg)
+                } else {
                     Style::default()
-                        .fg(if is_selected { theme.logo } else { theme.text })
+                };
+                let prefix = if is_selected { "▶ " } else { "  " };
+
+                let pid_str = w
+                    .pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+                let scope_str = w
+                    .scope_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_else(|| w.scope_path.to_str().unwrap_or("-"));
+
+                let limits_str = format!(
+                    "{}w/{:.1}G/{}p",
+                    w.cpu_weight,
+                    w.memory_limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                    w.pids_max
+                );
+
+                let status_style = match w.status.to_ascii_lowercase().as_str() {
+                    "running" | "active" => Style::default()
+                        .fg(theme.success)
                         .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(&w.agent_name, Style::default().fg(theme.info)),
-                Span::styled(pid_str, Style::default().fg(theme.accent)),
-                Span::styled(
-                    w.ephemeral_port.to_string(),
-                    Style::default().fg(theme.muted),
-                ),
-                Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
-                Span::styled(scope_str, Style::default().fg(theme.muted)),
-                Span::styled(limits_str, Style::default().fg(theme.warning)),
-                Span::styled(format!("[{}]", w.status.to_ascii_uppercase()), status_style),
-            ])
-            .style(row_style)
-        });
+                    "allocated" => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                    "exited" | "stale" => Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                    _ => Style::default().fg(theme.muted),
+                };
+
+                Row::new(vec![
+                    Span::styled(
+                        format!("{prefix}{}", w.worker_id),
+                        Style::default()
+                            .fg(if is_selected { theme.logo } else { theme.text })
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(&w.agent_name, Style::default().fg(theme.info)),
+                    Span::styled(pid_str, Style::default().fg(theme.accent)),
+                    Span::styled(
+                        w.ephemeral_port.to_string(),
+                        Style::default().fg(theme.muted),
+                    ),
+                    Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
+                    Span::styled(scope_str, Style::default().fg(theme.muted)),
+                    Span::styled(limits_str, Style::default().fg(theme.warning)),
+                    Span::styled(format!("[{}]", w.status.to_ascii_uppercase()), status_style),
+                ])
+                .style(row_style)
+            });
 
         let table = Table::new(
             rows,
@@ -2078,10 +2143,10 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
             ),
             Span::styled(" Kill Session  ", Style::default().fg(theme.text)),
             Span::styled(
-                "[v]",
+                "[[/]]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" Verify  ", Style::default().fg(theme.text)),
+            Span::styled(" Snapshots  ", Style::default().fg(theme.text)),
             Span::styled(
                 "[u]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
@@ -2157,6 +2222,26 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
         .borders(Borders::TOP)
         .border_style(Style::default().fg(theme.border));
     f.render_widget(Paragraph::new(lines).block(footer_block), area);
+}
+
+/// Computes `(offset, visible_rows)` so that `selected` is always visible inside a table viewport.
+fn table_viewport_window(
+    total: usize,
+    selected: usize,
+    area_height: u16,
+    chrome_rows: u16,
+) -> (usize, usize) {
+    let visible = (area_height.saturating_sub(chrome_rows) as usize).max(1);
+    if total <= visible {
+        return (0, total);
+    }
+    let clamped = selected.min(total.saturating_sub(1));
+    let offset = if clamped >= visible {
+        (clamped + 1 - visible).min(total - visible)
+    } else {
+        0
+    };
+    (offset, visible)
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -2295,8 +2380,8 @@ mod tests {
     }
 
     #[test]
-    fn test_render_sandbox_tab_policy_presets() {
-        let backend = TestBackend::new(140, 35);
+    fn test_render_sandbox_tab_policy_presets_and_viewport_scrolling() {
+        let backend = TestBackend::new(140, 22);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut state = DashboardState::new(None);
         state.active_tab = MissionTab::Sandbox;
@@ -2304,7 +2389,7 @@ mod tests {
         terminal.draw(|f| draw(f, &state)).unwrap();
 
         let buffer = terminal.backend().buffer();
-        let content: String = (0..35)
+        let content: String = (0..22)
             .map(|y| {
                 (0..140)
                     .map(|x| buffer.get(x, y).symbol())
@@ -2313,11 +2398,29 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(content.contains("POLICY PRESETS"));
+        assert!(content.contains("POLICY PRESETS (27)"));
         assert!(content.contains("POLICY INSPECTOR"));
         assert!(content.contains("FILESYSTEM ACCESS BOUNDARIES"));
         assert!(content.contains("NETWORK EGRESS POLICY"));
         assert!(content.contains("balanced"));
+
+        // Now select the very last preset (index 26, "smolagents") in a 22-row viewport
+        // and verify table viewport windowing scrolls "smolagents" into the left table
+        state.selected_preset = state.policy_presets.len() - 1;
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer2 = terminal.backend().buffer();
+        let content2: String = (0..22)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer2.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content2.contains("smolagents"));
+        assert!(content2.contains("Hugging Face Smolagents Profile"));
     }
 
     #[test]
@@ -2342,7 +2445,8 @@ mod tests {
                 cgroup_memory: "42.0 MB / 2.0 GiB".to_string(),
                 cgroup_cpu: "100".to_string(),
                 cgroup_pids: "3 / 128".to_string(),
-                net_proxy_status: "Active (L7 SNI)".to_string(),
+                cgroup_scope: "/sys/fs/cgroup/vetto-20260928_test_42a1".to_string(),
+                net_proxy_status: "L7 RELAY (8 domains)".to_string(),
                 procs: vec![12345, 12346, 12347],
                 extinction_status: "ARMED (cgroup.kill)".to_string(),
             });
@@ -2364,6 +2468,7 @@ mod tests {
         assert!(content.contains("20260928_test_42a1"));
         assert!(content.contains("claude"));
         assert!(content.contains("12345"));
+        assert!(content.contains("/sys/fs/cgroup/vetto-20260928_test_42a1"));
         assert!(content.contains("ARMED (cgroup.kill)"));
         assert!(content.contains("cgroup.kill (INV-12/13)"));
     }

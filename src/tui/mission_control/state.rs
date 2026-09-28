@@ -1,9 +1,9 @@
 //! Mission Control Dashboard State Management.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Result;
@@ -14,6 +14,8 @@ use crate::onboard::SUPPORTED_AGENTS;
 use crate::rescue::snapshot::{list_snapshots, rollback_snapshot, SnapshotMetadata};
 
 use super::theme::Theme;
+
+const MAX_INITIAL_LOG_TAIL_BYTES: u64 = 512 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityEventType {
@@ -116,6 +118,7 @@ pub struct ActiveSessionCard {
     pub cgroup_memory: String,
     pub cgroup_cpu: String,
     pub cgroup_pids: String,
+    pub cgroup_scope: String,
     pub net_proxy_status: String,
     pub procs: Vec<u32>,
     pub extinction_status: String,
@@ -136,6 +139,40 @@ pub struct PolicyPresetItem {
     pub cpu_quota: &'static str,
     pub landlock_abi: &'static str,
     pub seccomp_blocked: &'static str,
+}
+
+fn agent_preset_item(
+    name: &'static str,
+    title: &'static str,
+    description: &'static str,
+    write_roots: Vec<&'static str>,
+    read_roots: Vec<&'static str>,
+) -> PolicyPresetItem {
+    let network_domains = crate::policy::presets::agent_network_allowlist(name);
+    let network_mode = if network_domains.is_empty() {
+        "OFF (Fail-closed drop on any socket creation)"
+    } else {
+        "Allowlist with TLS SNI and L7 Anti-SSRF Validation"
+    };
+    PolicyPresetItem {
+        name,
+        title,
+        security_level: "STANDARD (Agent Optimized)",
+        description,
+        write_roots,
+        read_roots,
+        secret_denies: vec![
+            "~/.ssh, ~/.aws, .env, .env.*",
+            "~/.gnupg, ~/.kube, ~/.docker",
+            "$PROJECT/.git/config, *.pem, *.key",
+        ],
+        network_mode,
+        network_domains,
+        memory_quota: "2.0 GiB (cgroups v2)",
+        cpu_quota: "100% (cgroups v2)",
+        landlock_abi: "ABI 1-6",
+        seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+    }
 }
 
 pub fn built_in_presets() -> Vec<PolicyPresetItem> {
@@ -185,96 +222,174 @@ pub fn built_in_presets() -> Vec<PolicyPresetItem> {
             landlock_abi: "ABI 1-6",
             seccomp_blocked: "unshare, mount, raw AF_INET",
         },
-        PolicyPresetItem {
-            name: "claude",
-            title: "Claude Code Profile (Anthropic)",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for Claude Code CLI with state access to ~/.claude and Anthropic API endpoints",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.claude", "~/.claude.json"],
-            read_roots: vec!["/", "$PROJECT", "~/.claude"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
-            network_mode: "Allowlist (api.anthropic.com, auth.anthropic.com, claude.ai)",
-            network_domains: vec!["api.anthropic.com".into(), "auth.anthropic.com".into(), "claude.ai".into(), "statsig.anthropic.com".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
-        PolicyPresetItem {
-            name: "codex",
-            title: "OpenAI Codex Profile",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for OpenAI Codex CLI with state access to ~/.codex and OpenAI API endpoints",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.codex"],
-            read_roots: vec!["/", "$PROJECT", "~/.codex"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
-            network_mode: "Allowlist (api.openai.com, chatgpt.com, auth.openai.com)",
-            network_domains: vec!["api.openai.com".into(), "chatgpt.com".into(), "auth.openai.com".into(), "platform.openai.com".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
-        PolicyPresetItem {
-            name: "opencode",
-            title: "OpenCode AI Profile",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for OpenCode AI with 2 GiB SQLite ceiling for opencode.db without SIGXFSZ",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.local/share/opencode"],
-            read_roots: vec!["/", "$PROJECT"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env"],
-            network_mode: "Allowlist (api.openai.com, api.anthropic.com)",
-            network_domains: vec!["api.openai.com".into(), "api.anthropic.com".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
-        PolicyPresetItem {
-            name: "cursor",
-            title: "Cursor IDE Profile",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for Cursor IDE background agent with Cursor API endpoints allowlisted",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.cursor"],
-            read_roots: vec!["/", "$PROJECT", "~/.cursor"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env"],
-            network_mode: "Allowlist (api2.cursor.sh, repo42.cursor.sh)",
-            network_domains: vec!["api2.cursor.sh".into(), "repo42.cursor.sh".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
-        PolicyPresetItem {
-            name: "aider",
-            title: "Aider Pair Programmer Profile",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for Aider with git worktree isolation and multi-provider LLM API egress",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.aider"],
-            read_roots: vec!["/", "$PROJECT"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
-            network_mode: "Allowlist (OpenAI, Anthropic, OpenRouter)",
-            network_domains: vec!["api.openai.com".into(), "api.anthropic.com".into(), "openrouter.ai".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
-        PolicyPresetItem {
-            name: "antigravity",
-            title: "Google Antigravity Profile",
-            security_level: "STANDARD (Agent Optimized)",
-            description: "Tailored profile for Google Antigravity with Gemini API and Vertex AI endpoints allowlisted",
-            write_roots: vec!["$PROJECT", "/tmp", "~/.gemini", "~/.antigravity"],
-            read_roots: vec!["/", "$PROJECT", "~/.gemini"],
-            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
-            network_mode: "Allowlist (generativelanguage.googleapis.com, vertexai)",
-            network_domains: vec!["generativelanguage.googleapis.com".into(), "oauth2.googleapis.com".into()],
-            memory_quota: "2.0 GiB (cgroups v2)",
-            cpu_quota: "100% (cgroups v2)",
-            landlock_abi: "ABI 1-6",
-            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
-        },
+        agent_preset_item(
+            "claude",
+            "Claude Code Profile (Anthropic)",
+            "Tailored profile for Claude Code CLI with state access to ~/.claude and Anthropic API endpoints",
+            vec!["$PROJECT", "/tmp", "~/.claude", "~/.claude.json"],
+            vec!["/", "$PROJECT", "~/.claude"],
+        ),
+        agent_preset_item(
+            "codex",
+            "OpenAI Codex Profile",
+            "Tailored profile for OpenAI Codex CLI with state access to ~/.codex and OpenAI API endpoints",
+            vec!["$PROJECT", "/tmp", "~/.codex"],
+            vec!["/", "$PROJECT", "~/.codex"],
+        ),
+        agent_preset_item(
+            "opencode",
+            "OpenCode AI Profile",
+            "Tailored profile for OpenCode AI with 2 GiB SQLite ceiling for opencode.db without SIGXFSZ",
+            vec!["$PROJECT", "/tmp", "~/.local/share/opencode"],
+            vec!["/", "$PROJECT"],
+        ),
+        agent_preset_item(
+            "cursor",
+            "Cursor IDE Profile",
+            "Tailored profile for Cursor IDE background agent with Cursor API endpoints allowlisted",
+            vec!["$PROJECT", "/tmp", "~/.cursor"],
+            vec!["/", "$PROJECT", "~/.cursor"],
+        ),
+        agent_preset_item(
+            "aider",
+            "Aider Pair Programmer Profile",
+            "Tailored profile for Aider with git worktree isolation and multi-provider LLM API egress",
+            vec!["$PROJECT", "/tmp", "~/.aider"],
+            vec!["/", "$PROJECT"],
+        ),
+        agent_preset_item(
+            "antigravity",
+            "Google Antigravity Profile",
+            "Tailored profile for Google Antigravity with Gemini API and Vertex AI endpoints allowlisted",
+            vec!["$PROJECT", "/tmp", "~/.gemini", "~/.antigravity"],
+            vec!["/", "$PROJECT", "~/.gemini"],
+        ),
+        agent_preset_item(
+            "omnigent",
+            "Omnigent AI Profile",
+            "Tailored profile for Omnigent autonomous runtime with ~/.omnigent state and L7 anti-SSRF relay",
+            vec!["$PROJECT", "/tmp", "~/.omnigent", "~/.config/omnigent"],
+            vec!["/", "$PROJECT", "~/.omnigent"],
+        ),
+        agent_preset_item(
+            "hermes",
+            "Hermes Agent Profile (Nous Research)",
+            "Tailored profile for Hermes Agent runtime with Nous Research and Together AI endpoints",
+            vec!["$PROJECT", "/tmp", "~/.hermes", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.hermes"],
+        ),
+        agent_preset_item(
+            "kilo",
+            "Kilo Code Profile",
+            "Tailored profile for Kilo Code CLI agent with ~/.kilo state and multi-provider API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.kilo", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.kilo"],
+        ),
+        agent_preset_item(
+            "pi",
+            "Pi Coding Runtime Profile",
+            "Tailored profile for Pi coding agent with Groq, OpenAI, and Anthropic API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.pi", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.pi"],
+        ),
+        agent_preset_item(
+            "command_code",
+            "Command Code Profile (Cohere)",
+            "Tailored profile for Command Code CLI with Cohere API and package registry allowlist",
+            vec!["$PROJECT", "/tmp", "~/.command_code", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.command_code"],
+        ),
+        agent_preset_item(
+            "freebuff",
+            "Freebuff Agent Profile",
+            "Tailored profile for Freebuff coding agent with DeepSeek and OpenRouter API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.freebuff", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.freebuff"],
+        ),
+        agent_preset_item(
+            "deepseek_harness",
+            "DeepSeek Harness Profile",
+            "Tailored profile for DeepSeek Harness CLI with DeepSeek API and package registry egress",
+            vec!["$PROJECT", "/tmp", "~/.deepseek", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.deepseek"],
+        ),
+        agent_preset_item(
+            "omp",
+            "OMP Profile (Stencil Labs)",
+            "Tailored profile for OMP Rust coding agent with multi-model provider allowlist",
+            vec!["$PROJECT", "/tmp", "~/.omp", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.omp"],
+        ),
+        agent_preset_item(
+            "zcode",
+            "ZCode Profile (Z.ai / GLM)",
+            "Tailored profile for ZCode CLI with Z.ai and GLM endpoint allowlist",
+            vec!["$PROJECT", "/tmp", "~/.zcode", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.zcode"],
+        ),
+        agent_preset_item(
+            "kimi",
+            "Kimi Code Profile (Moonshot AI)",
+            "Tailored profile for Kimi Code CLI with Moonshot AI API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.kimi", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.kimi"],
+        ),
+        agent_preset_item(
+            "grok",
+            "Grok Build Profile (xAI)",
+            "Tailored profile for xAI Grok Build CLI with x.ai API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.grok", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.grok"],
+        ),
+        agent_preset_item(
+            "cline",
+            "Cline Assistant Profile",
+            "Tailored profile for Cline CLI with Anthropic, OpenAI, and OpenRouter egress",
+            vec!["$PROJECT", "/tmp", "~/.cline", "~/.cache"],
+            vec!["/", "$PROJECT", "~/.cline"],
+        ),
+        agent_preset_item(
+            "copilot",
+            "GitHub Copilot CLI Profile",
+            "Tailored profile for GitHub Copilot CLI with GitHub API and Copilot proxy allowlist",
+            vec!["$PROJECT", "/tmp", "~/.config/github-copilot"],
+            vec!["/", "$PROJECT", "~/.config/github-copilot"],
+        ),
+        agent_preset_item(
+            "windsurf",
+            "Windsurf Cascade Profile",
+            "Tailored profile for Windsurf CLI with Codeium API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.codeium", "~/.windsurf"],
+            vec!["/", "$PROJECT", "~/.codeium"],
+        ),
+        agent_preset_item(
+            "goose",
+            "Block Goose AI Profile",
+            "Tailored profile for Block Goose CLI agent with multi-provider LLM egress",
+            vec!["$PROJECT", "/tmp", "~/.config/goose", "~/.local/share/goose"],
+            vec!["/", "$PROJECT", "~/.config/goose"],
+        ),
+        agent_preset_item(
+            "openhands",
+            "OpenHands Profile (All-Hands)",
+            "Tailored profile for OpenHands agent runtime with bounded workspace write access",
+            vec!["$PROJECT", "/tmp", "~/.openhands"],
+            vec!["/", "$PROJECT", "~/.openhands"],
+        ),
+        agent_preset_item(
+            "devin",
+            "Cognition Devin CLI Profile",
+            "Tailored profile for Devin CLI runtime with Cognition API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.devin"],
+            vec!["/", "$PROJECT", "~/.devin"],
+        ),
+        agent_preset_item(
+            "smolagents",
+            "Hugging Face Smolagents Profile",
+            "Tailored profile for Smolagents with Hugging Face Hub and inference API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.cache/huggingface"],
+            vec!["/", "$PROJECT", "~/.cache/huggingface"],
+        ),
     ]
 }
 
@@ -289,6 +404,7 @@ pub struct DashboardState {
     pub security_events: VecDeque<SecurityEventItem>,
     pub selected_event: usize,
     pub seen_event_keys: HashSet<(i64, String, String)>,
+    pub log_file_offsets: HashMap<PathBuf, u64>,
     pub theme: Theme,
     pub status_message: Option<(String, Instant)>,
     pub pending_launch_agent: Option<String>,
@@ -323,6 +439,7 @@ impl DashboardState {
             security_events: VecDeque::with_capacity(500),
             selected_event: 0,
             seen_event_keys: HashSet::new(),
+            log_file_offsets: HashMap::new(),
             theme,
             status_message: None,
             pending_launch_agent: None,
@@ -456,16 +573,15 @@ impl DashboardState {
 
                 for entry in entries {
                     let uptime = now.saturating_sub(entry.started_at_secs);
-                    let pids = find_session_pids(entry.pid);
+                    let (mem_limit, cpu_limit, pids_limit, cgroup_scope) =
+                        read_session_cgroup_limits(&entry.session_id, entry.pid);
+                    let pids = find_session_pids(entry.pid, &cgroup_scope);
                     let allowlist = crate::policy::presets::agent_network_allowlist(&entry.agent);
                     let net_proxy = if allowlist.is_empty() {
                         "OFF (egress blocked)".to_string()
                     } else {
                         format!("L7 RELAY ({} domains)", allowlist.len())
                     };
-
-                    let (mem_limit, cpu_limit, pids_limit) =
-                        read_session_cgroup_limits(&entry.session_id, entry.pid);
 
                     let is_alive = crate::cli::status::is_pid_alive(entry.pid);
                     let extinction_status = if is_alive {
@@ -487,6 +603,7 @@ impl DashboardState {
                         cgroup_memory: mem_limit,
                         cgroup_cpu: cpu_limit,
                         cgroup_pids: pids_limit,
+                        cgroup_scope,
                         net_proxy_status: net_proxy,
                         procs: pids,
                         extinction_status,
@@ -495,6 +612,11 @@ impl DashboardState {
             }
         }
         self.active_sessions = sessions;
+        if self.active_sessions.is_empty() {
+            self.selected_session = 0;
+        } else if self.selected_session >= self.active_sessions.len() {
+            self.selected_session = self.active_sessions.len() - 1;
+        }
     }
 
     /// Cycles through available policy presets.
@@ -515,6 +637,11 @@ impl DashboardState {
         } else {
             self.fleet_workers = Vec::new();
         }
+        if self.fleet_workers.is_empty() {
+            self.selected_fleet_worker = 0;
+        } else if self.selected_fleet_worker >= self.fleet_workers.len() {
+            self.selected_fleet_worker = self.fleet_workers.len() - 1;
+        }
     }
 
     /// Reads recorded security events from ~/.vetto/logs/*.jsonl and appends them to ring buffer.
@@ -525,12 +652,17 @@ impl DashboardState {
 
         let Some(home) = home else { return };
         let logs_dir = home.join(".vetto").join("logs");
+        self.poll_security_events_from_dir(&logs_dir);
+    }
+
+    /// Incrementally tails the most recent `.jsonl` security log files in `logs_dir`.
+    pub fn poll_security_events_from_dir(&mut self, logs_dir: &Path) {
         if !logs_dir.exists() {
             return;
         }
 
         let mut log_files: Vec<PathBuf> = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&logs_dir) {
+        if let Ok(entries) = std::fs::read_dir(logs_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
@@ -545,16 +677,75 @@ impl DashboardState {
                 .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
         });
 
-        // Scan up to 5 most recent log files
+        // Scan up to 5 most recent log files using incremental byte offsets
         let slice_start = log_files.len().saturating_sub(5);
-        for log_file in &log_files[slice_start..] {
-            let Ok(file) = File::open(log_file) else {
+        let active_slice = &log_files[slice_start..];
+        self.log_file_offsets
+            .retain(|path, _| active_slice.contains(path));
+
+        for log_file in active_slice {
+            let Ok(mut file) = File::open(log_file) else {
                 continue;
             };
-            let reader = BufReader::new(file);
+            let file_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+            let prev_offset = self.log_file_offsets.get(log_file).copied();
 
-            for line in reader.lines() {
-                let Ok(line) = line else { continue };
+            let mut skip_partial_first_line = false;
+            let start_offset = match prev_offset {
+                Some(off) if off <= file_len => off,
+                Some(_) => {
+                    // File was truncated or rotated
+                    if file_len > MAX_INITIAL_LOG_TAIL_BYTES {
+                        skip_partial_first_line = true;
+                        file_len - MAX_INITIAL_LOG_TAIL_BYTES
+                    } else {
+                        0
+                    }
+                }
+                None => {
+                    if file_len > MAX_INITIAL_LOG_TAIL_BYTES {
+                        skip_partial_first_line = true;
+                        file_len - MAX_INITIAL_LOG_TAIL_BYTES
+                    } else {
+                        0
+                    }
+                }
+            };
+
+            if start_offset == file_len && prev_offset.is_some() {
+                continue;
+            }
+
+            if file.seek(SeekFrom::Start(start_offset)).is_err() {
+                continue;
+            }
+
+            let mut reader = BufReader::new(file);
+            let mut cursor = start_offset;
+
+            if skip_partial_first_line {
+                let mut discarded = String::new();
+                if let Ok(bytes) = reader.read_line(&mut discarded) {
+                    cursor += bytes as u64;
+                }
+            }
+
+            let mut line = String::new();
+            loop {
+                line.clear();
+                let Ok(bytes_read) = reader.read_line(&mut line) else {
+                    break;
+                };
+                if bytes_read == 0 {
+                    break;
+                }
+                // Only advance the offset past complete newline-terminated lines
+                // (or EOF when initial load parses a small static file)
+                if !line.ends_with('\n') && prev_offset.is_some() {
+                    break;
+                }
+                cursor += bytes_read as u64;
+
                 let trimmed = line.trim();
                 if trimmed.is_empty() || trimmed.starts_with('#') {
                     continue;
@@ -564,80 +755,7 @@ impl DashboardState {
                     continue;
                 };
 
-                let item = match ev {
-                    crate::events::Event::BlockedAttempt {
-                        ts,
-                        pid,
-                        comm,
-                        path,
-                        source,
-                    } => {
-                        let ev_type = if source.to_ascii_lowercase().contains("seccomp") {
-                            SecurityEventType::SeccompFilter
-                        } else {
-                            SecurityEventType::LandlockDenial
-                        };
-                        Some(SecurityEventItem {
-                            ts,
-                            event_type: ev_type,
-                            subject: path,
-                            detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
-                            source,
-                        })
-                    }
-                    crate::events::Event::NetRequest {
-                        ts,
-                        host,
-                        port,
-                        allowed,
-                    } if !allowed => Some(SecurityEventItem {
-                        ts,
-                        event_type: SecurityEventType::BlockedNetwork,
-                        subject: format!("{host}:{port}"),
-                        detail: "Outbound egress blocked fail-closed (Anti-SSRF / broker policy)"
-                            .to_string(),
-                        source: "net_relay".to_string(),
-                    }),
-                    crate::events::Event::SecretMasked { ts, path } => Some(SecurityEventItem {
-                        ts,
-                        event_type: SecurityEventType::SecretMasked,
-                        subject: path,
-                        detail: "Inode masked with 0000 mode tmpfs overlay (INV-08)".to_string(),
-                        source: "vfs_overlays".to_string(),
-                    }),
-                    crate::events::Event::NetQuotaExceeded {
-                        ts,
-                        host,
-                        limit_bytes,
-                        used_bytes,
-                    } => Some(SecurityEventItem {
-                        ts,
-                        event_type: SecurityEventType::QuotaExceeded,
-                        subject: host,
-                        detail: format!(
-                            "Bandwidth quota exceeded: {used_bytes}/{limit_bytes} bytes"
-                        ),
-                        source: "net_quota".to_string(),
-                    }),
-                    crate::events::Event::Notice { ts, message } => {
-                        let lower = message.to_ascii_lowercase();
-                        if lower.contains("blocked")
-                            || lower.contains("ssrf")
-                            || lower.contains("denied")
-                        {
-                            Some(SecurityEventItem {
-                                ts,
-                                event_type: SecurityEventType::BlockedNetwork,
-                                subject: message.clone(),
-                                detail: message,
-                                source: "net_relay".to_string(),
-                            })
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
+                let item = classify_security_event(ev);
 
                 if let Some(item) = item {
                     let key = (
@@ -648,11 +766,26 @@ impl DashboardState {
                     if self.seen_event_keys.insert(key) {
                         self.security_events.push_front(item);
                         if self.security_events.len() > 500 {
-                            self.security_events.pop_back();
+                            if let Some(evicted) = self.security_events.pop_back() {
+                                let evicted_key = (
+                                    evicted.ts.timestamp_millis(),
+                                    evicted.subject,
+                                    evicted.detail,
+                                );
+                                self.seen_event_keys.remove(&evicted_key);
+                            }
                         }
                     }
                 }
             }
+
+            self.log_file_offsets.insert(log_file.clone(), cursor);
+        }
+
+        if self.security_events.is_empty() {
+            self.selected_event = 0;
+        } else if self.selected_event >= self.security_events.len() {
+            self.selected_event = self.security_events.len() - 1;
         }
     }
 
@@ -661,7 +794,10 @@ impl DashboardState {
             return Ok(());
         }
 
-        let agent = &mut self.installed_agents[self.selected_agent];
+        let idx = self
+            .selected_agent
+            .min(self.installed_agents.len().saturating_sub(1));
+        let agent = &mut self.installed_agents[idx];
         let name = agent.name;
 
         if agent.is_shim_active {
@@ -779,11 +915,34 @@ impl DashboardState {
         }
     }
 
+    pub fn select_prev_snapshot(&mut self) {
+        if !self.snapshots.is_empty() {
+            if self.selected_snapshot > 0 {
+                self.selected_snapshot -= 1;
+            } else {
+                self.selected_snapshot = self.snapshots.len() - 1;
+            }
+        }
+    }
+
+    pub fn select_next_snapshot(&mut self) {
+        if !self.snapshots.is_empty() {
+            if self.selected_snapshot + 1 < self.snapshots.len() {
+                self.selected_snapshot += 1;
+            } else {
+                self.selected_snapshot = 0;
+            }
+        }
+    }
+
     pub fn rollback_selected_snapshot(&mut self) -> Result<()> {
         if self.snapshots.is_empty() {
             return Ok(());
         }
-        let snap = &self.snapshots[self.selected_snapshot];
+        let idx = self
+            .selected_snapshot
+            .min(self.snapshots.len().saturating_sub(1));
+        let snap = &self.snapshots[idx];
         let res = rollback_snapshot(&snap.session_id, None)?;
         self.set_status(format!(
             "Restored {} file(s) from session '{}'",
@@ -865,10 +1024,6 @@ impl DashboardState {
         }
 
         self.poll_fleet_state();
-        if self.selected_fleet_worker >= self.fleet_workers.len() && !self.fleet_workers.is_empty()
-        {
-            self.selected_fleet_worker = self.fleet_workers.len() - 1;
-        }
         self.set_status(format!("Terminated worker '{}' and released slot", wid));
     }
 
@@ -884,22 +1039,121 @@ impl DashboardState {
         let session = self.active_sessions[index].clone();
         let sid = session.session_id.clone();
 
-        let _ = crate::cli::kill::kill_pid(session.pid, true);
-        for &child_pid in &session.procs {
+        // 1. Trigger atomic cgroups v2 process tree extinction (cgroup.kill) if dedicated vetto scope exists
+        let cgroup_path = PathBuf::from(&session.cgroup_scope);
+        if session.cgroup_scope.contains("vetto") {
+            let cgroup_kill = cgroup_path.join("cgroup.kill");
+            if cgroup_kill.exists() {
+                let _ = std::fs::write(&cgroup_kill, "1\n");
+            }
+        }
+        let default_cgroup_kill = PathBuf::from("/sys/fs/cgroup")
+            .join(format!("vetto-{sid}"))
+            .join("cgroup.kill");
+        if default_cgroup_kill.exists() {
+            let _ = std::fs::write(&default_cgroup_kill, "1\n");
+        }
+
+        // 2. Signal all descendant processes in reverse (leaves-first) order, then root PID
+        for &child_pid in session.procs.iter().rev() {
             if child_pid != session.pid {
                 let _ = crate::cli::kill::kill_pid(child_pid, true);
             }
         }
+        let _ = crate::cli::kill::kill_pid(session.pid, true);
 
         if let Ok(reg) = crate::cli::status::SessionRegistry::new() {
             reg.unregister(&sid);
         }
 
         self.poll_active_sessions();
-        if self.selected_session >= self.active_sessions.len() && !self.active_sessions.is_empty() {
-            self.selected_session = self.active_sessions.len() - 1;
+        self.set_status(format!(
+            "Terminated session '{sid}' (PID {} + {} descendants)",
+            session.pid,
+            session.procs.len().saturating_sub(1)
+        ));
+    }
+}
+
+pub(crate) fn classify_security_event(ev: crate::events::Event) -> Option<SecurityEventItem> {
+    match ev {
+        crate::events::Event::BlockedAttempt {
+            ts,
+            pid,
+            comm,
+            path,
+            source,
+        } => {
+            let lower_src = source.to_ascii_lowercase();
+            // Distinguish seccomp-BPF syscall filter violations from filesystem path denials
+            // (note: "observe-seccomp" records filesystem paths opened via openat/statx)
+            let is_fs_path = path.starts_with('/')
+                || path.starts_with("~/")
+                || path.starts_with("./")
+                || path.starts_with("../");
+            let is_syscall_event = path.starts_with("syscall:")
+                || lower_src == "seccomp"
+                || lower_src == "seccomp-bpf"
+                || (lower_src.contains("seccomp") && !is_fs_path);
+            let ev_type = if is_syscall_event {
+                SecurityEventType::SeccompFilter
+            } else {
+                SecurityEventType::LandlockDenial
+            };
+            Some(SecurityEventItem {
+                ts,
+                event_type: ev_type,
+                subject: path,
+                detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
+                source,
+            })
         }
-        self.set_status(format!("Terminated session '{sid}' (PID {})", session.pid));
+        crate::events::Event::NetRequest {
+            ts,
+            host,
+            port,
+            allowed,
+        } if !allowed => Some(SecurityEventItem {
+            ts,
+            event_type: SecurityEventType::BlockedNetwork,
+            subject: format!("{host}:{port}"),
+            detail: "Outbound egress blocked fail-closed (Anti-SSRF / broker policy)".to_string(),
+            source: "net_relay".to_string(),
+        }),
+        crate::events::Event::SecretMasked { ts, path } => Some(SecurityEventItem {
+            ts,
+            event_type: SecurityEventType::SecretMasked,
+            subject: path,
+            detail: "Inode masked with 0000 mode tmpfs overlay (INV-08)".to_string(),
+            source: "vfs_overlays".to_string(),
+        }),
+        crate::events::Event::NetQuotaExceeded {
+            ts,
+            host,
+            limit_bytes,
+            used_bytes,
+        } => Some(SecurityEventItem {
+            ts,
+            event_type: SecurityEventType::QuotaExceeded,
+            subject: host,
+            detail: format!("Bandwidth quota exceeded: {used_bytes}/{limit_bytes} bytes"),
+            source: "net_quota".to_string(),
+        }),
+        crate::events::Event::Notice { ts, message } => {
+            let lower = message.to_ascii_lowercase();
+            if lower.contains("blocked") || lower.contains("ssrf") || lower.contains("denied") {
+                Some(SecurityEventItem {
+                    ts,
+                    event_type: SecurityEventType::BlockedNetwork,
+                    subject: message.clone(),
+                    detail: message,
+                    source: "net_relay".to_string(),
+                })
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
 
@@ -922,6 +1176,13 @@ fn format_agent_name(name: &str) -> String {
         "zcode" => "ZCode (Z.ai / GLM-5.3)".to_string(),
         "kimi" => "Kimi Code (Moonshot AI)".to_string(),
         "grok" => "Grok Build (xAI)".to_string(),
+        "hermes" => "Hermes Agent (Nous Research)".to_string(),
+        "kilo" => "Kilo Code CLI".to_string(),
+        "pi" => "Pi Coding Agent".to_string(),
+        "command_code" => "Command Code CLI".to_string(),
+        "freebuff" => "Freebuff Agent".to_string(),
+        "deepseek_harness" => "DeepSeek Harness".to_string(),
+        "omnigent" => "Omnigent Agent".to_string(),
         other => other.to_string(),
     }
 }
@@ -971,25 +1232,35 @@ fn find_running_pids(binary_name: &str, agent_name: &str) -> Vec<u32> {
     }
 }
 
-fn read_session_cgroup_limits(session_id: &str, pid: u32) -> (String, String, String) {
+fn read_session_cgroup_limits(session_id: &str, pid: u32) -> (String, String, String, String) {
+    let default_scope = format!("/sys/fs/cgroup/vetto-{session_id}");
     #[cfg(target_os = "linux")]
     {
-        let cgroup_dir =
-            std::path::PathBuf::from("/sys/fs/cgroup").join(format!("vetto-{}", session_id));
-        if cgroup_dir.exists() {
-            let mem = std::fs::read_to_string(cgroup_dir.join("memory.max"))
-                .unwrap_or_else(|_| "max".into())
-                .trim()
-                .to_string();
-            let cpu = std::fs::read_to_string(cgroup_dir.join("cpu.max"))
-                .unwrap_or_else(|_| "max 100000".into())
-                .trim()
-                .to_string();
-            let pids = std::fs::read_to_string(cgroup_dir.join("pids.max"))
-                .unwrap_or_else(|_| "max".into())
-                .trim()
-                .to_string();
-            return (format_cgroup_mem(&mem), format_cgroup_cpu(&cpu), pids);
+        let candidates = [
+            std::path::PathBuf::from("/sys/fs/cgroup").join(format!("vetto-{session_id}")),
+            std::path::PathBuf::from("/sys/fs/cgroup/vetto").join(session_id),
+        ];
+        for cgroup_dir in &candidates {
+            if cgroup_dir.exists() {
+                let mem = std::fs::read_to_string(cgroup_dir.join("memory.max"))
+                    .unwrap_or_else(|_| "max".into())
+                    .trim()
+                    .to_string();
+                let cpu = std::fs::read_to_string(cgroup_dir.join("cpu.max"))
+                    .unwrap_or_else(|_| "max 100000".into())
+                    .trim()
+                    .to_string();
+                let pids = std::fs::read_to_string(cgroup_dir.join("pids.max"))
+                    .unwrap_or_else(|_| "max".into())
+                    .trim()
+                    .to_string();
+                return (
+                    format_cgroup_mem(&mem),
+                    format_cgroup_cpu(&cpu),
+                    pids,
+                    cgroup_dir.display().to_string(),
+                );
+            }
         }
 
         if let Ok(cgroup_content) = std::fs::read_to_string(format!("/proc/{pid}/cgroup")) {
@@ -1010,7 +1281,12 @@ fn read_session_cgroup_limits(session_id: &str, pid: u32) -> (String, String, St
                             .unwrap_or_else(|_| "max".into())
                             .trim()
                             .to_string();
-                        return (format_cgroup_mem(&mem), format_cgroup_cpu(&cpu), pids);
+                        return (
+                            format_cgroup_mem(&mem),
+                            format_cgroup_cpu(&cpu),
+                            pids,
+                            full_path.display().to_string(),
+                        );
                     }
                 }
             }
@@ -1021,6 +1297,7 @@ fn read_session_cgroup_limits(session_id: &str, pid: u32) -> (String, String, St
         "2.0 GiB (default)".to_string(),
         "100% (default)".to_string(),
         "128 (default)".to_string(),
+        default_scope,
     )
 }
 
@@ -1057,10 +1334,43 @@ fn format_cgroup_cpu(raw: &str) -> String {
     }
 }
 
-fn find_session_pids(root_pid: u32) -> Vec<u32> {
+/// Pure BFS traversal over `(pid, ppid)` edges returning `root_pid` followed by all descendants.
+pub(crate) fn collect_descendant_pids(root_pid: u32, ppid_pairs: &[(u32, u32)]) -> Vec<u32> {
+    let mut children_by_ppid: HashMap<u32, Vec<u32>> = HashMap::new();
+    for &(pid, ppid) in ppid_pairs {
+        if pid != root_pid {
+            children_by_ppid.entry(ppid).or_default().push(pid);
+        }
+    }
+    for list in children_by_ppid.values_mut() {
+        list.sort_unstable();
+        list.dedup();
+    }
+
+    let mut result = vec![root_pid];
+    let mut visited: HashSet<u32> = HashSet::new();
+    visited.insert(root_pid);
+    let mut queue: VecDeque<u32> = VecDeque::new();
+    queue.push_back(root_pid);
+
+    while let Some(current) = queue.pop_front() {
+        if let Some(children) = children_by_ppid.get(&current) {
+            for &child in children {
+                if visited.insert(child) {
+                    result.push(child);
+                    queue.push_back(child);
+                }
+            }
+        }
+    }
+
+    result
+}
+
+fn find_session_pids(root_pid: u32, cgroup_scope: &str) -> Vec<u32> {
     #[cfg(target_os = "linux")]
     {
-        let mut pids = vec![root_pid];
+        let mut ppid_pairs = Vec::new();
         if let Ok(entries) = std::fs::read_dir("/proc") {
             for entry in entries.flatten() {
                 let Ok(file_name) = entry.file_name().into_string() else {
@@ -1069,30 +1379,180 @@ fn find_session_pids(root_pid: u32) -> Vec<u32> {
                 let Ok(pid) = file_name.parse::<u32>() else {
                     continue;
                 };
-                if pid == root_pid {
-                    continue;
-                }
                 if let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) {
                     if let Some(after_comm) = stat.rfind(')') {
                         let rest = stat[after_comm + 1..].trim();
                         let parts: Vec<&str> = rest.split_whitespace().collect();
                         if parts.len() >= 2 {
                             if let Ok(ppid) = parts[1].parse::<u32>() {
-                                if ppid == root_pid {
-                                    pids.push(pid);
-                                }
+                                ppid_pairs.push((pid, ppid));
                             }
                         }
                     }
                 }
             }
         }
-        pids.sort_unstable();
-        pids.dedup();
+
+        let mut pids = collect_descendant_pids(root_pid, &ppid_pairs);
+
+        // Also include PIDs registered in a dedicated vetto cgroup scope if present
+        if cgroup_scope.contains("vetto") {
+            let cgroup_procs = Path::new(cgroup_scope).join("cgroup.procs");
+            if let Ok(content) = std::fs::read_to_string(cgroup_procs) {
+                for line in content.lines() {
+                    if let Ok(pid) = line.trim().parse::<u32>() {
+                        if !pids.contains(&pid) {
+                            pids.push(pid);
+                        }
+                    }
+                }
+            }
+        }
+
         pids
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = cgroup_scope;
         vec![root_pid]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collect_descendant_pids_multi_level_bfs() {
+        // 4-level tree: 100 -> (200, 201), 200 -> 300 -> 400, plus unrelated 999 -> 1000
+        let pairs = vec![
+            (100, 1),
+            (200, 100),
+            (201, 100),
+            (300, 200),
+            (400, 300),
+            (999, 1),
+            (1000, 999),
+            // Synthetic cycle edge to ensure visited guard prevents infinite loop
+            (200, 400),
+        ];
+        let pids = collect_descendant_pids(100, &pairs);
+        assert_eq!(pids, vec![100, 200, 201, 300, 400]);
+    }
+
+    #[test]
+    fn test_classify_security_event_observe_seccomp_vs_syscall_filter() {
+        let fs_ev = crate::events::Event::BlockedAttempt {
+            ts: Utc::now(),
+            pid: 1234,
+            comm: "claude".to_string(),
+            path: "/etc/shadow".to_string(),
+            source: "observe-seccomp".to_string(),
+        };
+        let classified_fs = classify_security_event(fs_ev).expect("should classify fs event");
+        assert_eq!(classified_fs.event_type, SecurityEventType::LandlockDenial);
+        assert_eq!(classified_fs.event_type.badge(), "LANDLOCK");
+
+        let syscall_ev = crate::events::Event::BlockedAttempt {
+            ts: Utc::now(),
+            pid: 1234,
+            comm: "claude".to_string(),
+            path: "syscall:ptrace".to_string(),
+            source: "seccomp-bpf".to_string(),
+        };
+        let classified_sys =
+            classify_security_event(syscall_ev).expect("should classify syscall event");
+        assert_eq!(classified_sys.event_type, SecurityEventType::SeccompFilter);
+        assert_eq!(classified_sys.event_type.badge(), "SECCOMP");
+    }
+
+    #[test]
+    fn test_poll_security_events_incremental_tailing_and_large_file_cap() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let log_path = tmp.path().join("session-test.jsonl");
+
+        // Write > 512 KiB of padding comments followed by one valid event
+        let mut initial = String::with_capacity(600 * 1024);
+        let comment_line = format!("# {}\n", "x".repeat(100));
+        while initial.len() < 550 * 1024 {
+            initial.push_str(&comment_line);
+        }
+        initial.push_str(
+            r#"{"ts":"2026-09-28T12:00:00Z","type":"secret_masked","path":"/home/user/.ssh/id_ed25519"}"#,
+        );
+        initial.push('\n');
+        std::fs::write(&log_path, &initial).expect("write initial log");
+
+        let mut state = DashboardState {
+            active_tab: MissionTab::SecurityStream,
+            installed_agents: Vec::new(),
+            selected_agent: 0,
+            doctor_report: None,
+            snapshots: Vec::new(),
+            selected_snapshot: 0,
+            security_events: VecDeque::new(),
+            selected_event: 0,
+            seen_event_keys: HashSet::new(),
+            log_file_offsets: HashMap::new(),
+            theme: Theme::arasaka(),
+            status_message: None,
+            pending_launch_agent: None,
+            fleet_workers: Vec::new(),
+            selected_fleet_worker: 0,
+            fleet_probe_status: None,
+            active_sessions: Vec::new(),
+            selected_session: 0,
+            policy_presets: built_in_presets(),
+            selected_preset: 0,
+        };
+
+        state.poll_security_events_from_dir(tmp.path());
+        assert_eq!(state.security_events.len(), 1);
+        assert_eq!(
+            state.security_events[0].event_type,
+            SecurityEventType::SecretMasked
+        );
+        let first_offset = *state.log_file_offsets.get(&log_path).expect("offset saved");
+        assert_eq!(first_offset, initial.len() as u64);
+
+        // Append a second event and verify incremental read picks up only the new bytes
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("open append");
+        writeln!(
+            f,
+            r#"{{"ts":"2026-09-28T12:00:05Z","type":"net_request","host":"169.254.169.254","port":80,"allowed":false}}"#
+        )
+        .expect("append line");
+        drop(f);
+
+        state.poll_security_events_from_dir(tmp.path());
+        assert_eq!(state.security_events.len(), 2);
+        assert_eq!(
+            state.security_events[0].event_type,
+            SecurityEventType::BlockedNetwork
+        );
+        let second_offset = *state
+            .log_file_offsets
+            .get(&log_path)
+            .expect("updated offset");
+        assert!(second_offset > first_offset);
+    }
+
+    #[test]
+    fn test_built_in_presets_covers_all_supported_agents() {
+        let presets = built_in_presets();
+        // 3 base presets + 24 canonical agent presets = 27
+        assert_eq!(presets.len(), 27);
+        for &agent_name in &SUPPORTED_AGENTS {
+            let canon =
+                crate::policy::defaults::canonical_agent_name(agent_name).unwrap_or(agent_name);
+            assert!(
+                presets.iter().any(|p| p.name == canon),
+                "missing preset for supported agent {canon}"
+            );
+        }
     }
 }

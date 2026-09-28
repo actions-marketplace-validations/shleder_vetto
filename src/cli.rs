@@ -378,7 +378,11 @@ pub enum Command {
         non_interactive: bool,
     },
     /// Launch the interactive TUI Mission Control dashboard
-    #[command(name = "tui", visible_alias = "mission-control")]
+    #[command(
+        name = "tui",
+        visible_alias = "mission-control",
+        alias = "mission_control"
+    )]
     Tui {
         /// Color theme mode: arasaka | circuit
         #[arg(long, value_name = "THEME")]
@@ -1632,6 +1636,15 @@ mod test_is_container {
             Some(Command::Tui {
                 theme: Some(ref t)
             }) if t == "circuit"
+        ));
+
+        let mc_underscore_cli =
+            Cli::try_parse_from(["vetto", "mission_control", "--theme", "arasaka"]).unwrap();
+        assert!(matches!(
+            mc_underscore_cli.command,
+            Some(Command::Tui {
+                theme: Some(ref t)
+            }) if t == "arasaka"
         ));
     }
 }
