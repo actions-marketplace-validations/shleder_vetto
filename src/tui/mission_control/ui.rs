@@ -493,9 +493,7 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
             );
 
             let net_span = Span::styled(
-                if preset.network_mode.starts_with("OFF") {
-                    "OFF"
-                } else if preset.network_domains.is_empty() {
+                if preset.network_mode.starts_with("OFF") || preset.network_domains.is_empty() {
                     "OFF"
                 } else {
                     "ALLOW"
