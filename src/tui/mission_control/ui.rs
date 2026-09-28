@@ -465,56 +465,56 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
         .map(|(idx, preset)| {
             let is_selected = idx == state.selected_preset;
 
-        let level_badge = match preset.security_level {
-            s if s.starts_with("STRICT") => Span::styled(
-                "[STRICT]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            s if s.starts_with("STANDARD") => Span::styled(
-                "[STANDARD]",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            _ => Span::styled("[PERMISSIVE]", Style::default().fg(theme.warning)),
-        };
+            let level_badge = match preset.security_level {
+                s if s.starts_with("STRICT") => Span::styled(
+                    "[STRICT]",
+                    Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                s if s.starts_with("STANDARD") => Span::styled(
+                    "[STANDARD]",
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                _ => Span::styled("[PERMISSIVE]", Style::default().fg(theme.warning)),
+            };
 
-        let name_span = Span::styled(
-            preset.name,
+            let name_span = Span::styled(
+                preset.name,
+                if is_selected {
+                    Style::default()
+                        .fg(theme.selection_fg)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.text)
+                },
+            );
+
+            let net_span = Span::styled(
+                if preset.network_mode.starts_with("OFF") {
+                    "OFF"
+                } else if preset.network_domains.is_empty() {
+                    "OFF"
+                } else {
+                    "ALLOW"
+                },
+                Style::default().fg(theme.muted),
+            );
+
+            let row = Row::new(vec![name_span, level_badge, net_span]);
             if is_selected {
-                Style::default()
-                    .fg(theme.selection_fg)
-                    .add_modifier(Modifier::BOLD)
+                row.style(
+                    Style::default()
+                        .bg(theme.selection_bg)
+                        .fg(theme.selection_fg)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
-                Style::default().fg(theme.text)
-            },
-        );
-
-        let net_span = Span::styled(
-            if preset.network_mode.starts_with("OFF") {
-                "OFF"
-            } else if preset.network_domains.is_empty() {
-                "OFF"
-            } else {
-                "ALLOW"
-            },
-            Style::default().fg(theme.muted),
-        );
-
-        let row = Row::new(vec![name_span, level_badge, net_span]);
-        if is_selected {
-            row.style(
-                Style::default()
-                    .bg(theme.selection_bg)
-                    .fg(theme.selection_fg)
-                    .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            row
-        }
-    });
+                row
+            }
+        });
 
     let presets_table = Table::new(
         rows,
