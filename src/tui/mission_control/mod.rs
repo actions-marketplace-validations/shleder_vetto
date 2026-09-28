@@ -129,26 +129,35 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                             KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
                             KeyCode::Down | KeyCode::Char('j') => state.select_next(),
 
-                            // 'v': Trigger isolation verification probe on Fleet tab
+                            // 'v': Trigger isolation verification probe on Fleet or Sessions tab
                             KeyCode::Char('v') => {
-                                if state.active_tab == MissionTab::Fleet {
+                                if state.active_tab == MissionTab::Fleet
+                                    || state.active_tab == MissionTab::Sessions
+                                {
                                     state.trigger_fleet_verify_probe();
                                 } else {
                                     state.set_status(
-                                        "Verify probe [v] is only available on Fleet tab ([6])",
+                                        "Verify probe [v] is available on Fleet ([6]) and Sessions ([4]) tabs",
                                     );
                                 }
                             }
 
-                            // 'x': Terminate selected worker on Fleet tab
+                            // 'x': Terminate selected worker or session
                             KeyCode::Char('x') => {
                                 if state.active_tab == MissionTab::Fleet {
                                     state.terminate_selected_worker();
+                                } else if state.active_tab == MissionTab::Sessions {
+                                    state.terminate_selected_session();
                                 } else {
                                     state.set_status(
-                                        "Terminate [x] is only available on Fleet tab ([6])",
+                                        "Terminate [x] is available on Fleet ([6]) and Sessions ([4]) tabs",
                                     );
                                 }
+                            }
+
+                            // 'p': Cycle policy presets
+                            KeyCode::Char('p') => {
+                                state.cycle_preset();
                             }
 
                             // Space: Toggle shim for selected agent
@@ -228,6 +237,7 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
         if last_tick.elapsed() >= TICK_RATE {
             last_tick = Instant::now();
             state.poll_security_events();
+            state.poll_active_sessions();
         }
     };
 

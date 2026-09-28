@@ -1,3 +1,9 @@
+vetto (0.5.7-1) unstable; urgency=medium
+
+  * Release 0.5.7: Interactive TUI Mission Control Dashboard and real-time security monitor.
+
+ -- vetto contributors <noreply@github.com>  Mon, 28 Sep 2026 19:12:26 +0000
+
 vetto (0.5.6-1) unstable; urgency=medium
 
   * Release 0.5.6: Omnigent profile support and L7 anti-SSRF loopback hardening.

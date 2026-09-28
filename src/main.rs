@@ -72,6 +72,9 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "doctor",
         "tour",
         "status",
+        "tui",
+        "mission-control",
+        "mission_control",
         "kill",
         "fleet",
         "verify",
@@ -439,6 +442,9 @@ fn run() -> Result<()> {
             profile.as_deref(),
         ),
         Some(cli::Command::Status { json }) => cli::status::run_cli(*json),
+        Some(cli::Command::Tui { theme }) | Some(cli::Command::MissionControl { theme }) => {
+            vetto::tui::mission_control::run_dashboard(theme.as_deref())
+        }
         Some(cli::Command::Kill(kill_args)) => cli::kill::run_cli(kill_args),
         Some(cli::Command::Fleet { command }) => cli::fleet::run_cli(command.clone()),
         Some(cli::Command::Profile { command }) => match command {

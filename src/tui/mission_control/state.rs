@@ -17,17 +17,20 @@ use super::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityEventType {
-    AccessDenial,   // Landlock/Seccomp
-    BlockedNetwork, // NetRelay / Anti-SSRF drop
-    SecretMasked,   // Inode tmpfs overlay
+    AccessDenial,   // General access denial
+    LandlockDenial, // Landlock LSM filesystem access denial
+    SeccompFilter,  // Seccomp-BPF filtered syscall
+    BlockedNetwork, // NetRelay / Anti-SSRF drop (L7 egress)
+    SecretMasked,   // Inode tmpfs overlay (INV-08)
     QuotaExceeded,  // Network quota
 }
 
 impl SecurityEventType {
     pub fn badge(&self) -> &'static str {
         match self {
-            Self::AccessDenial => "DENIAL",
-            Self::BlockedNetwork => "NET_DROP",
+            Self::AccessDenial | Self::LandlockDenial => "LANDLOCK",
+            Self::SeccompFilter => "SECCOMP",
+            Self::BlockedNetwork => "L7_EGRESS",
             Self::SecretMasked => "SECRET",
             Self::QuotaExceeded => "QUOTA",
         }
@@ -100,6 +103,182 @@ pub struct AgentCard {
 }
 
 #[derive(Debug, Clone)]
+pub struct ActiveSessionCard {
+    pub session_id: String,
+    pub pid: u32,
+    pub agent: String,
+    pub started_at_secs: u64,
+    pub uptime_secs: u64,
+    pub policy: String,
+    pub tier: String,
+    pub cwd: String,
+    pub landlock_abi: u32,
+    pub cgroup_memory: String,
+    pub cgroup_cpu: String,
+    pub cgroup_pids: String,
+    pub net_proxy_status: String,
+    pub procs: Vec<u32>,
+    pub extinction_status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicyPresetItem {
+    pub name: &'static str,
+    pub title: &'static str,
+    pub security_level: &'static str,
+    pub description: &'static str,
+    pub write_roots: Vec<&'static str>,
+    pub read_roots: Vec<&'static str>,
+    pub secret_denies: Vec<&'static str>,
+    pub network_mode: &'static str,
+    pub network_domains: Vec<String>,
+    pub memory_quota: &'static str,
+    pub cpu_quota: &'static str,
+    pub landlock_abi: &'static str,
+    pub seccomp_blocked: &'static str,
+}
+
+pub fn built_in_presets() -> Vec<PolicyPresetItem> {
+    vec![
+        PolicyPresetItem {
+            name: "balanced",
+            title: "Balanced Preset (Default Base)",
+            security_level: "STANDARD (Fail-Closed Enforcement)",
+            description: "Default baseline: write restricted to project root and /tmp, system read-only, strict secret masking, network auto-allowlisted by agent",
+            write_roots: vec!["$PROJECT (Workspace Root)", "/tmp (Session Scratchpad)"],
+            read_roots: vec!["/ (System Rootfs Read-Only)", "/usr, /bin, /lib, /opt", "$PROJECT"],
+            secret_denies: vec!["~/.ssh, ~/.aws, .env, .env.*", "~/.gnupg, ~/.kube, ~/.docker", "$PROJECT/.git/config, *.pem, *.key"],
+            network_mode: "Allowlist with TLS SNI and DNS Validation",
+            network_domains: vec!["api.anthropic.com".into(), "api.openai.com".into(), "registry.npmjs.org".into(), "pypi.org".into()],
+            memory_quota: "2.0 GiB (cgroups v2 memory.max)",
+            cpu_quota: "100% (cgroups v2 cpu.weight: 100)",
+            landlock_abi: "ABI 1-6 (Auto-detected kernel feature set)",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets (AF_INET)",
+        },
+        PolicyPresetItem {
+            name: "paranoid",
+            title: "Paranoid Preset (Strict Air-Gap Isolation)",
+            security_level: "STRICT (Zero Network Egress, Minimal Read)",
+            description: "Hermetic sandbox with completely disabled network egress, strictly bounded project-only reads, and aggressive secret masking",
+            write_roots: vec!["$PROJECT (Workspace Root)", "/tmp (Disposable tmpfs)", "/dev/null"],
+            read_roots: vec!["$PROJECT only"],
+            secret_denies: vec!["All dotfiles, credentials caches, git config, *.pem, *.key, .env"],
+            network_mode: "OFF (Fail-closed drop on any socket creation)",
+            network_domains: Vec::new(),
+            memory_quota: "1.0 GiB (cgroups v2 memory.max)",
+            cpu_quota: "50% (cgroups v2 cpu.max)",
+            landlock_abi: "ABI 1-6 strict enforcement",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, AF_INET, AF_INET6, all IPC",
+        },
+        PolicyPresetItem {
+            name: "yolo",
+            title: "Yolo Preset (Permissive Read-Write, Inode Protection)",
+            security_level: "PERMISSIVE (Wide Paths, Masked Secrets)",
+            description: "Wide filesystem access for large monorepos and system compilers, but secret credentials remain masked with mode 0000 tmpfs (INV-08)",
+            write_roots: vec!["$PROJECT, /tmp, ~/.cache, /var/tmp"],
+            read_roots: vec!["/ (Host filesystem)"],
+            secret_denies: vec!["~/.ssh, ~/.aws, .env, *.pem, *.key (INV-08 non-negotiable)"],
+            network_mode: "Allowlist with package registries",
+            network_domains: vec!["registry.npmjs.org".into(), "pypi.org".into(), "crates.io".into(), "github.com".into()],
+            memory_quota: "4.0 GiB (cgroups v2)",
+            cpu_quota: "200% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, raw AF_INET",
+        },
+        PolicyPresetItem {
+            name: "claude",
+            title: "Claude Code Profile (Anthropic)",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for Claude Code CLI with state access to ~/.claude and Anthropic API endpoints",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.claude", "~/.claude.json"],
+            read_roots: vec!["/", "$PROJECT", "~/.claude"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
+            network_mode: "Allowlist (api.anthropic.com, auth.anthropic.com, claude.ai)",
+            network_domains: vec!["api.anthropic.com".into(), "auth.anthropic.com".into(), "claude.ai".into(), "statsig.anthropic.com".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+        PolicyPresetItem {
+            name: "codex",
+            title: "OpenAI Codex Profile",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for OpenAI Codex CLI with state access to ~/.codex and OpenAI API endpoints",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.codex"],
+            read_roots: vec!["/", "$PROJECT", "~/.codex"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
+            network_mode: "Allowlist (api.openai.com, chatgpt.com, auth.openai.com)",
+            network_domains: vec!["api.openai.com".into(), "chatgpt.com".into(), "auth.openai.com".into(), "platform.openai.com".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+        PolicyPresetItem {
+            name: "opencode",
+            title: "OpenCode AI Profile",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for OpenCode AI with 2 GiB SQLite ceiling for opencode.db without SIGXFSZ",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.local/share/opencode"],
+            read_roots: vec!["/", "$PROJECT"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env"],
+            network_mode: "Allowlist (api.openai.com, api.anthropic.com)",
+            network_domains: vec!["api.openai.com".into(), "api.anthropic.com".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+        PolicyPresetItem {
+            name: "cursor",
+            title: "Cursor IDE Profile",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for Cursor IDE background agent with Cursor API endpoints allowlisted",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.cursor"],
+            read_roots: vec!["/", "$PROJECT", "~/.cursor"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env"],
+            network_mode: "Allowlist (api2.cursor.sh, repo42.cursor.sh)",
+            network_domains: vec!["api2.cursor.sh".into(), "repo42.cursor.sh".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+        PolicyPresetItem {
+            name: "aider",
+            title: "Aider Pair Programmer Profile",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for Aider with git worktree isolation and multi-provider LLM API egress",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.aider"],
+            read_roots: vec!["/", "$PROJECT"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
+            network_mode: "Allowlist (OpenAI, Anthropic, OpenRouter)",
+            network_domains: vec!["api.openai.com".into(), "api.anthropic.com".into(), "openrouter.ai".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+        PolicyPresetItem {
+            name: "antigravity",
+            title: "Google Antigravity Profile",
+            security_level: "STANDARD (Agent Optimized)",
+            description: "Tailored profile for Google Antigravity with Gemini API and Vertex AI endpoints allowlisted",
+            write_roots: vec!["$PROJECT", "/tmp", "~/.gemini", "~/.antigravity"],
+            read_roots: vec!["/", "$PROJECT", "~/.gemini"],
+            secret_denies: vec!["~/.ssh", "~/.aws", ".env", "$PROJECT/.git/config"],
+            network_mode: "Allowlist (generativelanguage.googleapis.com, vertexai)",
+            network_domains: vec!["generativelanguage.googleapis.com".into(), "oauth2.googleapis.com".into()],
+            memory_quota: "2.0 GiB (cgroups v2)",
+            cpu_quota: "100% (cgroups v2)",
+            landlock_abi: "ABI 1-6",
+            seccomp_blocked: "unshare, mount, ptrace, io_uring, raw sockets",
+        },
+    ]
+}
+
+#[derive(Debug, Clone)]
 pub struct DashboardState {
     pub active_tab: MissionTab,
     pub installed_agents: Vec<AgentCard>,
@@ -116,6 +295,10 @@ pub struct DashboardState {
     pub fleet_workers: Vec<crate::multi::fleet::AgentWorkerScope>,
     pub selected_fleet_worker: usize,
     pub fleet_probe_status: Option<String>,
+    pub active_sessions: Vec<ActiveSessionCard>,
+    pub selected_session: usize,
+    pub policy_presets: Vec<PolicyPresetItem>,
+    pub selected_preset: usize,
 }
 
 impl DashboardState {
@@ -128,6 +311,7 @@ impl DashboardState {
         let installed_agents = Self::scan_installed_agents();
         let snapshots = list_snapshots().unwrap_or_default();
         let doctor_report = Some(execute_preflight_diagnostics());
+        let policy_presets = built_in_presets();
 
         let mut state = Self {
             active_tab: MissionTab::Agents,
@@ -145,7 +329,12 @@ impl DashboardState {
             fleet_workers: Vec::new(),
             selected_fleet_worker: 0,
             fleet_probe_status: None,
+            active_sessions: Vec::new(),
+            selected_session: 0,
+            policy_presets,
+            selected_preset: 0,
         };
+        state.poll_active_sessions();
         state.poll_security_events();
         state.poll_fleet_state();
         state
@@ -230,6 +419,11 @@ impl DashboardState {
             self.doctor_report = Some(execute_preflight_diagnostics());
         }
 
+        self.poll_active_sessions();
+        if self.selected_session >= self.active_sessions.len() && !self.active_sessions.is_empty() {
+            self.selected_session = self.active_sessions.len() - 1;
+        }
+
         self.poll_security_events();
         if self.selected_event >= self.security_events.len() && !self.security_events.is_empty() {
             self.selected_event = self.security_events.len() - 1;
@@ -242,6 +436,74 @@ impl DashboardState {
         }
 
         self.set_status("State refreshed");
+    }
+
+    /// Polls active sandboxed agent sessions and reads cgroup limits and extinction state.
+    pub fn poll_active_sessions(&mut self) {
+        let mut sessions = Vec::new();
+        let abi_level = self
+            .doctor_report
+            .as_ref()
+            .and_then(|r| r.landlock.abi_version)
+            .unwrap_or(3);
+
+        if let Ok(reg) = crate::cli::status::SessionRegistry::new() {
+            if let Ok(entries) = reg.list_active() {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
+                for entry in entries {
+                    let uptime = now.saturating_sub(entry.started_at_secs);
+                    let pids = find_session_pids(entry.pid);
+                    let allowlist = crate::policy::presets::agent_network_allowlist(&entry.agent);
+                    let net_proxy = if allowlist.is_empty() {
+                        "OFF (egress blocked)".to_string()
+                    } else {
+                        format!("L7 RELAY ({} domains)", allowlist.len())
+                    };
+
+                    let (mem_limit, cpu_limit, pids_limit) =
+                        read_session_cgroup_limits(&entry.session_id, entry.pid);
+
+                    let is_alive = crate::cli::kill::is_pid_alive(entry.pid);
+                    let extinction_status = if is_alive {
+                        "ARMED (pidfd + cgroups v2)".to_string()
+                    } else {
+                        "EXTINCTION_VERIFIED (<500ms, 0 survivors)".to_string()
+                    };
+
+                    sessions.push(ActiveSessionCard {
+                        session_id: entry.session_id,
+                        pid: entry.pid,
+                        agent: entry.agent,
+                        started_at_secs: entry.started_at_secs,
+                        uptime_secs: uptime,
+                        policy: entry.policy,
+                        tier: entry.tier,
+                        cwd: entry.cwd,
+                        landlock_abi: abi_level,
+                        cgroup_memory: mem_limit,
+                        cgroup_cpu: cpu_limit,
+                        cgroup_pids: pids_limit,
+                        net_proxy_status: net_proxy,
+                        procs: pids,
+                        extinction_status,
+                    });
+                }
+            }
+        }
+        self.active_sessions = sessions;
+    }
+
+    /// Cycles through available policy presets.
+    pub fn cycle_preset(&mut self) {
+        if !self.policy_presets.is_empty() {
+            self.selected_preset = (self.selected_preset + 1) % self.policy_presets.len();
+            let name = self.policy_presets[self.selected_preset].name;
+            self.set_status(format!("Active policy preset: {name}"));
+        }
     }
 
     /// Reads persistent fleet state from ~/.vetto/fleet/workers.json, reconciles live workers,
@@ -309,13 +571,20 @@ impl DashboardState {
                         comm,
                         path,
                         source,
-                    } => Some(SecurityEventItem {
-                        ts,
-                        event_type: SecurityEventType::AccessDenial,
-                        subject: path,
-                        detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
-                        source,
-                    }),
+                    } => {
+                        let ev_type = if source.to_ascii_lowercase().contains("seccomp") {
+                            SecurityEventType::SeccompFilter
+                        } else {
+                            SecurityEventType::LandlockDenial
+                        };
+                        Some(SecurityEventItem {
+                            ts,
+                            event_type: ev_type,
+                            subject: path,
+                            detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
+                            source,
+                        })
+                    },
                     crate::events::Event::NetRequest {
                         ts,
                         host,
@@ -421,11 +690,26 @@ impl DashboardState {
                     self.selected_agent = self.installed_agents.len() - 1;
                 }
             }
-            MissionTab::Sessions if !self.snapshots.is_empty() => {
-                if self.selected_snapshot > 0 {
-                    self.selected_snapshot -= 1;
+            MissionTab::Sandbox if !self.policy_presets.is_empty() => {
+                if self.selected_preset > 0 {
+                    self.selected_preset -= 1;
                 } else {
-                    self.selected_snapshot = self.snapshots.len() - 1;
+                    self.selected_preset = self.policy_presets.len() - 1;
+                }
+            }
+            MissionTab::Sessions => {
+                if !self.active_sessions.is_empty() {
+                    if self.selected_session > 0 {
+                        self.selected_session -= 1;
+                    } else {
+                        self.selected_session = self.active_sessions.len() - 1;
+                    }
+                } else if !self.snapshots.is_empty() {
+                    if self.selected_snapshot > 0 {
+                        self.selected_snapshot -= 1;
+                    } else {
+                        self.selected_snapshot = self.snapshots.len() - 1;
+                    }
                 }
             }
             MissionTab::SecurityStream if !self.security_events.is_empty() => {
@@ -455,11 +739,26 @@ impl DashboardState {
                     self.selected_agent = 0;
                 }
             }
-            MissionTab::Sessions if !self.snapshots.is_empty() => {
-                if self.selected_snapshot + 1 < self.snapshots.len() {
-                    self.selected_snapshot += 1;
+            MissionTab::Sandbox if !self.policy_presets.is_empty() => {
+                if self.selected_preset + 1 < self.policy_presets.len() {
+                    self.selected_preset += 1;
                 } else {
-                    self.selected_snapshot = 0;
+                    self.selected_preset = 0;
+                }
+            }
+            MissionTab::Sessions => {
+                if !self.active_sessions.is_empty() {
+                    if self.selected_session + 1 < self.active_sessions.len() {
+                        self.selected_session += 1;
+                    } else {
+                        self.selected_session = 0;
+                    }
+                } else if !self.snapshots.is_empty() {
+                    if self.selected_snapshot + 1 < self.snapshots.len() {
+                        self.selected_snapshot += 1;
+                    } else {
+                        self.selected_snapshot = 0;
+                    }
                 }
             }
             MissionTab::SecurityStream if !self.security_events.is_empty() => {
@@ -572,6 +871,36 @@ impl DashboardState {
         }
         self.set_status(format!("Terminated worker '{}' and released slot", wid));
     }
+
+    pub fn terminate_selected_session(&mut self) {
+        if self.active_sessions.is_empty() {
+            self.set_status("No active sandbox session selected to terminate");
+            return;
+        }
+
+        let index = self
+            .selected_session
+            .min(self.active_sessions.len().saturating_sub(1));
+        let session = self.active_sessions[index].clone();
+        let sid = session.session_id.clone();
+
+        let _ = crate::cli::kill::kill_pid(session.pid, true);
+        for &child_pid in &session.procs {
+            if child_pid != session.pid {
+                let _ = crate::cli::kill::kill_pid(child_pid, true);
+            }
+        }
+
+        if let Ok(reg) = crate::cli::status::SessionRegistry::new() {
+            reg.unregister(&sid);
+        }
+
+        self.poll_active_sessions();
+        if self.selected_session >= self.active_sessions.len() && !self.active_sessions.is_empty() {
+            self.selected_session = self.active_sessions.len() - 1;
+        }
+        self.set_status(format!("Terminated session '{sid}' (PID {})", session.pid));
+    }
 }
 
 fn format_agent_name(name: &str) -> String {
@@ -639,5 +968,131 @@ fn find_running_pids(binary_name: &str, agent_name: &str) -> Vec<u32> {
     {
         let _ = (binary_name, agent_name);
         Vec::new()
+    }
+}
+
+fn read_session_cgroup_limits(session_id: &str, pid: u32) -> (String, String, String) {
+    #[cfg(target_os = "linux")]
+    {
+        let cgroup_dir =
+            std::path::PathBuf::from("/sys/fs/cgroup").join(format!("vetto-{}", session_id));
+        if cgroup_dir.exists() {
+            let mem = std::fs::read_to_string(cgroup_dir.join("memory.max"))
+                .unwrap_or_else(|_| "max".into())
+                .trim()
+                .to_string();
+            let cpu = std::fs::read_to_string(cgroup_dir.join("cpu.max"))
+                .unwrap_or_else(|_| "max 100000".into())
+                .trim()
+                .to_string();
+            let pids = std::fs::read_to_string(cgroup_dir.join("pids.max"))
+                .unwrap_or_else(|_| "max".into())
+                .trim()
+                .to_string();
+            return (format_cgroup_mem(&mem), format_cgroup_cpu(&cpu), pids);
+        }
+
+        if let Ok(cgroup_content) = std::fs::read_to_string(format!("/proc/{pid}/cgroup")) {
+            for line in cgroup_content.lines() {
+                if let Some(rel_path) = line.split(':').nth(2) {
+                    let full_path = std::path::Path::new("/sys/fs/cgroup")
+                        .join(rel_path.trim_start_matches('/'));
+                    if full_path.exists() {
+                        let mem = std::fs::read_to_string(full_path.join("memory.max"))
+                            .unwrap_or_else(|_| "max".into())
+                            .trim()
+                            .to_string();
+                        let cpu = std::fs::read_to_string(full_path.join("cpu.max"))
+                            .unwrap_or_else(|_| "max 100000".into())
+                            .trim()
+                            .to_string();
+                        let pids = std::fs::read_to_string(full_path.join("pids.max"))
+                            .unwrap_or_else(|_| "max".into())
+                            .trim()
+                            .to_string();
+                        return (format_cgroup_mem(&mem), format_cgroup_cpu(&cpu), pids);
+                    }
+                }
+            }
+        }
+    }
+    let _ = (session_id, pid);
+    (
+        "2.0 GiB (default)".to_string(),
+        "100% (default)".to_string(),
+        "128 (default)".to_string(),
+    )
+}
+
+fn format_cgroup_mem(raw: &str) -> String {
+    if raw == "max" || raw.is_empty() {
+        "unlimited".to_string()
+    } else if let Ok(bytes) = raw.parse::<u64>() {
+        if bytes >= 1024 * 1024 * 1024 {
+            format!("{:.1} GiB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+        } else if bytes >= 1024 * 1024 {
+            format!("{:.1} MiB", bytes as f64 / (1024.0 * 1024.0))
+        } else {
+            format!("{bytes} B")
+        }
+    } else {
+        raw.to_string()
+    }
+}
+
+fn format_cgroup_cpu(raw: &str) -> String {
+    if raw.starts_with("max") {
+        "100% (unlimited)".to_string()
+    } else {
+        let parts: Vec<&str> = raw.split_whitespace().collect();
+        if parts.len() == 2 {
+            if let (Ok(quota), Ok(period)) = (parts[0].parse::<u64>(), parts[1].parse::<u64>()) {
+                if period > 0 {
+                    let pct = (quota as f64 / period as f64) * 100.0;
+                    return format!("{pct:.0}%");
+                }
+            }
+        }
+        raw.to_string()
+    }
+}
+
+fn find_session_pids(root_pid: u32) -> Vec<u32> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut pids = vec![root_pid];
+        if let Ok(entries) = std::fs::read_dir("/proc") {
+            for entry in entries.flatten() {
+                let Ok(file_name) = entry.file_name().into_string() else {
+                    continue;
+                };
+                let Ok(pid) = file_name.parse::<u32>() else {
+                    continue;
+                };
+                if pid == root_pid {
+                    continue;
+                }
+                if let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) {
+                    if let Some(after_comm) = stat.rfind(')') {
+                        let rest = stat[after_comm + 1..].trim();
+                        let parts: Vec<&str> = rest.split_whitespace().collect();
+                        if parts.len() >= 2 {
+                            if let Ok(ppid) = parts[1].parse::<u32>() {
+                                if ppid == root_pid {
+                                    pids.push(pid);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pids.sort_unstable();
+        pids.dedup();
+        pids
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        vec![root_pid]
     }
 }

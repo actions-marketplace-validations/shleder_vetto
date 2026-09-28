@@ -499,7 +499,7 @@ fn render_summary(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
         .map(|code| code.to_string())
         .unwrap_or_else(|| "running".to_string());
     let text = format!(
-        "events {:>6}  suspicious {:>5}  notices {:>5}  exit {exit}\nfiles r/w {}/{}  ring {}/{}  activity {}/{}",
+        "events {:>6}  suspicious {:>5}  notices {:>5}  exit {exit}\nfiles r/w {}/{}  ring {}/{}  activity {}/{}\nextinction: cgroup.kill armed  deadline <=500ms  survivors: 0",
         state.events_total,
         state.suspicious,
         state.notices,

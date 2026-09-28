@@ -377,6 +377,20 @@ pub enum Command {
         #[arg(long)]
         non_interactive: bool,
     },
+    /// Launch the interactive TUI Mission Control dashboard
+    #[command(name = "tui", visible_alias = "mission-control")]
+    Tui {
+        /// Color theme mode: arasaka | circuit
+        #[arg(long, value_name = "THEME")]
+        theme: Option<String>,
+    },
+    /// Interactive TUI Mission Control dashboard (alias to tui)
+    #[command(name = "mission-control", hide = true)]
+    MissionControl {
+        /// Color theme mode: arasaka | circuit
+        #[arg(long, value_name = "THEME")]
+        theme: Option<String>,
+    },
     /// List active sandboxed sessions and cleanup stale metadata.
     Status {
         /// Emit machine-readable JSON.
