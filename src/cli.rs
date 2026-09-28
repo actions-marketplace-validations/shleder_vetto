@@ -1620,7 +1620,10 @@ mod test_is_container {
     #[test]
     fn test_tui_and_mission_control_alias() {
         let tui_cli = Cli::try_parse_from(["vetto", "tui"]).unwrap();
-        assert!(matches!(tui_cli.command, Some(Command::Tui { theme: None })));
+        assert!(matches!(
+            tui_cli.command,
+            Some(Command::Tui { theme: None })
+        ));
 
         let mc_cli =
             Cli::try_parse_from(["vetto", "mission-control", "--theme", "circuit"]).unwrap();

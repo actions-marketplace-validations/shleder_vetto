@@ -450,7 +450,9 @@ fn run() -> Result<()> {
             #[cfg(not(unix))]
             {
                 let _ = theme;
-                eprintln!("TUI Mission Control Dashboard is currently supported on Unix platforms.");
+                eprintln!(
+                    "TUI Mission Control Dashboard is currently supported on Unix platforms."
+                );
                 std::process::exit(1);
             }
         }
