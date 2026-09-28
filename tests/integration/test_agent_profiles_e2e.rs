@@ -734,7 +734,7 @@ fn test_omnigent_profile_consistency() {
         "~/.omnigent must be writable"
     );
     assert!(
-        pol.pass_through.iter().any(|v| v == "OMNIGENT_*"),
+        pol.environment.pass_through.iter().any(|v| v == "OMNIGENT_*"),
         "OMNIGENT_* env vars must be allowed in pass_through"
     );
     assert!(

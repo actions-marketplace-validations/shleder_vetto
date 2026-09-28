@@ -480,10 +480,7 @@ mod tests {
             command_for_agent("deepseek_harness"),
             Some("deepseek-harness".to_string())
         );
-        assert_eq!(
-            command_for_agent("omnigent"),
-            Some("omnigent".to_string())
-        );
+        assert_eq!(command_for_agent("omnigent"), Some("omnigent".to_string()));
     }
 
     #[test]
