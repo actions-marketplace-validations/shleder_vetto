@@ -153,7 +153,10 @@ fn render_tabs(f: &mut Frame, state: &DashboardState, area: Rect) {
     let session_count = state.active_sessions.len() + state.snapshots.len();
     let tab_titles = vec![
         Line::from(format!(" [1] AGENTS ({}) ", state.installed_agents.len())),
-        Line::from(format!(" [2] POLICY & PRESETS ({}) ", state.policy_presets.len())),
+        Line::from(format!(
+            " [2] POLICY & PRESETS ({}) ",
+            state.policy_presets.len()
+        )),
         Line::from(" [3] KERNEL DOCTOR "),
         Line::from(format!(" [4] SESSIONS ({}) ", session_count)),
         Line::from(format!(
@@ -455,16 +458,26 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
         .split(area);
 
     // Left Column: Policy Presets Table
-    let rows = state.policy_presets.iter().enumerate().map(|(idx, preset)| {
-        let is_selected = idx == state.selected_preset;
+    let rows = state
+        .policy_presets
+        .iter()
+        .enumerate()
+        .map(|(idx, preset)| {
+            let is_selected = idx == state.selected_preset;
 
         let level_badge = match preset.security_level {
-            s if s.starts_with("STRICT") => {
-                Span::styled("[STRICT]", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD))
-            }
-            s if s.starts_with("STANDARD") => {
-                Span::styled("[STANDARD]", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
-            }
+            s if s.starts_with("STRICT") => Span::styled(
+                "[STRICT]",
+                Style::default()
+                    .fg(theme.danger)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            s if s.starts_with("STANDARD") => Span::styled(
+                "[STANDARD]",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
             _ => Span::styled("[PERMISSIVE]", Style::default().fg(theme.warning)),
         };
 
@@ -647,7 +660,10 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
         let empty_inspector = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(" POLICY INSPECTOR ", Style::default().fg(theme.logo)));
+            .title(Span::styled(
+                " POLICY INSPECTOR ",
+                Style::default().fg(theme.logo),
+            ));
         f.render_widget(
             Paragraph::new("No preset selected").block(empty_inspector),
             cols[1],
@@ -778,10 +794,7 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
                 })
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            "SSRF dropped",
-            Style::default().fg(theme.muted),
-        ),
+        Span::styled("SSRF dropped", Style::default().fg(theme.muted)),
     ])])
     .block(block3);
     f.render_widget(p3, metric_cols[2]);
@@ -801,10 +814,7 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
                 .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            "masked mode 0000",
-            Style::default().fg(theme.muted),
-        ),
+        Span::styled("masked mode 0000", Style::default().fg(theme.muted)),
     ])])
     .block(block4);
     f.render_widget(p4, metric_cols[3]);
@@ -1410,7 +1420,10 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
-                    format!(" ACTIVE AGENT SANDBOX SESSIONS ({}) ", state.active_sessions.len()),
+                    format!(
+                        " ACTIVE AGENT SANDBOX SESSIONS ({}) ",
+                        state.active_sessions.len()
+                    ),
                     Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
                 )),
         );
@@ -1434,42 +1447,62 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
 
     let ext_left_lines = vec![
         Line::from(vec![
-            Span::styled("KERNEL KILL MECHANISM:   ", Style::default().fg(theme.muted)),
+            Span::styled(
+                "KERNEL KILL MECHANISM:   ",
+                Style::default().fg(theme.muted),
+            ),
             Span::styled(
                 "Cgroups v2 cgroup.kill (INV-12/13) + pidfd_open (INV-21)",
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
-            Span::styled("PLATFORM ISOLATION TIER: ", Style::default().fg(theme.muted)),
+            Span::styled(
+                "PLATFORM ISOLATION TIER: ",
+                Style::default().fg(theme.muted),
+            ),
             Span::styled(
                 "Tier 1 (Full Linux Kernel LSM, User/Mount/PID Namespaces)",
                 Style::default().fg(theme.success),
             ),
         ]),
         Line::from(vec![
-            Span::styled("EXTINCTION DEADLINE:     ", Style::default().fg(theme.muted)),
+            Span::styled(
+                "EXTINCTION DEADLINE:     ",
+                Style::default().fg(theme.muted),
+            ),
             Span::styled(
                 "<= 500ms hard timeout with mathematical zero survivor guarantee",
                 Style::default().fg(theme.text),
             ),
         ]),
         Line::from(vec![
-            Span::styled("STDIO DRAIN INTEGRITY:   ", Style::default().fg(theme.muted)),
+            Span::styled(
+                "STDIO DRAIN INTEGRITY:   ",
+                Style::default().fg(theme.muted),
+            ),
             Span::styled(
                 "AsyncPipeReader non-blocking (INV-25, 0 deadlock on 64KB pipe)",
                 Style::default().fg(theme.muted),
             ),
         ]),
         Line::from(vec![
-            Span::styled("FAIL-CLOSED TRANSITION:  ", Style::default().fg(theme.muted)),
+            Span::styled(
+                "FAIL-CLOSED TRANSITION:  ",
+                Style::default().fg(theme.muted),
+            ),
             Span::styled(
                 "Exit 125 on sandbox violation (INV-01) -> EmergencyCleanup FSM",
                 Style::default().fg(theme.warning),
             ),
         ]),
     ];
-    f.render_widget(Paragraph::new(ext_left_lines).block(ext_left_block), ext_cols[0]);
+    f.render_widget(
+        Paragraph::new(ext_left_lines).block(ext_left_block),
+        ext_cols[0],
+    );
 
     let ext_right_block = Block::default()
         .borders(Borders::ALL)
@@ -1494,14 +1527,22 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
         let ext_right_lines = vec![
             Line::from(vec![
                 Span::styled("SELECTED SESSION: ", Style::default().fg(theme.muted)),
-                Span::styled(&session.session_id, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    &session.session_id,
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::raw(" ("),
                 Span::styled(&session.agent, Style::default().fg(theme.info)),
                 Span::raw(")"),
             ]),
             Line::from(vec![
                 Span::styled("ROOT PID & SUBTREE: ", Style::default().fg(theme.muted)),
-                Span::styled(pids_str, Style::default().fg(theme.text).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    pids_str,
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("CGROUPS V2 SCOPE:   ", Style::default().fg(theme.muted)),
@@ -1512,23 +1553,39 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
             ]),
             Line::from(vec![
                 Span::styled("RESOURCE ALLOC:     ", Style::default().fg(theme.muted)),
-                Span::styled(format!("Mem: {} | CPU: {}", session.cgroup_memory, session.cgroup_cpu), Style::default().fg(theme.warning)),
+                Span::styled(
+                    format!(
+                        "Mem: {} | CPU: {}",
+                        session.cgroup_memory, session.cgroup_cpu
+                    ),
+                    Style::default().fg(theme.warning),
+                ),
             ]),
             Line::from(vec![
-                Span::styled("TERMINATION KEY:    ", Style::default().fg(theme.logo).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "TERMINATION KEY:    ",
+                    Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(
                     "Press [x] to execute instant process tree extinction (cgroup.kill)",
-                    Style::default().fg(theme.danger).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
         ];
-        f.render_widget(Paragraph::new(ext_right_lines).block(ext_right_block), ext_cols[1]);
+        f.render_widget(
+            Paragraph::new(ext_right_lines).block(ext_right_block),
+            ext_cols[1],
+        );
     } else {
         let standby_lines = vec![
             Line::from(""),
             Line::styled(
                 "  ● EXTINCTION VERIFIER ARMED (STANDBY)",
-                Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.success)
+                    .add_modifier(Modifier::BOLD),
             ),
             Line::styled(
                 "  No target session selected. All sandboxed child trees are tracked.",
@@ -1539,7 +1596,10 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
                 Style::default().fg(theme.text),
             ),
         ];
-        f.render_widget(Paragraph::new(standby_lines).block(ext_right_block), ext_cols[1]);
+        f.render_widget(
+            Paragraph::new(standby_lines).block(ext_right_block),
+            ext_cols[1],
+        );
     }
 
     // 3. BOTTOM: Project Snapshots & Instant Rollback
@@ -1547,7 +1607,10 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            format!(" PROJECT SNAPSHOTS & INSTANT ROLLBACK ({}) ", state.snapshots.len()),
+            format!(
+                " PROJECT SNAPSHOTS & INSTANT ROLLBACK ({}) ",
+                state.snapshots.len()
+            ),
             Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
         ));
 

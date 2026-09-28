@@ -584,7 +584,7 @@ impl DashboardState {
                             detail: format!("Process '{comm}' (pid {pid}) denied by {source}"),
                             source,
                         })
-                    },
+                    }
                     crate::events::Event::NetRequest {
                         ts,
                         host,
