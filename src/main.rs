@@ -442,8 +442,17 @@ fn run() -> Result<()> {
             profile.as_deref(),
         ),
         Some(cli::Command::Status { json }) => cli::status::run_cli(*json),
-        Some(cli::Command::Tui { theme }) | Some(cli::Command::MissionControl { theme }) => {
-            vetto::tui::mission_control::run_dashboard(theme.as_deref())
+        Some(cli::Command::Tui { theme }) => {
+            #[cfg(unix)]
+            {
+                vetto::tui::mission_control::run_dashboard(theme.as_deref())
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = theme;
+                eprintln!("TUI Mission Control Dashboard is currently supported on Unix platforms.");
+                std::process::exit(1);
+            }
         }
         Some(cli::Command::Kill(kill_args)) => cli::kill::run_cli(kill_args),
         Some(cli::Command::Fleet { command }) => cli::fleet::run_cli(command.clone()),

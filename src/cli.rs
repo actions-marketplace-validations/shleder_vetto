@@ -384,13 +384,6 @@ pub enum Command {
         #[arg(long, value_name = "THEME")]
         theme: Option<String>,
     },
-    /// Interactive TUI Mission Control dashboard (alias to tui)
-    #[command(name = "mission-control", hide = true)]
-    MissionControl {
-        /// Color theme mode: arasaka | circuit
-        #[arg(long, value_name = "THEME")]
-        theme: Option<String>,
-    },
     /// List active sandboxed sessions and cleanup stale metadata.
     Status {
         /// Emit machine-readable JSON.
@@ -1622,5 +1615,20 @@ mod test_is_container {
         let cli = Cli::try_parse_from(["vetto", "--is-container"]).unwrap();
         assert!(cli.is_container);
         assert!(!cli.quiet);
+    }
+
+    #[test]
+    fn test_tui_and_mission_control_alias() {
+        let tui_cli = Cli::try_parse_from(["vetto", "tui"]).unwrap();
+        assert!(matches!(tui_cli.command, Some(Command::Tui { theme: None })));
+
+        let mc_cli =
+            Cli::try_parse_from(["vetto", "mission-control", "--theme", "circuit"]).unwrap();
+        assert!(matches!(
+            mc_cli.command,
+            Some(Command::Tui {
+                theme: Some(ref t)
+            }) if t == "circuit"
+        ));
     }
 }
