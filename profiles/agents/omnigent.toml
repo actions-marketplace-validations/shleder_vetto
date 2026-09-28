@@ -1,0 +1,73 @@
+[metadata]
+name = "omnigent"
+description = "Compatibility profile for Omnigent AI agent runtime."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.omnigent",
+    "$HOME/.config/omnigent",
+    "$HOME/.cache/omnigent",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.omnigent",
+    "$HOME/.config/omnigent",
+    "$HOME/.cache/omnigent",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+
+[environment]
+pass_through = [
+    "OMNIGENT_*",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY",
+    "TOGETHER_API_KEY",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+mode = "allowlist"
+allow = [
+    "api.omnigent.ai",
+    "api.openai.com",
+    "api.anthropic.com",
+    "openrouter.ai",
+    "api.together.xyz",
+    "github.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "crates.io",
+    "static.crates.io",
+]

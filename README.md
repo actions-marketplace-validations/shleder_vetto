@@ -187,6 +187,7 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **Command Code** | `command_code` | `api.cohere.com`, Cohere AI, OpenAI, Anthropic | `~/.command-code`, `~/.config/command-code` |
 | **Freebuff** | `freebuff` | `api.deepseek.com`, OpenAI, Anthropic | `~/.freebuff`, `~/.config/freebuff` |
 | **DeepSeek Harness** | `deepseek_harness` | `api.deepseek.com`, OpenAI, Anthropic | `~/.deepseek`, `~/.config/deepseek` |
+| **Omnigent** | `omnigent` | `api.omnigent.ai`, OpenAI, Anthropic | `~/.omnigent`, `~/.config/omnigent` |
 
 ---
 

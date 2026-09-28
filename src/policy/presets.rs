@@ -224,6 +224,13 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "api.anthropic.com".into(),
             "openrouter.ai".into(),
         ],
+        "omnigent" => vec![
+            "api.omnigent.ai".into(),
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+            "api.together.xyz".into(),
+        ],
         _ => Vec::new(),
     };
 
@@ -430,6 +437,7 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
         }
         "freebuff" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
         "deepseek" | "deepseek_harness" => Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"]),
+        "omnigent" => Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"]),
         _ => None,
     }
 }
@@ -464,6 +472,7 @@ pub const KNOWN_PRESETS: &[&str] = &[
     "freebuff",
     "deepseek",
     "deepseek_harness",
+    "omnigent",
 ];
 
 #[cfg(test)]
@@ -960,6 +969,10 @@ mod tests {
         assert_eq!(
             resolve_preset("deepseek"),
             Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"][..])
+        );
+        assert_eq!(
+            resolve_preset("omnigent"),
+            Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"][..])
         );
     }
 

@@ -119,6 +119,7 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "command_code" => Some("command-code".to_string()),
         "freebuff" => Some("freebuff".to_string()),
         "deepseek_harness" => Some("deepseek-harness".to_string()),
+        "omnigent" => Some("omnigent".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }
@@ -478,6 +479,10 @@ mod tests {
         assert_eq!(
             command_for_agent("deepseek_harness"),
             Some("deepseek-harness".to_string())
+        );
+        assert_eq!(
+            command_for_agent("omnigent"),
+            Some("omnigent".to_string())
         );
     }
 
