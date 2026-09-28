@@ -69,7 +69,7 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
 }
 
 #[test]
-fn test_all_18_agent_profiles_load_successfully() {
+fn test_all_agent_profiles_load_successfully() {
     let temp = TempProject::new("all-18-agents");
     let project = temp.path().join("project");
     let home = temp.path().join("home");
