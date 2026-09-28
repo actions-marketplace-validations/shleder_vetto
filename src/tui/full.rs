@@ -288,7 +288,8 @@ fn dashboard_ui(
 }
 
 fn render_header(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
-    let blocked_style = if state.blocked > 0 {
+    let blocked_total = state.aggregator.counters.blocked_total.max(state.blocked);
+    let blocked_style = if blocked_total > 0 {
         Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Green)
@@ -310,10 +311,10 @@ fn render_header(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
         )),
         Span::raw(format!(
             "  blocked={} suspicious={} files={} exec={} net={}",
-            state.blocked, state.suspicious, state.files, state.execs, state.net_requests
+            blocked_total, state.suspicious, state.files, state.execs, state.net_requests
         )),
         Span::styled(
-            if state.blocked > 0 {
+            if blocked_total > 0 {
                 "  BLOCKED"
             } else {
                 "  OK"
@@ -392,27 +393,35 @@ fn render_events(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
 }
 
 fn render_blocked(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
-    let text = if state.blocked == 0 {
+    let blocked_total = state.aggregator.counters.blocked_total.max(state.blocked);
+    let recent: Vec<String> = state
+        .events
+        .iter()
+        .rev()
+        .filter_map(|event| match event {
+            Event::BlockedAttempt { path, source, .. } => Some(format!("[{source}] {path}")),
+            Event::NetRequest {
+                host,
+                port,
+                allowed: false,
+                ..
+            } => Some(format!("[net] {host}:{port}")),
+            Event::SecretMasked { path, .. } => Some(format!("[secret] {path}")),
+            _ => None,
+        })
+        .take(2)
+        .collect();
+    let text = if recent.is_empty() {
         "none observed".to_string()
     } else {
-        state
-            .events
-            .iter()
-            .rev()
-            .filter_map(|event| match event {
-                Event::BlockedAttempt { path, source, .. } => Some(format!("[{source}] {path}")),
-                _ => None,
-            })
-            .take(2)
-            .collect::<Vec<_>>()
-            .join("\n")
+        recent.join("\n")
     };
     f.render_widget(
         Paragraph::new(text)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!(" blocked ({}) ", state.blocked)),
+                    .title(format!(" blocked ({blocked_total}) ")),
             )
             .wrap(Wrap { trim: true }),
         area,
@@ -499,7 +508,7 @@ fn render_summary(f: &mut ratatui::Frame, state: &AppState, area: Rect) {
         .map(|code| code.to_string())
         .unwrap_or_else(|| "running".to_string());
     let text = format!(
-        "events {:>6}  suspicious {:>5}  notices {:>5}  exit {exit}\nfiles r/w {}/{}  ring {}/{}  activity {}/{}",
+        "events {:>6}  suspicious {:>5}  notices {:>5}  exit {exit}\nfiles r/w {}/{}  ring {}/{}  activity {}/{}\nextinction: cgroup.kill armed  deadline <=500ms  survivors: 0",
         state.events_total,
         state.suspicious,
         state.notices,
@@ -869,6 +878,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use ratatui::backend::TestBackend;
 
     #[test]
     fn dashboard_state_tracks_filter_and_graph_inputs() {
@@ -883,5 +893,49 @@ mod tests {
         assert_eq!(state.filtered_len(), 1);
         assert_eq!(state.network.blocked, 1);
         assert_eq!(state.activity.len(), 1);
+    }
+
+    #[test]
+    fn dashboard_ui_renders_blocked_egress_and_live_output() {
+        let backend = TestBackend::new(120, 32);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = AppState::new("LinuxTier1", "broker", "balanced");
+        state.ingest(Event::NetRequest {
+            ts: Utc::now(),
+            host: "169.254.169.254".into(),
+            port: 80,
+            allowed: false,
+        });
+        state.ingest(Event::BlockedAttempt {
+            ts: Utc::now(),
+            pid: 9001,
+            comm: "claude".into(),
+            path: "/etc/shadow".into(),
+            source: "landlock".into(),
+        });
+
+        let out_buf: SharedBuf = Arc::new(Mutex::new(b"agent stdout line\n".to_vec()));
+        let err_buf: SharedBuf = Arc::new(Mutex::new(Vec::new()));
+
+        terminal
+            .draw(|f| dashboard_ui(f, &state, &out_buf, &err_buf, 0, false))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..32)
+            .map(|y| {
+                (0..120)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("blocked=2"));
+        assert!(content.contains("BLOCKED"));
+        assert!(content.contains("blocked (2)"));
+        assert!(content.contains("[landlock] /etc/shadow"));
+        assert!(content.contains("[net] 169.254.169.254:80"));
+        assert!(content.contains("agent stdout line"));
     }
 }

@@ -150,11 +150,15 @@ fn render_header(f: &mut Frame, state: &DashboardState, area: Rect, full_logo: b
 fn render_tabs(f: &mut Frame, state: &DashboardState, area: Rect) {
     let theme = &state.theme;
 
+    let session_count = state.active_sessions.len() + state.snapshots.len();
     let tab_titles = vec![
         Line::from(format!(" [1] AGENTS ({}) ", state.installed_agents.len())),
-        Line::from(" [2] SANDBOX VFS "),
+        Line::from(format!(
+            " [2] POLICY & PRESETS ({}) ",
+            state.policy_presets.len()
+        )),
         Line::from(" [3] KERNEL DOCTOR "),
-        Line::from(format!(" [4] SESSIONS ({}) ", state.snapshots.len())),
+        Line::from(format!(" [4] SESSIONS ({}) ", session_count)),
         Line::from(format!(
             " [5] SECURITY STREAM ({}) ",
             state.security_events.len()
@@ -231,10 +235,18 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
             ));
         f.render_widget(Paragraph::new(empty_lines).block(block), cols[0]);
     } else {
+        let (offset, visible) = table_viewport_window(
+            state.installed_agents.len(),
+            state.selected_agent,
+            cols[0].height,
+            3,
+        );
         let rows = state
             .installed_agents
             .iter()
             .enumerate()
+            .skip(offset)
+            .take(visible)
             .map(|(idx, agent)| {
                 let is_selected = idx == state.selected_agent;
 
@@ -448,318 +460,228 @@ fn render_tab_agents(f: &mut Frame, state: &DashboardState, area: Rect) {
 fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
     let theme = &state.theme;
 
-    let sandbox_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
-        .split(area);
-
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(sandbox_chunks[0]);
+        .constraints([Constraint::Percentage(32), Constraint::Percentage(68)])
+        .split(area);
 
-    let left_lines = vec![
-        Line::styled(
-            "KERNEL SANDBOX ISOLATION LAYERS",
-            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "1. Landlock LSM: ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Unprivileged in-kernel path access rules (ABI 1-6).",
-                Style::default().fg(theme.text),
-            ),
-        ]),
-        Line::styled(
-            "   Fail-closed execution (Exit 125, INV-01) on sandbox violation.",
-            Style::default().fg(theme.muted),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "2. Linux Namespaces: ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWNET",
-                Style::default().fg(theme.text),
-            ),
-        ]),
-        Line::styled(
-            "   Zero background daemons; sub-4ms cold start between fork() and execve().",
-            Style::default().fg(theme.muted),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "3. CoW Tmpfs Overlays: ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Copy-on-write overlay over system rootfs.",
-                Style::default().fg(theme.text),
-            ),
-        ]),
-        Line::styled(
-            "   Any destructive writes outside the project directory vanish upon exit.",
-            Style::default().fg(theme.muted),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "4. Seccomp-BPF Syscall Filter: ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Pure-Rust compiled BPF filter.",
-                Style::default().fg(theme.text),
-            ),
-        ]),
-        Line::styled(
-            "   Blocks unshare, mount, ptrace, io_uring, and raw AF_INET socket creation.",
-            Style::default().fg(theme.muted),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "5. Process Extinction: ",
-                Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "Cgroups v2 cgroup.kill + pidfd pinning.",
-                Style::default().fg(theme.text),
-            ),
-        ]),
-        Line::styled(
-            "   Mathematically eliminates runaway background daemons and orphan processes.",
-            Style::default().fg(theme.muted),
-        ),
-    ];
-
-    let left_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border))
-        .title(Span::styled(
-            " ARCHITECTURAL INVARIANTS ",
-            Style::default().fg(theme.logo),
-        ));
-    f.render_widget(
-        Paragraph::new(left_lines)
-            .block(left_block)
-            .wrap(Wrap { trim: true }),
-        cols[0],
+    // Left Column: Policy Presets Table
+    let (preset_offset, preset_visible) = table_viewport_window(
+        state.policy_presets.len(),
+        state.selected_preset,
+        cols[0].height,
+        3,
     );
+    let rows = state
+        .policy_presets
+        .iter()
+        .enumerate()
+        .skip(preset_offset)
+        .take(preset_visible)
+        .map(|(idx, preset)| {
+            let is_selected = idx == state.selected_preset;
 
-    let right_lines = vec![
-        Line::styled(
-            "INODE-LEVEL SECRET MASKING MATRIX (INV-08)",
-            Style::default()
-                .fg(theme.danger)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Line::from(""),
-        Line::styled(
-            "Vetto mounts 0000 mode tmpfs nodes over credential paths prior to agent execve:",
-            Style::default().fg(theme.muted),
-        ),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                "  ~/.ssh/id_*          ",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ~/.aws/credentials   ",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  .env, .env.*         ",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ~/.gnupg/secring.*   ",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ~/.kube/config       ",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "  ~/.docker/config.json",
-                Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "-> [MASKED 0000 EACCES]",
-                Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(""),
-        Line::styled(
-            "L7 NETWORK SEMANTIC RELAY & DNS BROKER:",
-            Style::default()
-                .fg(theme.accent)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Line::styled(
-            "Direct network calls are intercepted via unix-fd socket bridge with SNI inspection.",
-            Style::default().fg(theme.muted),
-        ),
-        Line::styled(
-            "Non-allowlisted endpoints immediately receive 403 Forbidden with zero socket bypass.",
-            Style::default().fg(theme.muted),
-        ),
-    ];
-
-    let right_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border))
-        .title(Span::styled(
-            " SECRET MASKING & EGRESS ",
-            Style::default().fg(theme.logo),
-        ));
-    f.render_widget(
-        Paragraph::new(right_lines)
-            .block(right_block)
-            .wrap(Wrap { trim: true }),
-        cols[1],
-    );
-
-    // Render compact security events mini-stream at the bottom of the Sandbox tab
-    let mini_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.border))
-        .title(Span::styled(
-            format!(
-                " LIVE SECURITY EVENT MINI-STREAM ({} RECORDED) — PRESS [5] FOR FULL STREAM ",
-                state.security_events.len()
-            ),
-            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
-        ));
-
-    if state.security_events.is_empty() {
-        let empty_p = Paragraph::new(vec![
-            Line::styled(
-                "  ● LIVE PROTECTION ACTIVE — 0 ACCESS DENIALS OR BLOCKED EGRESS DETECTED",
-                Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
-            ),
-            Line::styled(
-                "    All network socket requests and credential file accesses strictly constrained.",
-                Style::default().fg(theme.muted),
-            ),
-        ])
-        .block(mini_block);
-        f.render_widget(empty_p, sandbox_chunks[1]);
-    } else {
-        let rows = state.security_events.iter().take(6).map(|ev| {
-            let badge_style = match ev.event_type {
-                super::state::SecurityEventType::AccessDenial => Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::BlockedNetwork => Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::SecretMasked => Style::default()
-                    .fg(theme.warning)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::QuotaExceeded => {
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
-                }
+            let level_badge = match preset.security_level {
+                s if s.starts_with("STRICT") => Span::styled(
+                    "[STRICT]",
+                    Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                s if s.starts_with("STANDARD") => Span::styled(
+                    "[STANDARD]",
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                _ => Span::styled("[PERMISSIVE]", Style::default().fg(theme.warning)),
             };
 
-            Row::new(vec![
-                Span::styled(
-                    ev.ts.format("%H:%M:%S").to_string(),
-                    Style::default().fg(theme.muted),
-                ),
-                Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
-                Span::styled(
-                    &ev.subject,
-                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(&ev.source, Style::default().fg(theme.info)),
-                Span::styled(&ev.detail, Style::default().fg(theme.muted)),
-            ])
+            let name_span = Span::styled(
+                preset.name,
+                if is_selected {
+                    Style::default()
+                        .fg(theme.selection_fg)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.text)
+                },
+            );
+
+            let net_span = Span::styled(
+                if preset.network_mode.starts_with("OFF") || preset.network_domains.is_empty() {
+                    "OFF"
+                } else {
+                    "ALLOW"
+                },
+                Style::default().fg(theme.muted),
+            );
+
+            let row = Row::new(vec![name_span, level_badge, net_span]);
+            if is_selected {
+                row.style(
+                    Style::default()
+                        .bg(theme.selection_bg)
+                        .fg(theme.selection_fg)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                row
+            }
         });
 
-        let table = Table::new(
-            rows,
-            [
-                Constraint::Length(10),
-                Constraint::Length(12),
-                Constraint::Length(30),
-                Constraint::Length(15),
-                Constraint::Min(20),
-            ],
-        )
-        .header(
-            Row::new(vec![
-                Span::styled("TIME", Style::default().fg(theme.muted)),
-                Span::styled("TYPE", Style::default().fg(theme.muted)),
-                Span::styled("SUBJECT", Style::default().fg(theme.muted)),
-                Span::styled("SOURCE", Style::default().fg(theme.muted)),
-                Span::styled("DETAILS", Style::default().fg(theme.muted)),
-            ])
-            .bottom_margin(0),
-        )
-        .block(mini_block);
+    let presets_table = Table::new(
+        rows,
+        vec![
+            Constraint::Length(12),
+            Constraint::Length(12),
+            Constraint::Length(8),
+        ],
+    )
+    .header(
+        Row::new(vec!["PRESET", "LEVEL", "NET"]).style(
+            Style::default()
+                .fg(theme.muted)
+                .add_modifier(Modifier::BOLD),
+        ),
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border))
+            .title(Span::styled(
+                format!(" POLICY PRESETS ({}) ", state.policy_presets.len()),
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            )),
+    );
 
-        f.render_widget(table, sandbox_chunks[1]);
+    f.render_widget(presets_table, cols[0]);
+
+    // Right Column: Interactive Policy Inspector
+    if let Some(preset) = state.policy_presets.get(state.selected_preset) {
+        let inspector_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border))
+            .title(Span::styled(
+                format!(" POLICY INSPECTOR: {} ", preset.title),
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ));
+
+        let net_domains_str = if preset.network_domains.is_empty() {
+            "none (air-gapped hermetic isolation)".to_string()
+        } else {
+            preset.network_domains.join(", ")
+        };
+
+        let write_roots_str = preset.write_roots.join("  |  ");
+        let read_roots_str = preset.read_roots.join("  |  ");
+        let secret_denies_str = preset.secret_denies.join("  |  ");
+
+        let lines = vec![
+            Line::from(vec![
+                Span::styled("SECURITY LEVEL:      ", Style::default().fg(theme.muted)),
+                Span::styled(
+                    preset.security_level,
+                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("ARCHITECTURE SCOPE:  ", Style::default().fg(theme.muted)),
+                Span::styled(preset.description, Style::default().fg(theme.text)),
+            ]),
+            Line::from(""),
+            Line::styled(
+                "FILESYSTEM ACCESS BOUNDARIES (Landlock LSM + User/Mount Namespaces):",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(vec![
+                Span::styled("  [ALLOW WRITE]      ", Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
+                Span::styled(write_roots_str, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [ALLOW READ]       ", Style::default().fg(theme.info).add_modifier(Modifier::BOLD)),
+                Span::styled(read_roots_str, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  [MASKED DENY 0000] ", Style::default().fg(theme.danger).add_modifier(Modifier::BOLD)),
+                Span::styled(secret_denies_str, Style::default().fg(theme.text)),
+            ]),
+            Line::from(""),
+            Line::styled(
+                "NETWORK EGRESS POLICY & L7 ANTI-SSRF BROKER:",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(vec![
+                Span::styled("  EGRESS MODE:       ", Style::default().fg(theme.muted)),
+                Span::styled(preset.network_mode, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  ALLOWED DOMAINS:   ", Style::default().fg(theme.muted)),
+                Span::styled(net_domains_str, Style::default().fg(theme.accent)),
+            ]),
+            Line::from(vec![
+                Span::styled("  ANTI-SSRF BLOCKS:  ", Style::default().fg(theme.muted)),
+                Span::styled(
+                    "169.254.169.254 (Cloud IMDS), 100.100.100.200, 127.0.0.0/8, RFC 1918 Private Subnets",
+                    Style::default().fg(theme.warning),
+                ),
+            ]),
+            Line::from(""),
+            Line::styled(
+                "RESOURCE LIMITS (Cgroups v2 Controller Ceilings):",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(vec![
+                Span::styled("  MEMORY CEILING:    ", Style::default().fg(theme.muted)),
+                Span::styled(preset.memory_quota, Style::default().fg(theme.text)),
+                Span::styled("    CPU QUOTA: ", Style::default().fg(theme.muted)),
+                Span::styled(preset.cpu_quota, Style::default().fg(theme.text)),
+            ]),
+            Line::from(""),
+            Line::styled(
+                "KERNEL ENFORCEMENT SUBSYSTEMS:",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(vec![
+                Span::styled("  LANDLOCK LSM:      ", Style::default().fg(theme.muted)),
+                Span::styled(preset.landlock_abi, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  SECCOMP-BPF:       ", Style::default().fg(theme.muted)),
+                Span::styled(preset.seccomp_blocked, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  PROCESS EXTINCTION:", Style::default().fg(theme.muted)),
+                Span::styled(
+                    "Linux Tier 1 Proven (pidfd pinning + cgroups v2 cgroup.kill, INV-12/13/20)",
+                    Style::default().fg(theme.success),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("NAVIGATION: ", Style::default().fg(theme.logo).add_modifier(Modifier::BOLD)),
+                Span::styled("Use [↑/↓] or [j/k] to select preset | Press [p] to cycle presets", Style::default().fg(theme.muted)),
+            ]),
+        ];
+
+        f.render_widget(
+            Paragraph::new(lines)
+                .block(inspector_block)
+                .wrap(Wrap { trim: true }),
+            cols[1],
+        );
+    } else {
+        let empty_inspector = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border))
+            .title(Span::styled(
+                " POLICY INSPECTOR ",
+                Style::default().fg(theme.logo),
+            ));
+        f.render_widget(
+            Paragraph::new("No preset selected").block(empty_inspector),
+            cols[1],
+        );
     }
 }
 
@@ -776,10 +698,21 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
         .split(area);
 
     // 1. Metric counters
-    let count_denials = state
+    let count_landlock = state
         .security_events
         .iter()
-        .filter(|e| e.event_type == super::state::SecurityEventType::AccessDenial)
+        .filter(|e| {
+            matches!(
+                e.event_type,
+                super::state::SecurityEventType::AccessDenial
+                    | super::state::SecurityEventType::LandlockDenial
+            )
+        })
+        .count();
+    let count_seccomp = state
+        .security_events
+        .iter()
+        .filter(|e| e.event_type == super::state::SecurityEventType::SeccompFilter)
         .count();
     let count_net_blocked = state
         .security_events
@@ -800,46 +733,71 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
     let metric_cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
         ])
         .split(chunks[0]);
 
-    // Box 1: Filesystem / Syscall Denials
+    // Box 1: Landlock LSM Filesystem Denials
     let block1 = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " DENIED FILES / SYSCALLS ",
+            " LANDLOCK FS DENIALS ",
             Style::default().fg(theme.muted),
         ));
     let p1 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
-            format!("  {count_denials} "),
+            format!("  {count_landlock} "),
             Style::default()
-                .fg(if count_denials > 0 {
+                .fg(if count_landlock > 0 {
                     theme.danger
                 } else {
                     theme.success
                 })
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("attempts contained", Style::default().fg(theme.muted)),
+        Span::styled("LSM blocked", Style::default().fg(theme.muted)),
     ])])
     .block(block1);
     f.render_widget(p1, metric_cols[0]);
 
-    // Box 2: Blocked Egress (Anti-SSRF)
+    // Box 2: Seccomp-BPF Syscall Traps
     let block2 = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " BLOCKED EGRESS (ANTI-SSRF) ",
+            " SECCOMP-BPF TRAPS ",
             Style::default().fg(theme.muted),
         ));
     let p2 = Paragraph::new(vec![Line::from(vec![
+        Span::styled(
+            format!("  {count_seccomp} "),
+            Style::default()
+                .fg(if count_seccomp > 0 {
+                    theme.warning
+                } else {
+                    theme.success
+                })
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("syscalls filtered", Style::default().fg(theme.muted)),
+    ])])
+    .block(block2);
+    f.render_widget(p2, metric_cols[1]);
+
+    // Box 3: Blocked Egress (Anti-SSRF)
+    let block3 = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " BLOCKED L7 EGRESS ",
+            Style::default().fg(theme.muted),
+        ));
+    let p3 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
             format!("  {count_net_blocked} "),
             Style::default()
@@ -850,57 +808,51 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
                 })
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            "targets dropped fail-closed",
-            Style::default().fg(theme.muted),
-        ),
+        Span::styled("SSRF dropped", Style::default().fg(theme.muted)),
     ])])
-    .block(block2);
-    f.render_widget(p2, metric_cols[1]);
+    .block(block3);
+    f.render_widget(p3, metric_cols[2]);
 
-    // Box 3: Secrets Protected
-    let block3 = Block::default()
+    // Box 4: Secrets Protected
+    let block4 = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " SECRETS PROTECTED (INV-08) ",
+            " SECRETS (INV-08) ",
             Style::default().fg(theme.muted),
         ));
-    let p3 = Paragraph::new(vec![Line::from(vec![
+    let p4 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
             format!("  {count_secrets} "),
             Style::default()
                 .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            "credentials masked mode 0000",
-            Style::default().fg(theme.muted),
-        ),
+        Span::styled("masked mode 0000", Style::default().fg(theme.muted)),
     ])])
-    .block(block3);
-    f.render_widget(p3, metric_cols[2]);
+    .block(block4);
+    f.render_widget(p4, metric_cols[3]);
 
-    // Box 4: Total Stream Records
-    let block4 = Block::default()
+    // Box 5: Total Stream Records
+    let block5 = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " TOTAL EVENTS IN BUFFER ",
+            " TOTAL BUFFER ",
             Style::default().fg(theme.muted),
         ));
-    let p4 = Paragraph::new(vec![Line::from(vec![
+    let p5 = Paragraph::new(vec![Line::from(vec![
         Span::styled(
             format!("  {} / 500 ", state.security_events.len()),
             Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!("({count_quota} quota)", count_quota = count_quota),
+            format!("({count_quota} quota)"),
             Style::default().fg(theme.muted),
         ),
     ])])
-    .block(block4);
-    f.render_widget(p4, metric_cols[3]);
+    .block(block5);
+    f.render_widget(p5, metric_cols[4]);
 
     // 2. Events table
     let table_block = Block::default()
@@ -915,7 +867,7 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
         let empty_lines = vec![
             Line::from(""),
             Line::styled(
-                "  ● LIVE PROTECTION ACTIVE — 0 SECURITY EVENTS RECORDED",
+                "  ● LIVE PROTECTION ACTIVE: 0 SECURITY EVENTS RECORDED",
                 Style::default().fg(theme.success).add_modifier(Modifier::BOLD),
             ),
             Line::from(""),
@@ -939,53 +891,69 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
         ];
         f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
     } else {
-        let rows = state.security_events.iter().enumerate().map(|(idx, ev)| {
-            let is_selected = idx == state.selected_event;
+        let (ev_offset, ev_visible) = table_viewport_window(
+            state.security_events.len(),
+            state.selected_event,
+            chunks[1].height,
+            4,
+        );
+        let rows = state
+            .security_events
+            .iter()
+            .enumerate()
+            .skip(ev_offset)
+            .take(ev_visible)
+            .map(|(idx, ev)| {
+                let is_selected = idx == state.selected_event;
 
-            let badge_style = match ev.event_type {
-                super::state::SecurityEventType::AccessDenial => Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::BlockedNetwork => Style::default()
-                    .fg(theme.accent)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::SecretMasked => Style::default()
-                    .fg(theme.warning)
-                    .add_modifier(Modifier::BOLD),
-                super::state::SecurityEventType::QuotaExceeded => {
-                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
-                }
-            };
+                let badge_style = match ev.event_type {
+                    super::state::SecurityEventType::AccessDenial
+                    | super::state::SecurityEventType::LandlockDenial => Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::SeccompFilter => Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::BlockedNetwork => Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::SecretMasked => Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                    super::state::SecurityEventType::QuotaExceeded => {
+                        Style::default().fg(theme.info).add_modifier(Modifier::BOLD)
+                    }
+                };
 
-            let row_style = if is_selected {
-                Style::default().bg(theme.selection_bg)
-            } else {
-                Style::default()
-            };
+                let row_style = if is_selected {
+                    Style::default().bg(theme.selection_bg)
+                } else {
+                    Style::default()
+                };
 
-            let marker = if is_selected { "▶ " } else { "  " };
+                let marker = if is_selected { "▶ " } else { "  " };
 
-            Row::new(vec![
-                Span::styled(
-                    format!("{marker}{}", ev.ts.format("%H:%M:%S")),
-                    Style::default().fg(theme.muted),
-                ),
-                Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
-                Span::styled(
-                    &ev.subject,
-                    if is_selected {
-                        Style::default()
-                            .fg(theme.selection_fg)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(theme.text)
-                    },
-                ),
-                Span::styled(&ev.source, Style::default().fg(theme.info)),
-                Span::styled(&ev.detail, Style::default().fg(theme.muted)),
-            ])
-            .style(row_style)
-        });
+                Row::new(vec![
+                    Span::styled(
+                        format!("{marker}{}", ev.ts.format("%H:%M:%S")),
+                        Style::default().fg(theme.muted),
+                    ),
+                    Span::styled(format!("[{}]", ev.event_type.badge()), badge_style),
+                    Span::styled(
+                        &ev.subject,
+                        if is_selected {
+                            Style::default()
+                                .fg(theme.selection_fg)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.text)
+                        },
+                    ),
+                    Span::styled(&ev.source, Style::default().fg(theme.info)),
+                    Span::styled(&ev.detail, Style::default().fg(theme.muted)),
+                ])
+                .style(row_style)
+            });
 
         let table = Table::new(
             rows,
@@ -1048,8 +1016,12 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
 
     if let Some(selected) = state.security_events.get(state.selected_event) {
         let badge_style = match selected.event_type {
-            super::state::SecurityEventType::AccessDenial => Style::default()
+            super::state::SecurityEventType::AccessDenial
+            | super::state::SecurityEventType::LandlockDenial => Style::default()
                 .fg(theme.danger)
+                .add_modifier(Modifier::BOLD),
+            super::state::SecurityEventType::SeccompFilter => Style::default()
+                .fg(theme.warning)
                 .add_modifier(Modifier::BOLD),
             super::state::SecurityEventType::BlockedNetwork => Style::default()
                 .fg(theme.accent)
@@ -1329,86 +1301,155 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([
+            Constraint::Percentage(42), // Top: Active Agent Sandbox Sessions Monitor Table
+            Constraint::Percentage(33), // Middle: Real-time Process Tree Extinction Visualizer & Status
+            Constraint::Percentage(25), // Bottom: Project Snapshots & Instant Rollback
+        ])
         .split(area);
 
-    if state.snapshots.is_empty() {
+    // 1. TOP: Live Active Agent Sandbox Session Monitor Table
+    if state.active_sessions.is_empty() {
         let empty_msg = vec![
             Line::from(""),
-            Line::styled(" No project snapshots found.", Style::default().fg(theme.muted).add_modifier(Modifier::BOLD)),
-            Line::styled(" Snapshots are created automatically before agent sessions or via 'vetto run'.", Style::default().fg(theme.muted)),
-            Line::styled(" Once an agent modifies project files under Vetto, an automatic snapshot is stored here.", Style::default().fg(theme.text)),
+            Line::styled(
+                "  ● STANDBY: NO ACTIVE AGENT SANDBOX SESSIONS RUNNING",
+                Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(""),
+            Line::styled(
+                "  Active coding agent sessions launched via 'vetto run <agent>' or transparent shims appear here in real time.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::styled(
+                "  Each session is pinned with Landlock LSM ABI tracking, cgroups v2 resource ceilings, and process tree extinction.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::from(""),
+            Line::styled(
+                "  Press [1] to view installed agents and launch a sandboxed session with [Enter].",
+                Style::default().fg(theme.text),
+            ),
         ];
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme.border))
-            .title(" PROJECT SNAPSHOTS & UNDO ");
+            .title(Span::styled(
+                " ACTIVE AGENT SANDBOX SESSIONS (0) ",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ));
         f.render_widget(Paragraph::new(empty_msg).block(block), chunks[0]);
     } else {
-        let rows = state.snapshots.iter().enumerate().map(|(idx, snap)| {
-            let is_selected = idx == state.selected_snapshot;
-            let id_span = Span::styled(
-                snap.session_id.as_str(),
-                if is_selected {
-                    Style::default()
-                        .fg(theme.selection_fg)
-                        .add_modifier(Modifier::BOLD)
+        let (sess_offset, sess_visible) = table_viewport_window(
+            state.active_sessions.len(),
+            state.selected_session,
+            chunks[0].height,
+            3,
+        );
+        let rows = state
+            .active_sessions
+            .iter()
+            .enumerate()
+            .skip(sess_offset)
+            .take(sess_visible)
+            .map(|(idx, s)| {
+                let is_selected = idx == state.selected_session;
+                let marker = if is_selected { "▶ " } else { "  " };
+
+                let id_span = Span::styled(
+                    format!("{marker}{}", s.session_id),
+                    if is_selected {
+                        Style::default()
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.text)
+                    },
+                );
+
+                let agent_span = Span::styled(
+                    &s.agent,
+                    Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                );
+
+                let procs_info = if s.procs.len() > 1 {
+                    format!("PID {} ({} procs)", s.pid, s.procs.len())
                 } else {
-                    Style::default().fg(theme.text)
-                },
-            );
+                    format!("PID {}", s.pid)
+                };
+                let pid_span = Span::styled(procs_info, Style::default().fg(theme.accent));
 
-            let created_span =
-                Span::styled(snap.created_at.as_str(), Style::default().fg(theme.muted));
-            let files_span = Span::styled(
-                format!("{}", snap.file_count),
-                Style::default().fg(theme.text),
-            );
-            let size_span = Span::styled(
-                format_bytes(snap.total_size_bytes),
-                Style::default().fg(theme.accent),
-            );
-            let proj_span = Span::styled(
-                snap.project_dir.display().to_string(),
-                Style::default().fg(theme.text),
-            );
+                let abi_span = Span::styled(
+                    format!("ABI {}", s.landlock_abi),
+                    Style::default().fg(theme.success),
+                );
 
-            let row = Row::new(vec![
-                id_span,
-                created_span,
-                files_span,
-                size_span,
-                proj_span,
-            ]);
-            if is_selected {
-                row.style(
+                let limits_str = format!("{} / {}", s.cgroup_memory, s.cgroup_cpu);
+                let limits_span = Span::styled(limits_str, Style::default().fg(theme.warning));
+
+                let net_span = Span::styled(
+                    &s.net_proxy_status,
+                    Style::default().fg(
+                        if s.net_proxy_status.contains("Active")
+                            || s.net_proxy_status.contains("L7 RELAY")
+                        {
+                            theme.success
+                        } else {
+                            theme.muted
+                        },
+                    ),
+                );
+
+                let ext_span = Span::styled(
+                    &s.extinction_status,
                     Style::default()
-                        .bg(theme.selection_bg)
-                        .fg(theme.selection_fg)
+                        .fg(theme.danger)
                         .add_modifier(Modifier::BOLD),
-                )
-            } else {
-                row
-            }
-        });
+                );
+
+                let row = Row::new(vec![
+                    id_span,
+                    agent_span,
+                    pid_span,
+                    abi_span,
+                    limits_span,
+                    net_span,
+                    ext_span,
+                ]);
+
+                if is_selected {
+                    row.style(
+                        Style::default()
+                            .bg(theme.selection_bg)
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    row
+                }
+            });
 
         let table = Table::new(
             rows,
             vec![
-                Constraint::Length(18),
-                Constraint::Length(26),
-                Constraint::Length(8),
-                Constraint::Length(12),
-                Constraint::Min(20),
+                Constraint::Length(22), // SESSION ID
+                Constraint::Length(12), // AGENT
+                Constraint::Length(18), // PID / TREE
+                Constraint::Length(10), // LANDLOCK
+                Constraint::Length(24), // CGROUP LIMITS
+                Constraint::Length(14), // NET PROXY
+                Constraint::Min(16),    // EXTINCTION
             ],
         )
         .header(
             Row::new(vec![
-                "SESSION ID",
-                "CREATED AT",
-                "FILES",
-                "SIZE",
-                "PROJECT DIR",
+                "  SESSION ID",
+                "AGENT",
+                "PID / TREE",
+                "LANDLOCK",
+                "CGROUP LIMITS",
+                "NET PROXY",
+                "EXTINCTION",
             ])
             .style(
                 Style::default()
@@ -1421,7 +1462,10 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.border))
                 .title(Span::styled(
-                    format!(" AVAILABLE SNAPSHOTS ({}) ", state.snapshots.len()),
+                    format!(
+                        " ACTIVE AGENT SANDBOX SESSIONS ({}) ",
+                        state.active_sessions.len()
+                    ),
                     Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
                 )),
         );
@@ -1429,45 +1473,288 @@ fn render_tab_sessions(f: &mut Frame, state: &DashboardState, area: Rect) {
         f.render_widget(table, chunks[0]);
     }
 
-    // Bottom panel: Selected snapshot details and instant rollback prompt
-    let detail_block = Block::default()
+    // 2. MIDDLE: Real-time Process Tree Extinction Visualizer & Status Indicators
+    let ext_cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    let ext_left_block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border))
         .title(Span::styled(
-            " INSTANT ROLLBACK (VETTO UNDO) ",
-            Style::default().fg(theme.logo),
+            " PROCESS TREE EXTINCTION THEOREM (§12.1) ",
+            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
         ));
 
-    if let Some(snap) = state.snapshots.get(state.selected_snapshot) {
-        let lines = vec![
+    let ext_left_lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "KERNEL KILL MECHANISM:   ",
+                Style::default().fg(theme.muted),
+            ),
+            Span::styled(
+                "Cgroups v2 cgroup.kill (INV-12/13) + pidfd_open (INV-21)",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "PLATFORM ISOLATION TIER: ",
+                Style::default().fg(theme.muted),
+            ),
+            Span::styled(
+                "Tier 1 (Full Linux Kernel LSM, User/Mount/PID Namespaces)",
+                Style::default().fg(theme.success),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "EXTINCTION DEADLINE:     ",
+                Style::default().fg(theme.muted),
+            ),
+            Span::styled(
+                "<= 500ms hard timeout with mathematical zero survivor guarantee",
+                Style::default().fg(theme.text),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "STDIO DRAIN INTEGRITY:   ",
+                Style::default().fg(theme.muted),
+            ),
+            Span::styled(
+                "AsyncPipeReader non-blocking (INV-25, 0 deadlock on 64KB pipe)",
+                Style::default().fg(theme.muted),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "FAIL-CLOSED TRANSITION:  ",
+                Style::default().fg(theme.muted),
+            ),
+            Span::styled(
+                "Exit 125 on sandbox violation (INV-01) -> EmergencyCleanup FSM",
+                Style::default().fg(theme.warning),
+            ),
+        ]),
+    ];
+    f.render_widget(
+        Paragraph::new(ext_left_lines).block(ext_left_block),
+        ext_cols[0],
+    );
+
+    let ext_right_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            " ACTIVE PROCESS TREE & TERMINATION CONTROLS ",
+            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+        ));
+
+    if let Some(session) = state.active_sessions.get(state.selected_session) {
+        let pids_str = if session.procs.is_empty() {
+            format!("{}", session.pid)
+        } else {
+            session
+                .procs
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let ext_right_lines = vec![
             Line::from(vec![
                 Span::styled("SELECTED SESSION: ", Style::default().fg(theme.muted)),
-                Span::styled(&snap.session_id, Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(vec![
-                Span::styled("TARGET PROJECT:   ", Style::default().fg(theme.muted)),
-                Span::styled(snap.project_dir.display().to_string(), Style::default().fg(theme.text)),
-            ]),
-            Line::from(vec![
-                Span::styled("ARCHIVE PATH:     ", Style::default().fg(theme.muted)),
-                Span::styled(snap.archive_file.display().to_string(), Style::default().fg(theme.muted)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("ACTIONS: ", Style::default().fg(theme.logo).add_modifier(Modifier::BOLD)),
                 Span::styled(
-                    "Press [u] to restore files from this snapshot immediately! (Overwrites modified files)",
-                    Style::default().fg(theme.danger).add_modifier(Modifier::BOLD),
+                    &session.session_id,
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" ("),
+                Span::styled(&session.agent, Style::default().fg(theme.info)),
+                Span::raw(")"),
+            ]),
+            Line::from(vec![
+                Span::styled("ROOT PID & SUBTREE: ", Style::default().fg(theme.muted)),
+                Span::styled(
+                    pids_str,
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("CGROUPS V2 SCOPE:   ", Style::default().fg(theme.muted)),
+                Span::styled(&session.cgroup_scope, Style::default().fg(theme.muted)),
+            ]),
+            Line::from(vec![
+                Span::styled("RESOURCE ALLOC:     ", Style::default().fg(theme.muted)),
+                Span::styled(
+                    format!(
+                        "Mem: {} | CPU: {}",
+                        session.cgroup_memory, session.cgroup_cpu
+                    ),
+                    Style::default().fg(theme.warning),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "TERMINATION KEY:    ",
+                    Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Press [x] to execute instant process tree extinction (cgroup.kill)",
+                    Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
         ];
-        f.render_widget(Paragraph::new(lines).block(detail_block), chunks[1]);
-    } else {
         f.render_widget(
-            Paragraph::new("Select a session snapshot above to preview restore.")
-                .block(detail_block),
-            chunks[1],
+            Paragraph::new(ext_right_lines).block(ext_right_block),
+            ext_cols[1],
         );
+    } else {
+        let standby_lines = vec![
+            Line::from(""),
+            Line::styled(
+                "  ● EXTINCTION VERIFIER ARMED (STANDBY)",
+                Style::default()
+                    .fg(theme.success)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Line::styled(
+                "  No target session selected. All sandboxed child trees are tracked.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::styled(
+                "  Cgroup scopes and pidfds ensure no orphaned background processes escape.",
+                Style::default().fg(theme.text),
+            ),
+        ];
+        f.render_widget(
+            Paragraph::new(standby_lines).block(ext_right_block),
+            ext_cols[1],
+        );
+    }
+
+    // 3. BOTTOM: Project Snapshots & Instant Rollback
+    let snap_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.border))
+        .title(Span::styled(
+            format!(
+                " PROJECT SNAPSHOTS & INSTANT ROLLBACK ({}) ",
+                state.snapshots.len()
+            ),
+            Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+        ));
+
+    if state.snapshots.is_empty() {
+        let empty_msg = vec![
+            Line::from(""),
+            Line::styled(
+                "  No project snapshots found. Automatic snapshots are captured before agent file writes.",
+                Style::default().fg(theme.muted),
+            ),
+            Line::styled(
+                "  Run 'vetto run' or invoke an agent shim in a workspace to capture snapshots.",
+                Style::default().fg(theme.text),
+            ),
+        ];
+        f.render_widget(Paragraph::new(empty_msg).block(snap_block), chunks[2]);
+    } else {
+        let (snap_offset, snap_visible) = table_viewport_window(
+            state.snapshots.len(),
+            state.selected_snapshot,
+            chunks[2].height,
+            3,
+        );
+        let snap_rows = state
+            .snapshots
+            .iter()
+            .enumerate()
+            .skip(snap_offset)
+            .take(snap_visible)
+            .map(|(idx, snap)| {
+                let is_selected = idx == state.selected_snapshot;
+                let marker = if is_selected { "▶ " } else { "  " };
+
+                let id_span = Span::styled(
+                    format!("{marker}{}", snap.session_id),
+                    if is_selected {
+                        Style::default()
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme.text)
+                    },
+                );
+
+                let created_span =
+                    Span::styled(snap.created_at.as_str(), Style::default().fg(theme.muted));
+                let files_span = Span::styled(
+                    format!("{}", snap.file_count),
+                    Style::default().fg(theme.text),
+                );
+                let size_span = Span::styled(
+                    format_bytes(snap.total_size_bytes),
+                    Style::default().fg(theme.accent),
+                );
+                let proj_span = Span::styled(
+                    snap.project_dir.display().to_string(),
+                    Style::default().fg(theme.text),
+                );
+
+                let row = Row::new(vec![
+                    id_span,
+                    created_span,
+                    files_span,
+                    size_span,
+                    proj_span,
+                ]);
+                if is_selected {
+                    row.style(
+                        Style::default()
+                            .bg(theme.selection_bg)
+                            .fg(theme.selection_fg)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                } else {
+                    row
+                }
+            });
+
+        let snap_table = Table::new(
+            snap_rows,
+            vec![
+                Constraint::Length(22), // SESSION ID
+                Constraint::Length(26), // CREATED AT
+                Constraint::Length(8),  // FILES
+                Constraint::Length(12), // SIZE
+                Constraint::Min(20),    // PROJECT DIR
+            ],
+        )
+        .header(
+            Row::new(vec![
+                "  SESSION ID",
+                "CREATED AT",
+                "FILES",
+                "SIZE",
+                "PROJECT DIR (PRESS [u] TO ROLLBACK)",
+            ])
+            .style(
+                Style::default()
+                    .fg(theme.muted)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
+        .block(snap_block);
+
+        f.render_widget(snap_table, chunks[2]);
     }
 }
 
@@ -1620,63 +1907,75 @@ fn render_tab_fleet(f: &mut Frame, state: &DashboardState, area: Rect) {
         ];
         f.render_widget(Paragraph::new(empty_lines).block(table_block), chunks[1]);
     } else {
-        let rows = state.fleet_workers.iter().enumerate().map(|(idx, w)| {
-            let is_selected = idx == state.selected_fleet_worker;
-            let row_style = if is_selected {
-                Style::default().bg(theme.selection_bg)
-            } else {
-                Style::default()
-            };
-            let prefix = if is_selected { "▶ " } else { "  " };
-
-            let pid_str = w
-                .pid
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "-".to_string());
-            let scope_str = w
-                .scope_path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or_else(|| w.scope_path.to_str().unwrap_or("-"));
-
-            let limits_str = format!(
-                "{}w/{:.1}G/{}p",
-                w.cpu_weight,
-                w.memory_limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
-                w.pids_max
-            );
-
-            let status_style = match w.status.to_ascii_lowercase().as_str() {
-                "running" | "active" => Style::default()
-                    .fg(theme.success)
-                    .add_modifier(Modifier::BOLD),
-                "allocated" => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
-                "exited" | "stale" => Style::default()
-                    .fg(theme.danger)
-                    .add_modifier(Modifier::BOLD),
-                _ => Style::default().fg(theme.muted),
-            };
-
-            Row::new(vec![
-                Span::styled(
-                    format!("{prefix}{}", w.worker_id),
+        let (fleet_offset, fleet_visible) = table_viewport_window(
+            state.fleet_workers.len(),
+            state.selected_fleet_worker,
+            chunks[1].height,
+            4,
+        );
+        let rows = state
+            .fleet_workers
+            .iter()
+            .enumerate()
+            .skip(fleet_offset)
+            .take(fleet_visible)
+            .map(|(idx, w)| {
+                let is_selected = idx == state.selected_fleet_worker;
+                let row_style = if is_selected {
+                    Style::default().bg(theme.selection_bg)
+                } else {
                     Style::default()
-                        .fg(if is_selected { theme.logo } else { theme.text })
+                };
+                let prefix = if is_selected { "▶ " } else { "  " };
+
+                let pid_str = w
+                    .pid
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| "-".to_string());
+                let scope_str = w
+                    .scope_path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_else(|| w.scope_path.to_str().unwrap_or("-"));
+
+                let limits_str = format!(
+                    "{}w/{:.1}G/{}p",
+                    w.cpu_weight,
+                    w.memory_limit_bytes as f64 / (1024.0 * 1024.0 * 1024.0),
+                    w.pids_max
+                );
+
+                let status_style = match w.status.to_ascii_lowercase().as_str() {
+                    "running" | "active" => Style::default()
+                        .fg(theme.success)
                         .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(&w.agent_name, Style::default().fg(theme.info)),
-                Span::styled(pid_str, Style::default().fg(theme.accent)),
-                Span::styled(
-                    w.ephemeral_port.to_string(),
-                    Style::default().fg(theme.muted),
-                ),
-                Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
-                Span::styled(scope_str, Style::default().fg(theme.muted)),
-                Span::styled(limits_str, Style::default().fg(theme.warning)),
-                Span::styled(format!("[{}]", w.status.to_ascii_uppercase()), status_style),
-            ])
-            .style(row_style)
-        });
+                    "allocated" => Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
+                    "exited" | "stale" => Style::default()
+                        .fg(theme.danger)
+                        .add_modifier(Modifier::BOLD),
+                    _ => Style::default().fg(theme.muted),
+                };
+
+                Row::new(vec![
+                    Span::styled(
+                        format!("{prefix}{}", w.worker_id),
+                        Style::default()
+                            .fg(if is_selected { theme.logo } else { theme.text })
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(&w.agent_name, Style::default().fg(theme.info)),
+                    Span::styled(pid_str, Style::default().fg(theme.accent)),
+                    Span::styled(
+                        w.ephemeral_port.to_string(),
+                        Style::default().fg(theme.muted),
+                    ),
+                    Span::styled(&w.cow_branch_name, Style::default().fg(theme.text)),
+                    Span::styled(scope_str, Style::default().fg(theme.muted)),
+                    Span::styled(limits_str, Style::default().fg(theme.warning)),
+                    Span::styled(format!("[{}]", w.status.to_ascii_uppercase()), status_style),
+                ])
+                .style(row_style)
+            });
 
         let table = Table::new(
             rows,
@@ -1757,8 +2056,8 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
         "Theme: ARASAKA RED  |  Bare 'vetto' interactive TTY dashboard  |  Press 't' to toggle palette",
     );
 
-    let key_hints = if state.active_tab == MissionTab::Fleet {
-        vec![
+    let key_hints = match state.active_tab {
+        MissionTab::Fleet => vec![
             Span::styled(
                 "[1-6]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
@@ -1780,10 +2079,37 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
             ),
             Span::styled(" Navigate  ", Style::default().fg(theme.text)),
             Span::styled(
-                "[Tab]",
+                "[t]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" Switch Tab  ", Style::default().fg(theme.text)),
+            Span::styled(" Theme  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[r]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Refresh  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[q/Esc]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Quit", Style::default().fg(theme.text)),
+        ],
+        MissionTab::Sandbox => vec![
+            Span::styled(
+                "[1-6]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Tabs  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[p]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Cycle Preset  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[↑↓/jk]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Select  ", Style::default().fg(theme.text)),
             Span::styled(
                 "[t]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
@@ -1799,9 +2125,50 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
             Span::styled(" Quit", Style::default().fg(theme.text)),
-        ]
-    } else {
-        vec![
+        ],
+        MissionTab::Sessions => vec![
+            Span::styled(
+                "[1-6]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Tabs  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[↑↓/jk]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Select  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[x]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Kill Session  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[[/]]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Snapshots  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[u]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Undo Snapshot  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[t]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Theme  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[r]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Refresh  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[q/Esc]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Quit", Style::default().fg(theme.text)),
+        ],
+        _ => vec![
             Span::styled(
                 "[1-6]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
@@ -1833,16 +2200,11 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
             ),
             Span::styled(" Refresh  ", Style::default().fg(theme.text)),
             Span::styled(
-                "[u]",
-                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" Undo  ", Style::default().fg(theme.text)),
-            Span::styled(
                 "[q/Esc]",
                 Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
             ),
             Span::styled(" Quit", Style::default().fg(theme.text)),
-        ]
+        ],
     };
 
     let lines = vec![
@@ -1860,6 +2222,26 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
         .borders(Borders::TOP)
         .border_style(Style::default().fg(theme.border));
     f.render_widget(Paragraph::new(lines).block(footer_block), area);
+}
+
+/// Computes `(offset, visible_rows)` so that `selected` is always visible inside a table viewport.
+fn table_viewport_window(
+    total: usize,
+    selected: usize,
+    area_height: u16,
+    chrome_rows: u16,
+) -> (usize, usize) {
+    let visible = (area_height.saturating_sub(chrome_rows) as usize).max(1);
+    if total <= visible {
+        return (0, total);
+    }
+    let clamped = selected.min(total.saturating_sub(1));
+    let offset = if clamped >= visible {
+        (clamped + 1 - visible).min(total - visible)
+    } else {
+        0
+    };
+    (offset, visible)
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -1957,6 +2339,24 @@ mod tests {
                 detail: "Inode masked mode 0000".to_string(),
                 source: "vfs_overlays".to_string(),
             });
+        state
+            .security_events
+            .push_back(super::super::state::SecurityEventItem {
+                ts: chrono::Utc::now(),
+                event_type: super::super::state::SecurityEventType::LandlockDenial,
+                subject: "/etc/shadow".to_string(),
+                detail: "Landlock LSM denied write".to_string(),
+                source: "landlock".to_string(),
+            });
+        state
+            .security_events
+            .push_back(super::super::state::SecurityEventItem {
+                ts: chrono::Utc::now(),
+                event_type: super::super::state::SecurityEventType::SeccompFilter,
+                subject: "unshare".to_string(),
+                detail: "Seccomp filtered forbidden syscall".to_string(),
+                source: "seccomp".to_string(),
+            });
 
         terminal.draw(|f| draw(f, &state)).unwrap();
 
@@ -1971,8 +2371,133 @@ mod tests {
             .join("\n");
 
         assert!(content.contains("SECURITY STREAM"));
-        assert!(content.contains("BLOCKED EGRESS (ANTI-SSRF)"));
+        assert!(content.contains("BLOCKED L7 EGRESS"));
+        assert!(content.contains("LANDLOCK FS DENIALS"));
+        assert!(content.contains("SECCOMP-BPF TRAPS"));
         assert!(content.contains("169.254.169.254:80"));
+        assert!(content.contains("[LANDLOCK]"));
+        assert!(content.contains("[SECCOMP]"));
+    }
+
+    #[test]
+    fn test_render_sandbox_tab_policy_presets_and_viewport_scrolling() {
+        let backend = TestBackend::new(140, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::Sandbox;
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("POLICY PRESETS (27)"));
+        assert!(content.contains("POLICY INSPECTOR"));
+        assert!(content.contains("FILESYSTEM ACCESS BOUNDARIES"));
+        assert!(content.contains("NETWORK EGRESS POLICY"));
+        assert!(content.contains("balanced"));
+
+        // Now select the very last preset (index 26, "smolagents") in a 35-row viewport
+        // (17 visible table rows < 27 presets) and verify table viewport windowing scrolls
+        // "smolagents" into the left table
+        state.selected_preset = state.policy_presets.len() - 1;
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer2 = terminal.backend().buffer();
+        let content2: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer2.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content2.contains("smolagents"));
+        assert!(content2.contains("Hugging Face Smolagents Profile"));
+    }
+
+    #[test]
+    fn test_render_sessions_tab_active_and_extinction() {
+        let backend = TestBackend::new(140, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::Sessions;
+
+        state
+            .active_sessions
+            .push(super::super::state::ActiveSessionCard {
+                session_id: "20260928_test_42a1".to_string(),
+                pid: 12345,
+                agent: "claude".to_string(),
+                started_at_secs: 100,
+                uptime_secs: 42,
+                policy: "balanced".to_string(),
+                tier: "LinuxTier1".to_string(),
+                cwd: "/tmp/project".to_string(),
+                landlock_abi: 3,
+                cgroup_memory: "42.0 MB / 2.0 GiB".to_string(),
+                cgroup_cpu: "100".to_string(),
+                cgroup_pids: "3 / 128".to_string(),
+                cgroup_scope: "/sys/fs/cgroup/vetto-20260928_test_42a1".to_string(),
+                net_proxy_status: "L7 RELAY (8 domains)".to_string(),
+                procs: vec![12345, 12346, 12347],
+                extinction_status: "ARMED (cgroup.kill)".to_string(),
+            });
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..40)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("ACTIVE AGENT SANDBOX SESSIONS"));
+        assert!(content.contains("PROCESS TREE EXTINCTION THEOREM"));
+        assert!(content.contains("20260928_test_42a1"));
+        assert!(content.contains("claude"));
+        assert!(content.contains("12345"));
+        assert!(content.contains("/sys/fs/cgroup/vetto-20260928_test_42a1"));
+        assert!(content.contains("ARMED (cgroup.kill)"));
+        assert!(content.contains("cgroup.kill (INV-12/13)"));
+    }
+
+    #[test]
+    fn test_render_sessions_tab_empty() {
+        let backend = TestBackend::new(140, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.active_tab = MissionTab::Sessions;
+        state.active_sessions.clear();
+        state.snapshots.clear();
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("STANDBY: NO ACTIVE AGENT SANDBOX SESSIONS RUNNING"));
+        assert!(content.contains("EXTINCTION VERIFIER ARMED (STANDBY)"));
+        assert!(content.contains("No project snapshots found"));
     }
 
     #[test]
