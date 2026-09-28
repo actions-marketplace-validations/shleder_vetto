@@ -467,7 +467,7 @@ impl DashboardState {
                     let (mem_limit, cpu_limit, pids_limit) =
                         read_session_cgroup_limits(&entry.session_id, entry.pid);
 
-                    let is_alive = crate::cli::kill::is_pid_alive(entry.pid);
+                    let is_alive = crate::cli::status::is_pid_alive(entry.pid);
                     let extinction_status = if is_alive {
                         "ARMED (pidfd + cgroups v2)".to_string()
                     } else {
