@@ -1252,6 +1252,34 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".grok"));
                         let _ = std::fs::create_dir_all(home.join(".config/grok"));
                     }
+                    Some("hermes") => {
+                        let _ = std::fs::create_dir_all(home.join(".hermes"));
+                        let _ = std::fs::create_dir_all(home.join(".config/hermes"));
+                    }
+                    Some("kilo") => {
+                        let _ = std::fs::create_dir_all(home.join(".kilo"));
+                        let _ = std::fs::create_dir_all(home.join(".config/kilo"));
+                    }
+                    Some("pi") => {
+                        let _ = std::fs::create_dir_all(home.join(".pi"));
+                        let _ = std::fs::create_dir_all(home.join(".config/pi"));
+                    }
+                    Some("command_code") => {
+                        let _ = std::fs::create_dir_all(home.join(".command-code"));
+                        let _ = std::fs::create_dir_all(home.join(".config/command-code"));
+                    }
+                    Some("freebuff") => {
+                        let _ = std::fs::create_dir_all(home.join(".freebuff"));
+                        let _ = std::fs::create_dir_all(home.join(".config/freebuff"));
+                    }
+                    Some("deepseek_harness") => {
+                        let _ = std::fs::create_dir_all(home.join(".deepseek"));
+                        let _ = std::fs::create_dir_all(home.join(".config/deepseek"));
+                    }
+                    Some("omnigent") => {
+                        let _ = std::fs::create_dir_all(home.join(".omnigent"));
+                        let _ = std::fs::create_dir_all(home.join(".config/omnigent"));
+                    }
                     _ => {}
                 }
                 let _ = std::fs::create_dir_all(home.join(".npm/_npx"));
@@ -2002,6 +2030,13 @@ fn agent_root(home: &Path, agent: &str) -> Result<PathBuf> {
         "zcode" => PathBuf::from(".zcode"),
         "kimi" => PathBuf::from(".kimi"),
         "grok" => PathBuf::from(".grok"),
+        "hermes" => PathBuf::from(".hermes"),
+        "kilo" => PathBuf::from(".kilo"),
+        "pi" => PathBuf::from(".pi"),
+        "command_code" => PathBuf::from(".command-code"),
+        "freebuff" => PathBuf::from(".freebuff"),
+        "deepseek_harness" => PathBuf::from(".deepseek"),
+        "omnigent" => PathBuf::from(".omnigent"),
         "custom" => PathBuf::from(".config/vetto/agents/custom"),
         _ => bail!(
             "unknown agent '{}'; known agents: {}",

@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 24] = [
+pub const SUPPORTED_AGENTS: [&str; 25] = [
     "claude",
     "codex",
     "opencode",
@@ -39,6 +39,7 @@ pub const SUPPORTED_AGENTS: [&str; 24] = [
     "command_code",
     "freebuff",
     "deepseek_harness",
+    "omnigent",
 ];
 
 struct AgentSpec {
@@ -162,6 +163,11 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "deepseek_harness",
         binaries: &["deepseek-harness", "deepseek_harness"],
         markers: &[".deepseek", "deepseek.json"],
+    },
+    AgentSpec {
+        name: "omnigent",
+        binaries: &["omnigent", "omnigent-cli"],
+        markers: &[".omnigent", "omnigent.toml", "omnigent.json"],
     },
 ];
 
@@ -400,6 +406,10 @@ mod tests {
         let deepseek_bins = agent_candidate_binaries("deepseek_harness");
         assert!(deepseek_bins.contains(&"deepseek-harness"));
         assert!(deepseek_bins.contains(&"deepseek_harness"));
+
+        let omnigent_bins = agent_candidate_binaries("omnigent");
+        assert!(omnigent_bins.contains(&"omnigent"));
+        assert!(omnigent_bins.contains(&"omnigent-cli"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

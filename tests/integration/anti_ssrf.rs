@@ -186,3 +186,49 @@ fn test_anti_ssrf_3xx_redirect_to_metadata_dropped() {
         output
     );
 }
+
+#[test]
+fn test_anti_ssrf_ipv6_mapped_and_compatible_destinations_denied() {
+    if detected_tier().as_deref() != Some("full") {
+        eprintln!("SKIP: anti-ssrf needs full tier");
+        return;
+    }
+    if !tool_available("curl") {
+        eprintln!("SKIP: curl not installed");
+        return;
+    }
+    let proj = TempProject::new("anti-ssrf-ipv6-mapped");
+    let targets = [
+        "http://[::ffff:169.254.169.254]:80/",
+        "http://[::ffff:100.100.100.200]:80/",
+        "http://[::ffff:100.64.0.1]:80/",
+        "http://[::ffff:10.0.0.1]:80/",
+        "http://[::ffff:192.168.1.1]:80/",
+        "http://[::169.254.169.254]:80/",
+        "http://[::100.100.100.200]:80/",
+        "http://[::100.64.0.1]:80/",
+        "http://[::10.0.0.1]:80/",
+        "http://[::192.168.1.1]:80/",
+    ];
+    for target in &targets {
+        let out = run_vetto_in(
+            proj.path(),
+            &[
+                "--tui=none",
+                "--net=allowlist:*",
+                "--",
+                "curl",
+                "-sS",
+                "-m",
+                "3",
+                target,
+            ],
+        );
+        assert!(
+            !out.status.success(),
+            "connection to mapped/compatible IPv6 {target} succeeded unexpectedly! stdout: {}, stderr: {}",
+            stdout(&out),
+            stderr(&out)
+        );
+    }
+}

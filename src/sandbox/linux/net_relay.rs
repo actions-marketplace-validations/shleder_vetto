@@ -658,7 +658,32 @@ pub const DOH_ENDPOINTS: &[&str] = &[
 
 pub(crate) fn is_loopback_host(host: &str) -> bool {
     let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
-    h == "127.0.0.1" || h == "localhost" || h == "::1" || h == "[::1]"
+    if h == "localhost" {
+        return true;
+    }
+    let clean = h.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = clean.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(v4) => v4.is_loopback(),
+            IpAddr::V6(v6) => {
+                if v6.is_loopback() {
+                    return true;
+                }
+                let octets = v6.octets();
+                let is_v4_mapped = octets[..10].iter().all(|&b| b == 0)
+                    && octets[10] == 0xff
+                    && octets[11] == 0xff;
+                let is_v4_compat = octets[..12].iter().all(|&b| b == 0);
+                if is_v4_mapped || is_v4_compat {
+                    Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]).is_loopback()
+                } else {
+                    false
+                }
+            }
+        }
+    } else {
+        false
+    }
 }
 
 fn request_allowed(
@@ -1053,7 +1078,8 @@ pub(crate) fn is_cloud_metadata(ip: IpAddr) -> bool {
             let octets = ip.octets();
             let is_v4_mapped =
                 octets[..10].iter().all(|&b| b == 0) && octets[10] == 0xff && octets[11] == 0xff;
-            if is_v4_mapped {
+            let is_v4_compatible = octets[..12].iter().all(|&b| b == 0);
+            if is_v4_mapped || is_v4_compatible {
                 let v4 = Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]);
                 let [a, b, c, d] = v4.octets();
                 (a == 169 && b == 254 && c == 169 && d == 254)
@@ -1099,10 +1125,12 @@ pub(crate) fn forbidden_destination(ip: IpAddr) -> bool {
                 // 2002::/16 (6to4) is deprecated and not a valid egress target.
                 || (octets[0] == 0x20 && octets[1] == 0x02);
 
-            // IPv4-mapped IPv6 addresses must receive the same IPv4 policy.
+            // IPv4-mapped and deprecated IPv4-compatible IPv6 addresses must receive the same IPv4 policy.
             let is_v4_mapped =
                 octets[..10].iter().all(|&b| b == 0) && octets[10] == 0xff && octets[11] == 0xff;
-            let mapped_forbidden = is_v4_mapped
+            let is_v4_compatible =
+                octets[..12].iter().all(|&b| b == 0) && !is_unspecified && !is_loopback;
+            let mapped_forbidden = (is_v4_mapped || is_v4_compatible)
                 && forbidden_ipv4(Ipv4Addr::new(
                     octets[12], octets[13], octets[14], octets[15],
                 ));
@@ -2158,11 +2186,17 @@ mod tests {
     fn test_loopback_host_verification() {
         assert!(is_loopback_host("localhost"));
         assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("127.0.0.8"));
         assert!(is_loopback_host("::1"));
         assert!(is_loopback_host("[::1]"));
+        assert!(is_loopback_host("::ffff:127.0.0.1"));
+        assert!(is_loopback_host("[::ffff:127.0.0.1]"));
+        assert!(is_loopback_host("::127.0.0.1"));
+        assert!(is_loopback_host("[::127.0.0.1]"));
         assert!(!is_loopback_host("evil.com"));
         assert!(!is_loopback_host("api.openai.com"));
         assert!(!is_loopback_host("192.168.1.1"));
+        assert!(!is_loopback_host("100.64.0.1"));
     }
 
     #[test]
@@ -2177,6 +2211,11 @@ mod tests {
             Ipv6Addr::new(0x3fff, 0, 0, 0, 0, 0, 0, 1),
             Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1),
             Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0x0a00, 1),
+            // IPv4-mapped and IPv4-compatible CGNAT (100.64.0.1)
+            Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0x6440, 1),
+            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0x6440, 1),
+            // IPv4-compatible loopback (::127.0.0.1)
+            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0x7f00, 1),
             // 64:ff9b::/96 embedding 10.1.2.3.
             Ipv6Addr::from([0x00, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0, 10, 1, 2, 3]),
             // 64:ff9b::/96 embedding the AWS/GCP metadata endpoint.
@@ -2769,6 +2808,14 @@ mod tests {
         // IPv4-mapped IPv6
         let v6_mapped = Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xa9fe, 0xa9fe); // ::ffff:169.254.169.254
         assert!(super::is_cloud_metadata(IpAddr::V6(v6_mapped)));
+        let v6_mapped_ali = Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0x6464, 0x64c8); // ::ffff:100.100.100.200
+        assert!(super::is_cloud_metadata(IpAddr::V6(v6_mapped_ali)));
+
+        // IPv4-compatible IPv6
+        let v6_compat = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0xa9fe, 0xa9fe); // ::169.254.169.254
+        assert!(super::is_cloud_metadata(IpAddr::V6(v6_compat)));
+        let v6_compat_ali = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0x6464, 0x64c8); // ::100.100.100.200
+        assert!(super::is_cloud_metadata(IpAddr::V6(v6_compat_ali)));
 
         // Ordinary IPs are not cloud metadata
         assert!(!super::is_cloud_metadata(IpAddr::V4(Ipv4Addr::new(

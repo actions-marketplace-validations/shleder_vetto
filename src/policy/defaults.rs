@@ -31,9 +31,10 @@ pub const COMMAND_CODE_AGENT_TOML: &str = include_str!("../../profiles/agents/co
 pub const FREEBUFF_AGENT_TOML: &str = include_str!("../../profiles/agents/freebuff.toml");
 pub const DEEPSEEK_HARNESS_AGENT_TOML: &str =
     include_str!("../../profiles/agents/deepseek_harness.toml");
+pub const OMNIGENT_AGENT_TOML: &str = include_str!("../../profiles/agents/omnigent.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
 
-pub const AGENT_PROFILE_NAMES: [&str; 24] = [
+pub const AGENT_PROFILE_NAMES: [&str; 25] = [
     "codex",
     "claude",
     "antigravity",
@@ -57,6 +58,7 @@ pub const AGENT_PROFILE_NAMES: [&str; 24] = [
     "command_code",
     "freebuff",
     "deepseek_harness",
+    "omnigent",
     "custom",
 ];
 
@@ -156,6 +158,7 @@ pub fn canonical_agent_name(name: &str) -> Option<&'static str> {
         "command-code" | "command_code" | "commandcode" => Some("command_code"),
         "freebuff" | "freebuff-agent" => Some("freebuff"),
         "deepseek-harness" | "deepseek_harness" | "deepseek" => Some("deepseek_harness"),
+        "omnigent" | "omnigent-ai" | "omnigent-cli" => Some("omnigent"),
         "custom" => Some("custom"),
         _ => None,
     }
@@ -186,6 +189,7 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
         "command_code" => Some(COMMAND_CODE_AGENT_TOML),
         "freebuff" => Some(FREEBUFF_AGENT_TOML),
         "deepseek_harness" => Some(DEEPSEEK_HARNESS_AGENT_TOML),
+        "omnigent" => Some(OMNIGENT_AGENT_TOML),
         "custom" => Some(CUSTOM_AGENT_TOML),
         _ => None,
     }

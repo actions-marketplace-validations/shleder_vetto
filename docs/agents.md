@@ -31,6 +31,7 @@ unproven rather than assumed.
 | Command Code (#8 Leaderboard) | `command-code` | Autonomous loop | full | `command_code` | Strict timeout & process group eviction | first-class preset |
 | Freebuff (#9 Leaderboard) | `freebuff` | Multi-model agent runtime | statusline | `freebuff` | L7 proxy SNI filtering | first-class preset |
 | DeepSeek Harness (#10 Leaderboard) | `deepseek-harness` | Batch benchmark runner | none or statusline | `deepseek_harness` | Fair-share cgroups v2 fleet containment | first-class preset |
+| Omnigent AI | `omnigent`, `omnigent-cli` | Agent runtime | statusline or full | `omnigent` | Model provider + target repo write boundary | first-class preset |
 | Custom process | any executable | unknown | statusline or none | `custom` | Default remains `off` | process contract covered |
 
 ## High-Volume Token Leaderboard Presets
@@ -41,6 +42,7 @@ The production token leaderboard (September 2026) tracks massive usage across em
 - **Command Code** (281B tokens) — Autonomous loop watchdog.
 - **Freebuff** (279B tokens) — L7 TLS SNI filtering and credential masking.
 - **DeepSeek Harness** (201B tokens) — Large-scale evaluation runner with cgroups memory/CPU quotas.
+- **Omnigent** — Autonomous agent framework with Landlock/seccomp process sandboxing.
 
 
 ## Compatibility rules

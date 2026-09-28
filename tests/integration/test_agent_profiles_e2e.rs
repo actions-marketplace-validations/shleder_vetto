@@ -14,7 +14,7 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
     std::fs::create_dir_all(&home).expect("create home dir");
 
     let agents = vec![
-        "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok",
+        "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok", "omnigent",
     ];
     for agent in agents {
         let opts = PolicyLoadOptions {
@@ -69,7 +69,7 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
 }
 
 #[test]
-fn test_all_18_agent_profiles_load_successfully() {
+fn test_all_agent_profiles_load_successfully() {
     let temp = TempProject::new("all-18-agents");
     let project = temp.path().join("project");
     let home = temp.path().join("home");
@@ -94,6 +94,13 @@ fn test_all_18_agent_profiles_load_successfully() {
         "zcode",
         "kimi",
         "grok",
+        "hermes",
+        "kilo",
+        "pi",
+        "command_code",
+        "freebuff",
+        "deepseek_harness",
+        "omnigent",
         "custom",
     ];
 
@@ -703,5 +710,38 @@ fn test_smolagents_profile_caches_and_secret_masking() {
     assert!(
         pol.deny_resolved.iter().any(|d| d.path == dot_env),
         "smolagents must strictly deny project .env"
+    );
+}
+
+#[test]
+fn test_omnigent_profile_consistency() {
+    let temp = TempProject::new("omnigent-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("omnigent".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load omnigent policy");
+    let omnigent_home = home.join(".omnigent");
+    assert!(
+        pol.allow_write.contains(&omnigent_home),
+        "~/.omnigent must be writable"
+    );
+    assert!(
+        pol.environment
+            .pass_through
+            .iter()
+            .any(|v| v == "OMNIGENT_*"),
+        "OMNIGENT_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow.iter().any(|d| d == "api.omnigent.ai"),
+        "api.omnigent.ai must be allowed in network_allow"
     );
 }
