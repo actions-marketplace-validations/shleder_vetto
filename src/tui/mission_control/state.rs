@@ -1179,10 +1179,10 @@ impl DashboardState {
                     &domain,
                 );
                 if let Some(net_table) = table.get_mut("network").and_then(|v| v.as_table_mut()) {
-                    let should_switch = match net_table.get("mode").and_then(|m| m.as_str()) {
-                        None | Some("off") => true,
-                        _ => false,
-                    };
+                    let should_switch = matches!(
+                        net_table.get("mode").and_then(|m| m.as_str()),
+                        None | Some("off")
+                    );
                     if should_switch {
                         net_table.insert(
                             "mode".to_string(),
