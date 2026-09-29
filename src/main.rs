@@ -1272,14 +1272,6 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         );
     }
 
-    let session_id = format!(
-        "{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos()
-    );
-
     let mut env_extra: HashMap<String, String> = {
         let mut env_extra = HashMap::new();
         env_extra.insert("VETTO_SANDBOX".into(), "1".into());

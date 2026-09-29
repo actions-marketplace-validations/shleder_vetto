@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
 
+## [Unreleased]
+
+### Fixed
+- **Ephemeral Sandbox Auto-Rollback (`vetto ephemeral`)**:
+  - Eliminated `session_id` variable shadowing in `src/main.rs`, ensuring the timestamp-pid session ID used during initial snapshot capture matches the ID passed to post-session completion handlers.
+  - Hardened `handle_ephemeral_completion` in `src/rescue/ephemeral.rs` to gracefully handle cases where pre-session snapshots are absent without throwing unhandled errors.
+- **TUI Mission Control Interactive Live Network Policy**:
+  - Automatically promote `network.mode` to `allowlist` in `.vetto/policy.toml` when an operator presses `[a]` to allow a domain, preventing allowed domains from being silently ignored when the base mode was `off`.
+- **Packaging Integrity**:
+  - Synchronized `packaging/homebrew/vetto.rb` with verified release v0.5.8 sha256 checksums across all 4 host architectures.
+
+### Added
+- **Integration Test Suite**:
+  - Added `tests/integration/ephemeral.rs` to comprehensively verify automated workspace discard on failure and workspace preservation on success.
+
 ## [0.5.8] - 2026-09-29
 
 ### Added
