@@ -1,3 +1,9 @@
+vetto (0.5.10-1) unstable; urgency=medium
+
+  * Release 0.5.10: Quick Start enable-all onboarding, GitHub Actions runner fixes, and policy warnings suppression.
+
+ -- vetto contributors <noreply@github.com>  Tue, 29 Sep 2026 16:40:22 +0000
+
 vetto (0.5.9-1) unstable; urgency=medium
 
   * Release 0.5.9: Linux seccomp SYS_clone3 ENOSYS fallback, ephemeral rollback fix, and TUI live policy.
