@@ -65,7 +65,11 @@ pub struct BenchArgs {
     pub env: Vec<String>,
 
     /// Command to execute in the benchmark sandbox; everything after `--`
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, value_name = "COMMAND [ARGS...]")]
+    #[arg(
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        value_name = "COMMAND [ARGS...]"
+    )]
     pub command: Vec<String>,
 }
 
@@ -119,11 +123,48 @@ pub fn configure_bench_run(bench_args: &BenchArgs, cli: &Cli) -> Result<RunConfi
 
 /// Resolve policy file from repository, system location, or materialize embedded TOML.
 pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
-    let candidates = [
+    let mut candidates = vec![
         PathBuf::from(format!("profiles/agents/{profile_name}.toml")),
         PathBuf::from(format!("../profiles/agents/{profile_name}.toml")),
-        PathBuf::from(format!("/home/shleder/prod/vetto/profiles/agents/{profile_name}.toml")),
+        PathBuf::from(format!("profiles/{profile_name}.toml")),
+        PathBuf::from(format!("../profiles/{profile_name}.toml")),
     ];
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join(format!("profiles/agents/{profile_name}.toml")));
+        candidates.push(cwd.join(format!("../profiles/agents/{profile_name}.toml")));
+        candidates.push(cwd.join(format!("profiles/{profile_name}.toml")));
+    }
+
+    let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
+
+    if let Some(cfg_dir) = config_dir {
+        candidates.push(
+            cfg_dir
+                .join("vetto/profiles/agents")
+                .join(format!("{profile_name}.toml")),
+        );
+        candidates.push(
+            cfg_dir
+                .join("vetto/profiles")
+                .join(format!("{profile_name}.toml")),
+        );
+    }
+
+    if let Some(home) = std::env::var_os("HOME") {
+        candidates.push(
+            PathBuf::from(home)
+                .join(".vetto/profiles/agents")
+                .join(format!("{profile_name}.toml")),
+        );
+        candidates.push(
+            PathBuf::from(home)
+                .join(".vetto/profiles")
+                .join(format!("{profile_name}.toml")),
+        );
+    }
 
     for candidate in &candidates {
         if candidate.is_file() {
@@ -135,6 +176,10 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
     let temp_path = std::env::temp_dir().join(format!("vetto-profile-{profile_name}.toml"));
     let content = if profile_name == "swebench" {
         SWEBENCH_PROFILE_TOML
+    } else if let Some(builtin_agent) = crate::policy::defaults::agent_builtin(profile_name) {
+        builtin_agent
+    } else if let Some(builtin_pol) = crate::policy::defaults::builtin(profile_name) {
+        builtin_pol
     } else {
         SWEBENCH_PROFILE_TOML
     };
@@ -266,7 +311,8 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
     agent_cmd[0] = resolve_binary_in_path(&agent_cmd[0])?;
 
     // Backend detection (fast-path)
-    let backend = sandbox::Backend::detect_with_backend(cfg.net.clone(), false, cfg.backend.as_deref())?;
+    let backend =
+        sandbox::Backend::detect_with_backend(cfg.net.clone(), false, cfg.backend.as_deref())?;
     let tier = backend.tier();
     let tier_for_policy = match tier {
         Some(t) => t,
@@ -366,7 +412,10 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
 
     // Fast-path cold-start execution boundary
     let t_cold_start = Instant::now();
-    let scenario_id = format!("bench:{}", bench_args.instance_id.as_deref().unwrap_or("task"));
+    let scenario_id = format!(
+        "bench:{}",
+        bench_args.instance_id.as_deref().unwrap_or("task")
+    );
     let unprepared = UnpreparedProductionExecution::new(
         backend,
         pol,
@@ -447,7 +496,8 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
     let blocked_attempts = 0usize;
 
     // Contract: Fail-closed Exit 125 on timeout, OOM or sandbox security breach
-    let final_exit_code = if timed_out || oom_killed || raw_exit_code == 125 || blocked_attempts > 0 {
+    let final_exit_code = if timed_out || oom_killed || raw_exit_code == 125 || blocked_attempts > 0
+    {
         125
     } else {
         raw_exit_code
@@ -556,7 +606,8 @@ mod tests {
         assert!(json_str.contains("\"verdict\":\"pass\""));
         assert!(json_str.contains("\"instance_id\":\"django__django-11099\""));
 
-        let deserialized: BenchJsonResult = serde_json::from_str(&json_str).expect("deserialization");
+        let deserialized: BenchJsonResult =
+            serde_json::from_str(&json_str).expect("deserialization");
         assert_eq!(deserialized, res);
     }
 

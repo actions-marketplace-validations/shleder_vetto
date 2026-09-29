@@ -75,11 +75,8 @@ fn bench_configure_run_config(c: &mut Criterion) {
 fn bench_swebench_policy_layer_parsing(c: &mut Criterion) {
     c.bench_function("swebench_policy_parse_layer", |b| {
         b.iter(|| {
-            let layer = parse_layer(
-                black_box(SWEBENCH_PROFILE_TOML),
-                black_box("swebench.toml"),
-            )
-            .expect("parse swebench layer");
+            let layer = parse_layer(black_box(SWEBENCH_PROFILE_TOML), black_box("swebench.toml"))
+                .expect("parse swebench layer");
             black_box(layer)
         });
     });
@@ -123,8 +120,8 @@ fn bench_json_telemetry_roundtrip(c: &mut Criterion) {
 fn bench_resolve_policy(c: &mut Criterion) {
     c.bench_function("swebench_resolve_policy_path", |b| {
         b.iter(|| {
-            let path = resolve_or_materialize_policy(black_box("swebench"))
-                .expect("resolve policy");
+            let path =
+                resolve_or_materialize_policy(black_box("swebench")).expect("resolve policy");
             black_box(path)
         });
     });

@@ -414,9 +414,17 @@ impl RunConfig {
         let ci = if benchmark { true } else { cli.ci };
         let ephemeral = if benchmark { true } else { ephemeral };
         let mask_secrets = if benchmark { true } else { mask_secrets };
-        let auto_deny_secrets = if benchmark { true } else { cli.auto_deny_secrets };
+        let auto_deny_secrets = if benchmark {
+            true
+        } else {
+            cli.auto_deny_secrets
+        };
         let snapshot = if benchmark { false } else { snapshot };
-        let report_formats = if benchmark { Vec::new() } else { report_formats };
+        let report_formats = if benchmark {
+            Vec::new()
+        } else {
+            report_formats
+        };
         let tmpfs_tmp = if benchmark { true } else { cli.tmpfs_tmp };
 
         Ok(Self {

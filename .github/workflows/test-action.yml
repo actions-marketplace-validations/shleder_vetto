@@ -81,6 +81,7 @@ jobs:
         with:
           command: 'echo "agent allowlist wiring test"'
           agent: 'aider'
+          net: 'off'
           profile: 'default'
           report: 'json,sarif'
           fail-on-block: 'false'

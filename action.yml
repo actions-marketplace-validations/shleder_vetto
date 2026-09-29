@@ -94,7 +94,7 @@ runs:
 
         # Resolve version tag
         if [ -z "$REQUESTED_VERSION" ] || [ "$REQUESTED_VERSION" = "latest" ]; then
-          RESOLVED_TAG=$(curl -sSL "${AUTH_HEADER[@]}" -H "Accept: application/vnd.github+json" \
+          RESOLVED_TAG=$(curl -sSL ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
           if [ -z "$RESOLVED_TAG" ]; then
             RESOLVED_TAG="v0.5.10"

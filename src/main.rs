@@ -418,9 +418,7 @@ fn run() -> Result<()> {
             let cfg = cli::eval::configure_eval_run(eval_args, &args)?;
             supervise(cfg)
         }
-        Some(cli::Command::Bench(bench_args)) => {
-            cli::bench::execute_bench(bench_args, &args)
-        }
+        Some(cli::Command::Bench(bench_args)) => cli::bench::execute_bench(bench_args, &args),
         Some(cli::Command::Diff(args)) => cli::diff::run_diff(args),
         Some(cli::Command::Pack(args)) => cli::bundle::run_pack(args),
         Some(cli::Command::Unpack(args)) => cli::bundle::run_unpack(args),
@@ -1181,7 +1179,8 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         };
 
     // Only capture a project manifest if diff reporting or snapshotting is requested
-    let diff_requested = (cfg.snapshot || cfg.ephemeral || !cfg.report_formats.is_empty()) && !cfg.benchmark;
+    let diff_requested =
+        (cfg.snapshot || cfg.ephemeral || !cfg.report_formats.is_empty()) && !cfg.benchmark;
 
     let diff_enabled = diff_requested && !is_home_or_root;
 
