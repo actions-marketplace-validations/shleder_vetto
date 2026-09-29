@@ -27,7 +27,12 @@ pub enum SecurityEventType {
     QuotaExceeded,  // Network quota
 }
 
+#[allow(non_upper_case_globals)]
 impl SecurityEventType {
+    pub const L7EgressBlock: Self = Self::BlockedNetwork;
+    pub const SecretAccessAttempt: Self = Self::SecretMasked;
+    pub const SeccompTrap: Self = Self::SeccompFilter;
+
     pub fn badge(&self) -> &'static str {
         match self {
             Self::AccessDenial | Self::LandlockDenial => "LANDLOCK",
@@ -39,6 +44,8 @@ impl SecurityEventType {
     }
 }
 
+pub type SecurityEventKind = SecurityEventType;
+
 #[derive(Debug, Clone)]
 pub struct SecurityEventItem {
     pub ts: DateTime<Utc>,
@@ -47,6 +54,18 @@ pub struct SecurityEventItem {
     pub detail: String,
     pub source: String,
 }
+
+impl SecurityEventItem {
+    pub fn kind(&self) -> SecurityEventType {
+        self.event_type
+    }
+
+    pub fn target(&self) -> &str {
+        &self.subject
+    }
+}
+
+pub type SecurityEventRow = SecurityEventItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MissionTab {
@@ -58,7 +77,10 @@ pub enum MissionTab {
     Fleet,
 }
 
+#[allow(non_upper_case_globals)]
 impl MissionTab {
+    pub const SecurityEvents: Self = Self::SecurityStream;
+
     pub fn index(&self) -> usize {
         match self {
             Self::Agents => 0,
@@ -90,6 +112,8 @@ impl MissionTab {
         Self::from_index(self.index() + 5)
     }
 }
+
+pub type TabId = MissionTab;
 
 #[derive(Debug, Clone)]
 pub struct AgentCard {
@@ -415,6 +439,12 @@ pub struct DashboardState {
     pub selected_session: usize,
     pub policy_presets: Vec<PolicyPresetItem>,
     pub selected_preset: usize,
+    pub workspace_root: Option<PathBuf>,
+    pub live_allow_domains: Vec<String>,
+    pub live_deny_domains: Vec<String>,
+    pub live_allow_write: Vec<String>,
+    pub live_allow_read: Vec<String>,
+    pub live_deny_paths: Vec<String>,
 }
 
 impl DashboardState {
@@ -450,7 +480,14 @@ impl DashboardState {
             selected_session: 0,
             policy_presets,
             selected_preset: 0,
+            workspace_root: None,
+            live_allow_domains: Vec::new(),
+            live_deny_domains: Vec::new(),
+            live_allow_write: Vec::new(),
+            live_allow_read: Vec::new(),
+            live_deny_paths: Vec::new(),
         };
+        state.reload_policy_tab();
         state.poll_active_sessions();
         state.poll_security_events();
         state.poll_fleet_state();
@@ -535,6 +572,8 @@ impl DashboardState {
         if self.active_tab == MissionTab::Doctor {
             self.doctor_report = Some(execute_preflight_diagnostics());
         }
+
+        self.reload_policy_tab();
 
         self.poll_active_sessions();
         if self.selected_session >= self.active_sessions.len() && !self.active_sessions.is_empty() {
@@ -1073,6 +1112,381 @@ impl DashboardState {
             session.procs.len().saturating_sub(1)
         ));
     }
+
+    /// Resolves the path to `.vetto/policy.toml` for the active workspace.
+    pub fn policy_toml_path(&self) -> PathBuf {
+        let base = self
+            .workspace_root
+            .clone()
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        base.join(".vetto").join("policy.toml")
+    }
+
+    /// Reloads `.vetto/policy.toml` live rules into the Policy Inspector state.
+    pub fn reload_policy_tab(&mut self) {
+        self.policy_presets = built_in_presets();
+        let path = self.policy_toml_path();
+        let table = load_policy_toml_table(&path);
+
+        self.live_allow_domains = extract_string_array(&table, "network", "allow_domains");
+        self.live_deny_domains = extract_string_array(&table, "network", "deny_domains");
+        self.live_allow_write = extract_string_array(&table, "filesystem", "allow_write");
+        self.live_allow_read = extract_string_array(&table, "filesystem", "allow_read");
+        self.live_deny_paths = extract_string_array(&table, "filesystem", "deny");
+
+        if !self.live_allow_domains.is_empty() || !self.live_deny_domains.is_empty() {
+            let indices = if self.selected_preset == 0 {
+                vec![0]
+            } else {
+                vec![0, self.selected_preset]
+            };
+            for idx in indices {
+                if let Some(preset) = self.policy_presets.get_mut(idx) {
+                    preset
+                        .network_domains
+                        .retain(|d| !self.live_deny_domains.contains(d));
+                    for dom in &self.live_allow_domains {
+                        if !preset.network_domains.contains(dom) {
+                            preset.network_domains.push(dom.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Interactively allows the currently selected security event in `.vetto/policy.toml`.
+    pub fn allow_selected_security_event(&mut self) {
+        let Some(selected) = self.security_events.get(self.selected_event).cloned() else {
+            self.set_status("No security event selected to allow");
+            return;
+        };
+
+        match selected.event_type {
+            SecurityEventType::BlockedNetwork | SecurityEventType::QuotaExceeded => {
+                let Some(domain) = extract_network_domain(&selected.subject) else {
+                    self.set_status("Cannot extract valid domain from selected network event");
+                    return;
+                };
+                let policy_path = self.policy_toml_path();
+                let mut table = load_policy_toml_table(&policy_path);
+                upsert_toml_string_array(
+                    &mut table,
+                    "network",
+                    &["allow_domains"],
+                    &["deny_domains"],
+                    &domain,
+                );
+                match save_policy_toml_table(&policy_path, &table) {
+                    Ok(()) => {
+                        self.reload_policy_tab();
+                        self.set_status(format!("Allowed domain '{domain}' in .vetto/policy.toml"));
+                    }
+                    Err(e) => {
+                        self.set_status(format!(
+                            "Failed to update .vetto/policy.toml for '{domain}': {e}"
+                        ));
+                    }
+                }
+            }
+            SecurityEventType::AccessDenial
+            | SecurityEventType::LandlockDenial
+            | SecurityEventType::SecretMasked => {
+                let target_path = selected.subject.trim();
+                let clean_path = match validate_allowable_filesystem_path(target_path) {
+                    Ok(p) => p,
+                    Err(reason) => {
+                        self.set_status(reason);
+                        return;
+                    }
+                };
+                let policy_path = self.policy_toml_path();
+                let mut table = load_policy_toml_table(&policy_path);
+                upsert_toml_string_array(
+                    &mut table,
+                    "filesystem",
+                    &["allow_write", "allow_read"],
+                    &["deny"],
+                    &clean_path,
+                );
+                match save_policy_toml_table(&policy_path, &table) {
+                    Ok(()) => {
+                        self.reload_policy_tab();
+                        self.set_status(format!(
+                            "Allowed path '{clean_path}' in .vetto/policy.toml"
+                        ));
+                    }
+                    Err(e) => {
+                        self.set_status(format!(
+                            "Failed to update .vetto/policy.toml for '{clean_path}': {e}"
+                        ));
+                    }
+                }
+            }
+            SecurityEventType::SeccompFilter => {
+                self.set_status(
+                    "Refused fail-closed: kernel seccomp-BPF syscall traps are immutable security invariants and cannot be allowlisted via TOML",
+                );
+            }
+        }
+    }
+
+    /// Interactively denies the currently selected security event in `.vetto/policy.toml`.
+    pub fn deny_selected_security_event(&mut self) {
+        let Some(selected) = self.security_events.get(self.selected_event).cloned() else {
+            self.set_status("No security event selected to deny");
+            return;
+        };
+
+        match selected.event_type {
+            SecurityEventType::BlockedNetwork | SecurityEventType::QuotaExceeded => {
+                let Some(domain) = extract_network_domain(&selected.subject) else {
+                    self.set_status("Cannot extract valid domain from selected network event");
+                    return;
+                };
+                let policy_path = self.policy_toml_path();
+                let mut table = load_policy_toml_table(&policy_path);
+                upsert_toml_string_array(
+                    &mut table,
+                    "network",
+                    &["deny_domains"],
+                    &["allow_domains"],
+                    &domain,
+                );
+                match save_policy_toml_table(&policy_path, &table) {
+                    Ok(()) => {
+                        self.reload_policy_tab();
+                        self.set_status(format!("Denied domain '{domain}' in .vetto/policy.toml"));
+                    }
+                    Err(e) => {
+                        self.set_status(format!(
+                            "Failed to update .vetto/policy.toml for '{domain}': {e}"
+                        ));
+                    }
+                }
+            }
+            SecurityEventType::AccessDenial
+            | SecurityEventType::LandlockDenial
+            | SecurityEventType::SecretMasked => {
+                let clean_path = selected.subject.trim().to_string();
+                if clean_path.is_empty() {
+                    self.set_status("Cannot deny empty filesystem path");
+                    return;
+                }
+                let policy_path = self.policy_toml_path();
+                let mut table = load_policy_toml_table(&policy_path);
+                upsert_toml_string_array(
+                    &mut table,
+                    "filesystem",
+                    &["deny"],
+                    &["allow_write", "allow_read"],
+                    &clean_path,
+                );
+                match save_policy_toml_table(&policy_path, &table) {
+                    Ok(()) => {
+                        self.reload_policy_tab();
+                        self.set_status(format!(
+                            "Denied path '{clean_path}' in .vetto/policy.toml"
+                        ));
+                    }
+                    Err(e) => {
+                        self.set_status(format!(
+                            "Failed to update .vetto/policy.toml for '{clean_path}': {e}"
+                        ));
+                    }
+                }
+            }
+            SecurityEventType::SeccompFilter => {
+                self.set_status(format!(
+                    "Seccomp-BPF syscall '{}' is already blocked fail-closed by kernel filter",
+                    selected.subject
+                ));
+            }
+        }
+    }
+}
+
+fn load_policy_toml_table(path: &Path) -> toml::map::Map<String, toml::Value> {
+    if let Ok(raw) = std::fs::read_to_string(path) {
+        if let Ok(toml::Value::Table(table)) = raw.parse::<toml::Value>() {
+            return table;
+        }
+    }
+    toml::map::Map::new()
+}
+
+fn save_policy_toml_table(
+    path: &Path,
+    table: &toml::map::Map<String, toml::Value>,
+) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let serialized = toml::to_string_pretty(&toml::Value::Table(table.clone()))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+    std::fs::write(path, serialized)
+}
+
+fn extract_string_array(
+    table: &toml::map::Map<String, toml::Value>,
+    section: &str,
+    key: &str,
+) -> Vec<String> {
+    table
+        .get(section)
+        .and_then(|v| v.as_table())
+        .and_then(|sec| sec.get(key))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| item.as_str().map(ToString::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn upsert_toml_string_array(
+    table: &mut toml::map::Map<String, toml::Value>,
+    section: &str,
+    add_keys: &[&str],
+    remove_keys: &[&str],
+    value: &str,
+) {
+    let sec_val = table
+        .entry(section.to_string())
+        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+    if !sec_val.is_table() {
+        *sec_val = toml::Value::Table(toml::map::Map::new());
+    }
+    let Some(sec_table) = sec_val.as_table_mut() else {
+        return;
+    };
+
+    for &rk in remove_keys {
+        if let Some(toml::Value::Array(arr)) = sec_table.get_mut(rk) {
+            arr.retain(|item| item.as_str() != Some(value));
+        }
+    }
+
+    for &ak in add_keys {
+        let arr_val = sec_table
+            .entry(ak.to_string())
+            .or_insert_with(|| toml::Value::Array(Vec::new()));
+        if !arr_val.is_array() {
+            *arr_val = toml::Value::Array(Vec::new());
+        }
+        if let Some(arr) = arr_val.as_array_mut() {
+            if !arr.iter().any(|item| item.as_str() == Some(value)) {
+                arr.push(toml::Value::String(value.to_string()));
+            }
+        }
+    }
+}
+
+pub(crate) fn extract_network_domain(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let token = if trimmed.contains(char::is_whitespace) {
+        trimmed
+            .split_whitespace()
+            .find(|part| part.contains('.') || part.contains(':'))
+            .unwrap_or(trimmed)
+    } else {
+        trimmed
+    };
+    let without_scheme = token
+        .strip_prefix("https://")
+        .or_else(|| token.strip_prefix("http://"))
+        .unwrap_or(token);
+    let authority = without_scheme.split('/').next().unwrap_or(without_scheme);
+    let host = if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or(bracketed)
+    } else if let Some((h, port)) = authority.rsplit_once(':') {
+        if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) {
+            h
+        } else {
+            authority
+        }
+    } else {
+        authority
+    };
+    let clean = host.trim_matches(|c: char| c == '\'' || c == '"' || c == ',' || c == ';');
+    if clean.is_empty() {
+        None
+    } else {
+        Some(clean.to_ascii_lowercase())
+    }
+}
+
+pub(crate) fn validate_allowable_filesystem_path(
+    raw_path: &str,
+) -> std::result::Result<String, String> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return Err("Refused fail-closed: cannot allow empty filesystem path".to_string());
+    }
+
+    let normalized = if trimmed == "/" {
+        "/"
+    } else {
+        trimmed.trim_end_matches('/')
+    };
+
+    let home_dir = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+        .map(|h| h.trim_end_matches('/').to_string());
+
+    if normalized == "~" || normalized == "$HOME" || home_dir.as_deref() == Some(normalized) {
+        return Err(format!(
+            "Refused fail-closed: home root '{normalized}' cannot be allowlisted interactively"
+        ));
+    }
+
+    const FORBIDDEN_SYSTEM_ROOTS: &[&str] = &[
+        "/", "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/boot", "/proc", "/sys", "/dev",
+        "/root",
+    ];
+
+    for &sys_root in FORBIDDEN_SYSTEM_ROOTS {
+        if normalized == sys_root {
+            return Err(format!(
+                "Refused fail-closed: system root path '{normalized}' cannot be allowlisted interactively"
+            ));
+        }
+        if sys_root != "/" {
+            let prefix = format!("{sys_root}/");
+            if normalized.starts_with(&prefix) {
+                return Err(format!(
+                    "Refused fail-closed: system path '{normalized}' under '{sys_root}' cannot be allowlisted interactively"
+                ));
+            }
+        }
+    }
+
+    let lower = normalized.to_ascii_lowercase();
+    if lower.ends_with(".pem") || lower.ends_with(".key") || lower.contains(".git/config") {
+        return Err(format!(
+            "Refused fail-closed: mandatory secret path '{normalized}' (INV-08) cannot be allowlisted interactively"
+        ));
+    }
+
+    for segment in lower.split(['/', '\\']) {
+        if matches!(
+            segment,
+            ".ssh" | ".aws" | ".env" | ".gnupg" | ".kube" | ".docker"
+        ) || segment.starts_with(".env.")
+        {
+            return Err(format!(
+                "Refused fail-closed: mandatory secret path '{normalized}' (INV-08) cannot be allowlisted interactively"
+            ));
+        }
+    }
+
+    Ok(normalized.to_string())
 }
 
 pub(crate) fn classify_security_event(ev: crate::events::Event) -> Option<SecurityEventItem> {
@@ -1422,6 +1836,37 @@ fn find_session_pids(root_pid: u32, cgroup_scope: &str) -> Vec<u32> {
 mod tests {
     use super::*;
 
+    fn empty_test_state(workspace: Option<PathBuf>) -> DashboardState {
+        DashboardState {
+            active_tab: MissionTab::SecurityStream,
+            installed_agents: Vec::new(),
+            selected_agent: 0,
+            doctor_report: None,
+            snapshots: Vec::new(),
+            selected_snapshot: 0,
+            security_events: VecDeque::new(),
+            selected_event: 0,
+            seen_event_keys: HashSet::new(),
+            log_file_offsets: HashMap::new(),
+            theme: Theme::arasaka(),
+            status_message: None,
+            pending_launch_agent: None,
+            fleet_workers: Vec::new(),
+            selected_fleet_worker: 0,
+            fleet_probe_status: None,
+            active_sessions: Vec::new(),
+            selected_session: 0,
+            policy_presets: built_in_presets(),
+            selected_preset: 0,
+            workspace_root: workspace,
+            live_allow_domains: Vec::new(),
+            live_deny_domains: Vec::new(),
+            live_allow_write: Vec::new(),
+            live_allow_read: Vec::new(),
+            live_deny_paths: Vec::new(),
+        }
+    }
+
     #[test]
     fn test_collect_descendant_pids_multi_level_bfs() {
         // 4-level tree: 100 -> (200, 201), 200 -> 300 -> 400, plus unrelated 999 -> 1000
@@ -1491,28 +1936,7 @@ mod tests {
         initial.push('\n');
         std::fs::write(&log_path, &initial).expect("write initial log");
 
-        let mut state = DashboardState {
-            active_tab: MissionTab::SecurityStream,
-            installed_agents: Vec::new(),
-            selected_agent: 0,
-            doctor_report: None,
-            snapshots: Vec::new(),
-            selected_snapshot: 0,
-            security_events: VecDeque::new(),
-            selected_event: 0,
-            seen_event_keys: HashSet::new(),
-            log_file_offsets: HashMap::new(),
-            theme: Theme::arasaka(),
-            status_message: None,
-            pending_launch_agent: None,
-            fleet_workers: Vec::new(),
-            selected_fleet_worker: 0,
-            fleet_probe_status: None,
-            active_sessions: Vec::new(),
-            selected_session: 0,
-            policy_presets: built_in_presets(),
-            selected_preset: 0,
-        };
+        let mut state = empty_test_state(Some(tmp.clone()));
 
         state.poll_security_events_from_dir(&tmp);
         assert_eq!(state.security_events.len(), 1);
@@ -1563,5 +1987,137 @@ mod tests {
                 "missing preset for supported agent {canon}"
             );
         }
+    }
+
+    #[test]
+    fn test_allow_and_deny_selected_security_event_in_temp_dir() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp = std::env::temp_dir().join(format!(
+            "vetto-live-policy-state-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).expect("create temp workspace");
+
+        let mut state = empty_test_state(Some(tmp.clone()));
+        let safe_project_path = tmp.join("build-cache").display().to_string();
+
+        // 1. Network event: allow then deny
+        state.security_events.push_back(SecurityEventItem {
+            ts: Utc::now(),
+            event_type: SecurityEventType::BlockedNetwork,
+            subject: "api.example.com:443".to_string(),
+            detail: "Outbound egress blocked".to_string(),
+            source: "net_relay".to_string(),
+        });
+        // 2. Safe filesystem path: allow then deny
+        state.security_events.push_back(SecurityEventItem {
+            ts: Utc::now(),
+            event_type: SecurityEventType::LandlockDenial,
+            subject: safe_project_path.clone(),
+            detail: "Landlock denied write".to_string(),
+            source: "landlock".to_string(),
+        });
+        // 3. System root path (/etc/shadow): must refuse fail-closed on allow
+        state.security_events.push_back(SecurityEventItem {
+            ts: Utc::now(),
+            event_type: SecurityEventType::LandlockDenial,
+            subject: "/etc/shadow".to_string(),
+            detail: "Landlock denied read".to_string(),
+            source: "landlock".to_string(),
+        });
+        // 4. Mandatory secret path (~/.ssh/id_ed25519): must refuse fail-closed on allow
+        state.security_events.push_back(SecurityEventItem {
+            ts: Utc::now(),
+            event_type: SecurityEventType::SecretMasked,
+            subject: "/home/user/.ssh/id_ed25519".to_string(),
+            detail: "Inode masked mode 0000".to_string(),
+            source: "vfs_overlays".to_string(),
+        });
+        // 5. Seccomp trap: must refuse fail-closed on allow
+        state.security_events.push_back(SecurityEventItem {
+            ts: Utc::now(),
+            event_type: SecurityEventType::SeccompFilter,
+            subject: "syscall:ptrace".to_string(),
+            detail: "Seccomp filtered syscall".to_string(),
+            source: "seccomp-bpf".to_string(),
+        });
+
+        // Event 0: Allow network domain
+        state.selected_event = 0;
+        state.allow_selected_security_event();
+        assert_eq!(
+            state.active_status(),
+            Some("Allowed domain 'api.example.com' in .vetto/policy.toml")
+        );
+        assert!(state
+            .live_allow_domains
+            .contains(&"api.example.com".to_string()));
+        assert!(state.policy_presets[0]
+            .network_domains
+            .contains(&"api.example.com".to_string()));
+
+        // Event 0: Deny network domain (moves from allow_domains to deny_domains)
+        state.deny_selected_security_event();
+        assert_eq!(
+            state.active_status(),
+            Some("Denied domain 'api.example.com' in .vetto/policy.toml")
+        );
+        assert!(!state
+            .live_allow_domains
+            .contains(&"api.example.com".to_string()));
+        assert!(state
+            .live_deny_domains
+            .contains(&"api.example.com".to_string()));
+
+        // Event 1: Allow safe filesystem path
+        state.selected_event = 1;
+        state.allow_selected_security_event();
+        assert!(state.active_status().unwrap_or("").contains("Allowed path"));
+        assert!(state.live_allow_write.contains(&safe_project_path));
+        assert!(state.live_allow_read.contains(&safe_project_path));
+
+        // Event 1: Deny filesystem path (moves from allow_write/read to deny)
+        state.deny_selected_security_event();
+        assert!(state.active_status().unwrap_or("").contains("Denied path"));
+        assert!(!state.live_allow_write.contains(&safe_project_path));
+        assert!(state.live_deny_paths.contains(&safe_project_path));
+
+        // Event 2: Refuse allowing /etc/shadow
+        state.selected_event = 2;
+        state.allow_selected_security_event();
+        assert!(state
+            .active_status()
+            .unwrap_or("")
+            .contains("Refused fail-closed"));
+        assert!(!state.live_allow_write.contains(&"/etc/shadow".to_string()));
+
+        // Event 3: Refuse allowing mandatory secret .ssh
+        state.selected_event = 3;
+        state.allow_selected_security_event();
+        assert!(state
+            .active_status()
+            .unwrap_or("")
+            .contains("Refused fail-closed"));
+        assert!(!state
+            .live_allow_write
+            .contains(&"/home/user/.ssh/id_ed25519".to_string()));
+
+        // Event 4: Refuse allowing seccomp syscall trap
+        state.selected_event = 4;
+        state.allow_selected_security_event();
+        assert!(state
+            .active_status()
+            .unwrap_or("")
+            .contains("immutable security invariants"));
+
+        let policy_content =
+            std::fs::read_to_string(state.policy_toml_path()).expect("read policy.toml");
+        assert!(policy_content.contains("deny_domains"));
+        assert!(policy_content.contains("api.example.com"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

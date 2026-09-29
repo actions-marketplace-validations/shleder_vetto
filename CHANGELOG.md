@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Format follows
 Keep a Changelog; versioning follows SemVer.
 
+## [0.5.8] - 2026-09-29
+
+### Added
+- **Interactive Live Policy Allow/Deny in TUI Mission Control (`[a]` Allow / `[d]` Deny)**:
+  - Added interactive keybindings on the `Security Stream` tab (`MissionTab::SecurityStream`) allowing operators to press `a` to allow or `d` to deny the selected security event directly in `.vetto/policy.toml`.
+  - Automatically extracts domains from blocked L7 egress and network quota events into `[network].allow_domains` or `[network].deny_domains`, and writes safe project filesystem paths into `[filesystem].allow_write`, `[filesystem].allow_read`, or `[filesystem].deny`.
+  - Enforces a fail-closed safety guard refusing to allowlist system roots (`/`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/boot`, `/proc`, `/sys`, `/dev`, `/root`, `$HOME`, `~`), mandatory INV-08 secrets (`.ssh`, `.aws`, `.env`, `.gnupg`, `.kube`, `.docker`, `.pem`, `.key`), or immutable kernel seccomp-BPF syscall traps.
+  - Reloads the Policy Inspector state (`reload_policy_tab()`) immediately after updating `.vetto/policy.toml` and surfaces `[a] Allow  [d] Deny` in the Mission Control footer bar.
+
+### Security
+- **Linux Landlock `SYS_openat2` (`RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS`) Hardening**:
+  - Replaced `libc::open(..., O_PATH | O_CLOEXEC)` in Landlock rule path opening (`open_landlock_path_fd`) with `SYS_openat2` using `RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (`0x04 | 0x02`) and a fail-closed `O_NOFOLLOW` + `fstat` `S_IFLNK` fallback on `ENOSYS`/`EPERM`, preventing symlink or `/proc/self/fd/*` magiclink traversal during Landlock rule attachment (`ELOOP`).
+
 ## [0.5.7] - 2026-09-28
 
 ### Added
