@@ -245,7 +245,7 @@ fn measure_peak_memory_bytes(_pid: Option<u32>) -> u64 {
                     if p.is_dir()
                         && p.file_name()
                             .and_then(|n| n.to_str())
-                            .map_or(false, |n| n.starts_with("vetto-session-"))
+                            .is_some_and(|n| n.starts_with("vetto-session-"))
                     {
                         if let Ok(content) = std::fs::read_to_string(p.join("memory.peak")) {
                             if let Ok(bytes) = content.trim().parse::<u64>() {
