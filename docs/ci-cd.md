@@ -1,58 +1,124 @@
-# CI/CD integration
+# CI/CD Integration Guide
 
-Run a non-interactive agent with machine-readable output:
+Vetto provides a rootless, kernel-enforced security boundary for executing AI coding agents (Claude Code, Aider, Codex, Cursor) in CI/CD pipelines. It replaces Docker-in-Docker (DinD) with direct Landlock LSM and cgroups v2 isolation.
 
-```console
-vetto --ci --tui=none --profile=strict --net=off \
-  --report=json,sarif --report-dir=.vetto/reports \
-  --fail-on-block -- agent command
-```
+## Comparison: Vetto vs Docker-in-Docker (DinD)
 
-`--ci` disables the statusline and prints the final JSON summary to standard
-output. Diagnostics stay on standard error. `--fail-on-block` returns a
-non-zero status when at least one blocked event was observed; an explicit
-number changes the threshold, for example `--fail-on-block=5`.
+| Dimension | Docker-in-Docker (DinD) | Vetto Sandbox |
+|---|---|---|
+| **Cold Start Overhead** | 30–120s (image pull + daemon init) | <4ms (kernel-native Landlock LSM) |
+| **Privilege Requirement** | Requires `--privileged` or root Docker socket | 100% unprivileged / rootless user namespaces |
+| **Runner Caching** | Isolated filesystem; cannot share `actions/cache` | Native access to `$GITHUB_WORKSPACE` and runner toolchains |
+| **Process Extinction** | Orphaned containers can leak across steps | Guaranteed tree termination via cgroups v2 (`cgroup.kill`) |
+| **Security Audit** | Container exit code only (coarse-grained) | Inode-level violation logs and SARIF 2.1.0 CodeQL annotations |
+| **OS Support** | Linux VM runners only | Linux (Landlock), macOS (Seatbelt SBPL), Windows (Job Objects) |
 
-Blocked-attempt visibility is best-effort on platforms where a readable audit
-feed or seccomp user-notify is unavailable. The threshold applies to observed
-events and must not be interpreted as proof that no denied syscall occurred.
-The filesystem and network boundary remains enforced regardless of reporting.
+## GitHub Actions Marketplace Action
 
-## GitHub Actions
+The canonical action is published on GitHub Marketplace as `shleder/vetto`. It operates in two modes: **Setup Mode** and **Execute Mode**.
 
-The repository contains a composite action under `action/`:
+### Mode 1: Execute Mode (Single-Step Runner)
+
+Execute a sandboxed agent command, generate audit reports, and optionally upload findings to GitHub Code Scanning:
 
 ```yaml
-- uses: shleder/vetto/action@main
-  with:
-    command: codex exec "review this PR"
-    profile: strict
-    net: off
-    report: sarif
-    fail-on-block: "true"
+name: Agent Security Gate
+on: [pull_request]
+
+permissions:
+  contents: read
+  security-events: write # Required when upload-sarif is true
+
+jobs:
+  agent-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Aider in Sandbox
+        uses: shleder/vetto@v0.5.10
+        with:
+          command: 'aider --yes-always --no-git --message "Review PR changes"'
+          agent: 'aider'
+          profile: 'strict'
+          fail-on-block: '1'
+          upload-sarif: 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-For a pinned production workflow, reference an immutable commit SHA. The
-action builds the checked-out source, runs the requested command through
-`vetto`, and can upload SARIF through GitHub's official CodeQL action. It does
-not download an unverified binary or start a service.
+### Mode 2: Setup Mode (Multi-Step Workflows)
 
-## Report retention
+When `command` is omitted, the action verifies and installs the standalone `vetto` binary into `$GITHUB_PATH`:
 
-Place reports in a dedicated directory that is outside the sandbox allowlist:
+```yaml
+      - name: Setup Vetto Sandbox
+        uses: shleder/vetto@v0.5.10
+        with:
+          version: 'latest'
 
-```console
-vetto --report-dir="$RUNNER_TEMP/vetto-reports" --report=sarif,json -- agent command
+      - name: Run Sandboxed Commands
+        run: |
+          vetto doctor --preflight
+          vetto run -- aider --message "Refactor parser error handling"
 ```
 
-Cleanup only considers files with vetto's generated report-name grammar in
-that exact directory. Configure retention explicitly with the CLI retention
-options. Report creation refuses symlink targets and existing destination
-files.
+## Binary Integrity & Verification
 
-## Other CI systems
+The action downloads official pre-compiled release binaries from GitHub Releases and cryptographically verifies the SHA-256 hash against the release `.sha256` sidecar file before extraction. Unverified binaries are rejected fail-closed.
 
-The same CLI works in GitLab CI, Jenkins, CircleCI and Azure Pipelines. Preserve
-the command exit code, collect `.vetto/reports` as an artifact, and feed SARIF
-to the platform's supported scanner importer. Do not parse the human-readable
-doctor output as a stable API; use JSON reports for automation.
+## Action Inputs Reference
+
+| Input | Type | Default | Description |
+|---|---|---|---|
+| `command` | String | `""` | Agent command to execute. If omitted, runs in Setup Mode. |
+| `agent` | String | `""` | Agent preset (`aider`, `claude`, `codex`, `cursor`, `opencode`). Auto-configures profile and network allowlists. |
+| `version` | String | `'latest'` | Target Vetto release version (e.g. `'0.5.10'` or `'latest'`). |
+| `profile` | String | `'strict'` | Built-in policy profile: `strict`, `default`, `permissive`, `audit`. |
+| `net` | String | `""` | Network mode: `off`, `allowlist:<domains>`, `strict:<domains>`. If omitted with `agent`, auto-resolves provider domains. Defaults to `off` if neither is specified. |
+| `policy` | String | `""` | Path to custom TOML policy file. |
+| `report` | String | `'json,sarif'` | Comma-separated report formats: `json`, `sarif`, `md`, `html`. |
+| `report-dir` | String | `'.vetto/reports'` | Output directory for audit and security reports. |
+| `fail-on-block` | String | `'false'` | Fail step if blocked attempts occur. `'true'` or integer threshold (e.g. `'1'`). |
+| `upload-sarif` | String | `'false'` | Upload SARIF report to GitHub Code Scanning via `github/codeql-action/upload-sarif@v3`. |
+| `telemetry` | String | `'false'` | Opt-in anonymous telemetry. |
+| `github-token` | String | `""` | GitHub token for authenticated release resolution when rate-limited. |
+
+## Action Outputs
+
+| Output | Description |
+|---|---|
+| `vetto-version` | Installed Vetto version string (e.g. `0.5.10`). |
+| `vetto-path` | Absolute path to the installed executable. |
+| `exit-code` | Process return code from the sandboxed agent command. |
+| `sarif-path` | Absolute path to the generated SARIF report file. |
+
+## Audit Engine & Exit Codes
+
+Vetto enforces deterministic exit codes:
+- **`0`**: Command succeeded and zero policy violations were triggered.
+- **`124`**: Command execution timed out.
+- **`125` (`EXIT_FAIL_CLOSED`)**: Contract violation or security boundary breach (unauthorized filesystem write, secret traversal to `~/.ssh` or `.env`, or denied network egress).
+- Non-zero status codes from the target agent process are preserved when no sandbox violation occurs.
+
+## Code Scanning Annotations (SARIF 2.1.0)
+
+When `upload-sarif: 'true'` is configured:
+1. Vetto compiles blocked filesystem and network events into a standard SARIF 2.1.0 artifact in `report-dir`.
+2. The SARIF payload includes exact violation categories:
+   - `vetto.blocked-attempt`: Filesystem access blocked by Landlock LSM.
+   - `vetto.network-denied`: Outbound socket connection rejected by network broker.
+   - `vetto.suspicious-signal`: Suspicious system access heuristic.
+3. GitHub Actions renders inline annotations on the Pull Request "Files Changed" tab pointing to the specific paths the agent attempted to access.
+
+## Non-GitHub CI Systems (GitLab, Jenkins, CircleCI)
+
+The standalone CLI operates identically in other CI runners:
+
+```bash
+vetto --ci --profile=strict --net=allowlist:api.anthropic.com \
+  --report=json,sarif --report-dir=.vetto/reports \
+  --fail-on-block=1 -- aider --message "Run tests"
+```
+
+Collect `.vetto/reports/*.sarif` as a job artifact and feed it into the platform's security dashboard.

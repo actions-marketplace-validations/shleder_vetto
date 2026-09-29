@@ -1,0 +1,15 @@
+{
+  "name": "Vetto Claude Code CI Security Sandbox",
+  "description": "Run Claude Code CLI in an isolated rootless kernel sandbox without Docker or root privileges.",
+  "iconName": "shield",
+  "categories": [
+    "Security",
+    "Continuous Integration"
+  ],
+  "filePatterns": [
+    "package\\.json$",
+    "tsconfig\\.json$",
+    "requirements\\.txt$",
+    "Cargo\\.toml$"
+  ]
+}

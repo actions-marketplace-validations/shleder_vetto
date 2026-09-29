@@ -1298,6 +1298,10 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".omnigent"));
                         let _ = std::fs::create_dir_all(home.join(".config/omnigent"));
                     }
+                    Some("aider") => {
+                        let _ = std::fs::create_dir_all(home.join(".aider"));
+                        let _ = std::fs::create_dir_all(home.join(".config/aider"));
+                    }
                     _ => {}
                 }
                 let _ = std::fs::create_dir_all(home.join(".npm/_npx"));
@@ -1597,7 +1601,7 @@ pub fn load_with_context(
     load_with_options(profile, custom_path, project, home, tier, options)
 }
 
-fn parse_layer(text: &str, label: &str) -> Result<RawLayer> {
+pub fn parse_layer(text: &str, label: &str) -> Result<RawLayer> {
     toml::from_str(text).with_context(|| format!("failed to parse policy '{label}'"))
 }
 

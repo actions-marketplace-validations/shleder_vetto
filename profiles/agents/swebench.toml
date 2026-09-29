@@ -1,0 +1,68 @@
+[metadata]
+name = "swebench"
+description = "Hermetic high-throughput execution profile for SWE-bench evaluation harness."
+
+[filesystem]
+allow_write = [
+    "$PROJECT",
+    "/tmp",
+]
+allow_read = [
+    "$PROJECT",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.local",
+    "$HOME/.conda",
+    "$HOME/miniconda3",
+    "$HOME/anaconda3",
+    "/opt/conda",
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/sbin",
+    "/etc",
+]
+deny_read = [
+    "$HOME/.ssh",
+    "$HOME/.aws",
+    "$HOME/.gnupg",
+    "$HOME/.config/gcloud",
+    "$HOME/.azure",
+    "$HOME/.kube",
+    "$HOME/.docker",
+    ".env",
+]
+deny_write = [
+    "$HOME/.ssh",
+    "$HOME/.aws",
+    "$HOME/.gnupg",
+    "$PROJECT/.git/config",
+]
+tmpfs_tmp = true
+
+[security]
+auto_deny_secrets = true
+git_guard = false
+snapshot = false
+
+[network]
+mode = "off"
+allow = []
+
+[cgroup]
+memory_max = "4096MB"
+pids_max = "256"
+
+[environment]
+pass_through = [
+    "PATH",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "VIRTUAL_ENV",
+    "CONDA_DEFAULT_ENV",
+    "CONDA_PREFIX",
+    "LANG",
+    "LC_ALL",
+    "PYTEST_ADDOPTS",
+]

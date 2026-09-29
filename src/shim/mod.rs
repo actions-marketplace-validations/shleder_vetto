@@ -216,6 +216,8 @@ pub fn is_destructive_git_command(args: &[String]) -> Option<&'static str> {
                     || arg == "refs/heads/main"
                     || arg == "refs/heads/master"
                     || arg == "origin/main"
+                    || arg.ends_with(":main")
+                    || arg.ends_with(":master")
                 {
                     return Some("direct git push to main/master branch blocked by vetto git_guard (use a feature branch and pull request)");
                 }
@@ -257,7 +259,7 @@ pub fn is_destructive_git_command(args: &[String]) -> Option<&'static str> {
             }
         }
         "checkout" => {
-            let has_dot = sub_args.iter().any(|a| a == ".");
+            let has_dot = sub_args.iter().any(|a| a == "." || a == ":/" || a == ":");
             let has_force = sub_args.iter().any(|a| a == "-f" || a == "--force");
             if has_dot || has_force {
                 return Some(
@@ -266,7 +268,7 @@ pub fn is_destructive_git_command(args: &[String]) -> Option<&'static str> {
             }
         }
         "restore" => {
-            let has_dot = sub_args.iter().any(|a| a == ".");
+            let has_dot = sub_args.iter().any(|a| a == "." || a == ":/" || a == ":");
             if has_dot {
                 return Some(
                     "destructive 'git restore .' blocked by vetto git_guard (discards working tree changes)",
@@ -361,8 +363,8 @@ pub fn dispatch(binary_name: &str, args: &[String]) -> Result<i32> {
         && !bypass_active
     {
         if let Some(reason) = is_destructive_git_command(&clean_args) {
-            eprintln!("vetto: {reason}");
-            bail!("{reason}");
+            eprintln!("vetto: fail-closed: destructive git command blocked by git_guard: {reason}");
+            bail!("fail-closed: destructive git command blocked by git_guard: {reason}");
         }
     }
 
@@ -646,6 +648,8 @@ mod tests {
 
         // Discard checkout
         assert!(is_destructive_git_command(&["checkout".into(), ".".into()]).is_some());
+        assert!(is_destructive_git_command(&["checkout".into(), ":/".into()]).is_some());
+        assert!(is_destructive_git_command(&["checkout".into(), ":".into()]).is_some());
         assert!(
             is_destructive_git_command(&["checkout".into(), "--".into(), ".".into()]).is_some()
         );
@@ -654,6 +658,8 @@ mod tests {
 
         // Discard restore
         assert!(is_destructive_git_command(&["restore".into(), ".".into()]).is_some());
+        assert!(is_destructive_git_command(&["restore".into(), ":/".into()]).is_some());
+        assert!(is_destructive_git_command(&["restore".into(), ":".into()]).is_some());
         assert!(
             is_destructive_git_command(&["restore".into(), "--worktree".into(), ".".into()])
                 .is_some()
@@ -667,6 +673,16 @@ mod tests {
         assert!(
             is_destructive_git_command(&["push".into(), "origin".into(), "main".into()]).is_some()
         );
+        assert!(
+            is_destructive_git_command(&["push".into(), "origin".into(), "head:main".into()])
+                .is_some()
+        );
+        assert!(is_destructive_git_command(&[
+            "push".into(),
+            "origin".into(),
+            "feat:master".into()
+        ])
+        .is_some());
         assert!(is_destructive_git_command(&["push".into(), "--force".into()]).is_some());
         assert!(is_destructive_git_command(&["push".into(), "-f".into()]).is_some());
         assert!(

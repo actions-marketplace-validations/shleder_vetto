@@ -1,5 +1,5 @@
-name: 'Setup Vetto'
-description: 'Daemon-less, sub-4ms cold start kernel-enforced sandbox for AI coding agents (Claude Code, Codex, Cursor)'
+name: 'Vetto Sandbox - Run AI Agents Securely in CI'
+description: 'Daemon-less, sub-4ms cold start kernel sandbox for AI coding agents (Claude Code, Aider, Codex, Cursor)'
 author: 'shleder'
 branding:
   icon: 'shield'
@@ -9,17 +9,61 @@ branding:
 # - Operating Systems: Linux (ubuntu-latest, ubuntu-24.04, ubuntu-22.04), macOS (macos-latest, macos-14, macos-13), Windows (windows-latest, windows-2022)
 # - Architectures: x86_64 (amd64), aarch64 (arm64)
 # - Environment: Prepends the installation directory to GITHUB_PATH
-# - Minimal permissions: contents: read
+# - Minimal permissions: contents: read (security-events: write required only if upload-sarif: true)
 
 inputs:
   version:
     description: 'Vetto version to install (e.g. "0.5.10" or "latest")'
     required: false
     default: 'latest'
-  github-token:
-    description: 'GitHub token for authenticated API requests when resolving the latest release version'
+  command:
+    description: 'Agent command to execute inside the sandbox. If omitted, runs in setup-only mode.'
     required: false
     default: ''
+  agent:
+    description: 'Target agent preset (e.g. aider, claude, codex, cursor, opencode) for automatic profile and network allowlist.'
+    required: false
+    default: ''
+  policy:
+    description: 'Optional custom policy file path or community policy.'
+    required: false
+    default: ''
+  profile:
+    description: 'Built-in policy profile (strict, default, permissive, audit).'
+    required: false
+    default: 'strict'
+  net:
+    description: 'Network mode (off, allowlist:..., strict:...). Default: auto-resolved from agent preset or off.'
+    required: false
+    default: ''
+  report:
+    description: 'Comma-separated report formats (json, sarif, md, html).'
+    required: false
+    default: 'json,sarif'
+  report-dir:
+    description: 'Directory for generated audit and security reports.'
+    required: false
+    default: '.vetto/reports'
+  fail-on-block:
+    description: 'Fail step if at least one blocked attempt is observed (true/false/threshold).'
+    required: false
+    default: 'false'
+  upload-sarif:
+    description: 'Upload generated SARIF report to GitHub Code Scanning (requires permissions: security-events: write).'
+    required: false
+    default: 'false'
+  telemetry:
+    description: 'Opt-in anonymous telemetry (default: false).'
+    required: false
+    default: 'false'
+  token:
+    description: 'GitHub token for authenticated API requests when resolving the latest release version.'
+    required: false
+    default: ${{ github.token }}
+  github-token:
+    description: 'Alias for token: GitHub token for authenticated API requests when resolving the latest release version.'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   vetto-version:
@@ -28,26 +72,34 @@ outputs:
   vetto-path:
     description: 'Path to the installed vetto binary'
     value: ${{ steps.install.outputs.path }}
+  sarif-path:
+    description: 'Path to the generated SARIF report file (when command is provided)'
+    value: ${{ steps.run.outputs.sarif-path }}
+  exit-code:
+    description: 'Exit code of the sandboxed command (when command is provided)'
+    value: ${{ steps.run.outputs.exit-code }}
 
 runs:
   using: 'composite'
   steps:
     - id: install
+      name: Install and verify Vetto binary
       shell: bash
       run: |
         set -euo pipefail
 
         REQUESTED_VERSION="${{ inputs.version }}"
-        TOKEN="${{ inputs.github-token }}"
+        TOKEN="${{ inputs.token || inputs.github-token }}"
+
+        AUTH_HEADER=()
+        if [ -n "$TOKEN" ]; then
+          AUTH_HEADER=(-H "Authorization: token $TOKEN")
+        fi
 
         # Resolve version tag
         if [ -z "$REQUESTED_VERSION" ] || [ "$REQUESTED_VERSION" = "latest" ]; then
-          AUTH_HEADER=()
-          if [ -n "$TOKEN" ]; then
-            AUTH_HEADER=(-H "Authorization: token $TOKEN")
-          fi
-          RESOLVED_TAG=$(curl -sSL "${AUTH_HEADER[@]}" -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          RESOLVED_TAG=$(curl -sSL ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | (grep '"tag_name":' || true) | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/') || true
           if [ -z "$RESOLVED_TAG" ]; then
             RESOLVED_TAG="v0.5.10"
           fi
@@ -79,23 +131,77 @@ runs:
         INSTALL_DIR="${RUNNER_TOOL_CACHE:-$HOME/.vetto}/bin"
         mkdir -p "$INSTALL_DIR"
 
+        TMP_DIR="$(mktemp -d 2>/dev/null || echo "${RUNNER_TEMP:-/tmp}/vetto-inst-$$")"
+        mkdir -p "$TMP_DIR"
+        trap 'rm -rf "$TMP_DIR"' EXIT
+
+        compute_sha256() {
+          local target_file="$1"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$target_file" | awk '{print $1}'
+          elif command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$target_file" | awk '{print $1}'
+          elif command -v openssl >/dev/null 2>&1; then
+            openssl dgst -sha256 "$target_file" | sed -e 's/.*= *//'
+          elif command -v certutil.exe >/dev/null 2>&1; then
+            certutil.exe -hashfile "$target_file" SHA256 | grep -v ":" | grep -v "CertUtil" | tr -d " \r\n"
+          elif command -v powershell.exe >/dev/null 2>&1; then
+            powershell.exe -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '$target_file').Hash.ToLower()" | tr -d " \r\n"
+          else
+            echo "::error::No SHA-256 calculation utility found (requires sha256sum, shasum, openssl, certutil, or powershell)" >&2
+            exit 1
+          fi
+        }
+
         if [ "$TARGET_OS" = "windows" ]; then
           ASSET_NAME="vetto-windows-${TARGET_ARCH}.zip"
-          DOWNLOAD_URL="https://github.com/shleder/vetto/releases/download/${RESOLVED_TAG}/${ASSET_NAME}"
-          TMP_ZIP="$(mktemp 2>/dev/null || echo "/tmp/vetto-$$").zip"
-          echo "Downloading $DOWNLOAD_URL..."
-          curl -fsSL "$DOWNLOAD_URL" -o "$TMP_ZIP"
-          unzip -q -o "$TMP_ZIP" -d "$INSTALL_DIR"
-          rm -f "$TMP_ZIP"
-          BIN_PATH="$INSTALL_DIR/vetto.exe"
+          BIN_NAME="vetto.exe"
         else
           ASSET_NAME="vetto-${TARGET_OS}-${TARGET_ARCH}.tar.gz"
-          DOWNLOAD_URL="https://github.com/shleder/vetto/releases/download/${RESOLVED_TAG}/${ASSET_NAME}"
-          echo "Downloading $DOWNLOAD_URL..."
-          curl -fsSL "$DOWNLOAD_URL" | tar -xz -C "$INSTALL_DIR"
-          BIN_PATH="$INSTALL_DIR/vetto"
-          chmod +x "$BIN_PATH"
+          BIN_NAME="vetto"
         fi
+
+        DOWNLOAD_URL="https://github.com/shleder/vetto/releases/download/${RESOLVED_TAG}/${ASSET_NAME}"
+        SHA_URL="${DOWNLOAD_URL}.sha256"
+
+        ARCHIVE_FILE="${TMP_DIR}/${ASSET_NAME}"
+        SHA_FILE="${TMP_DIR}/${ASSET_NAME}.sha256"
+
+        echo "Downloading Vetto ${RESOLVED_TAG} from ${DOWNLOAD_URL}..."
+        curl -fsSL --retry 3 ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} "$DOWNLOAD_URL" -o "$ARCHIVE_FILE"
+
+        echo "Downloading SHA-256 checksum from ${SHA_URL}..."
+        curl -fsSL --retry 3 ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} "$SHA_URL" -o "$SHA_FILE"
+
+        EXPECTED_RAW="$(head -n 1 "$SHA_FILE" | awk '{print $1}')"
+        EXPECTED_HASH="$(printf "%s" "$EXPECTED_RAW" | tr "[:upper:]" "[:lower:]" | tr -cd "0-9a-f")"
+
+        if [ "${#EXPECTED_HASH}" -ne 64 ]; then
+          echo "::error::Invalid SHA-256 checksum format in $SHA_URL: '${EXPECTED_RAW}'" >&2
+          exit 1
+        fi
+
+        echo "Verifying SHA-256 checksum..."
+        ACTUAL_RAW="$(compute_sha256 "$ARCHIVE_FILE")"
+        ACTUAL_HASH="$(printf "%s" "$ACTUAL_RAW" | tr "[:upper:]" "[:lower:]" | tr -cd "0-9a-f")"
+
+        if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+          echo "::error::SHA-256 checksum verification failed!" >&2
+          echo "::error::  Archive:  ${ASSET_NAME}" >&2
+          echo "::error::  Expected: ${EXPECTED_HASH}" >&2
+          echo "::error::  Computed: ${ACTUAL_HASH}" >&2
+          exit 1
+        fi
+        echo "SHA-256 checksum verified: ${ACTUAL_HASH}"
+
+        if [ "$TARGET_OS" = "windows" ]; then
+          unzip -q -o "$ARCHIVE_FILE" -d "$INSTALL_DIR"
+        else
+          tar -xzf "$ARCHIVE_FILE" -C "$INSTALL_DIR"
+          chmod +x "$INSTALL_DIR/$BIN_NAME"
+        fi
+
+        BIN_PATH="$INSTALL_DIR/$BIN_NAME"
 
         echo "$INSTALL_DIR" >> "$GITHUB_PATH"
         echo "version=$VERSION_STR" >> "$GITHUB_OUTPUT"
@@ -103,3 +209,33 @@ runs:
 
         echo "Vetto $VERSION_STR successfully installed at $BIN_PATH"
         "$BIN_PATH" --version
+
+    - name: Run sandboxed command
+      id: run
+      if: ${{ inputs.command != '' }}
+      shell: bash
+      env:
+        VETTO_ACTION_COMMAND: ${{ inputs.command }}
+        VETTO_ACTION_AGENT: ${{ inputs.agent }}
+        VETTO_ACTION_POLICY: ${{ inputs.policy }}
+        VETTO_ACTION_NET: ${{ inputs.net }}
+        VETTO_ACTION_PROFILE: ${{ inputs.profile }}
+        VETTO_ACTION_REPORT: ${{ inputs.report }}
+        VETTO_ACTION_REPORT_DIR: ${{ inputs.report-dir }}
+        VETTO_ACTION_FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
+        VETTO_ACTION_TELEMETRY: ${{ inputs.telemetry }}
+      run: |
+        if [ -f "$GITHUB_ACTION_PATH/action/entrypoint.sh" ]; then
+          bash "$GITHUB_ACTION_PATH/action/entrypoint.sh"
+        elif [ -f "$GITHUB_ACTION_PATH/entrypoint.sh" ]; then
+          bash "$GITHUB_ACTION_PATH/entrypoint.sh"
+        else
+          echo "::error::entrypoint.sh not found in action path: $GITHUB_ACTION_PATH"
+          exit 1
+        fi
+
+    - name: Upload SARIF report to GitHub Code Scanning
+      if: ${{ always() && inputs.command != '' && inputs.upload-sarif == 'true' && steps.run.outputs.sarif-path != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.run.outputs.sarif-path }}

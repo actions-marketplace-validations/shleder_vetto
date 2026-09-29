@@ -2,6 +2,10 @@
 name = "aider"
 description = "Hardened compatibility roots for Aider pair programmer."
 
+[security]
+git_guard = true
+auto_deny_secrets = true
+
 [filesystem]
 allow_read = [
     "$HOME/.aider.conf.yml",
@@ -10,6 +14,8 @@ allow_read = [
     "$HOME/.aider/skills",
     "$HOME/.config/aider",
     "$PROJECT/.aider.chat.history.md",
+    "$PROJECT/.aider.input.history",
+    "$PROJECT/.aider.tags.cache.v3",
     "$HOME/.local/bin",
     "$HOME/.cargo/bin",
     "/tmp",
@@ -29,6 +35,8 @@ allow_write = [
     "$HOME/.aider/skills",
     "$HOME/.config/aider",
     "$PROJECT/.aider.chat.history.md",
+    "$PROJECT/.aider.input.history",
+    "$PROJECT/.aider.tags.cache.v3",
     "/tmp",
     "$HOME/.cache",
     "$HOME/.cache/ms-playwright",
@@ -52,7 +60,16 @@ pass_through = [
     "OPENROUTER_BASE_URL",
     "GEMINI_API_KEY",
     "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
     "GROQ_API_KEY",
+    "GROQ_BASE_URL",
+    "MISTRAL_API_KEY",
+    "MISTRAL_BASE_URL",
+    "COHERE_API_KEY",
+    "COHERE_BASE_URL",
+    "TOGETHER_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "OLLAMA_API_BASE",
     "DISPLAY",
     "WAYLAND_DISPLAY",
     "XDG_CURRENT_DESKTOP",
@@ -63,3 +80,26 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.openai.com",
+    "api.anthropic.com",
+    "auth.anthropic.com",
+    "openrouter.ai",
+    "api.deepseek.com",
+    "api.groq.com",
+    "generativelanguage.googleapis.com",
+    "api.mistral.ai",
+    "api.cohere.ai",
+    "api.cohere.com",
+    "api.together.xyz",
+    "api.perplexity.ai",
+    "aider.chat",
+    "api.github.com",
+    "github.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+]
+

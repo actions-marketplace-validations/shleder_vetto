@@ -4,6 +4,12 @@ on:
   push:
     paths:
       - 'action.yml'
+      - 'action/**'
+      - '.github/workflows/test-action.yml'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - 'action/**'
       - '.github/workflows/test-action.yml'
   workflow_dispatch:
 
@@ -26,10 +32,61 @@ jobs:
         id: vetto
         uses: ./
         with:
-          version: '0.2.23'
+          version: 'latest'
 
       - name: Verify vetto CLI
         shell: bash
         run: |
+          echo "Installed version: ${{ steps.vetto.outputs.vetto-version }}"
+          echo "Installed path: ${{ steps.vetto.outputs.vetto-path }}"
+          test -n "${{ steps.vetto.outputs.vetto-version }}"
+          test -n "${{ steps.vetto.outputs.vetto-path }}"
           vetto --version
           vetto doctor --dry-run || true
+
+  test-execute-vetto:
+    name: execute-mode (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test Execute Mode with SARIF Report
+        id: exec_test
+        uses: ./
+        with:
+          command: 'echo "vetto marketplace action smoke test"'
+          profile: 'default'
+          report: 'json,sarif'
+          report-dir: '.vetto/reports'
+          fail-on-block: 'false'
+
+      - name: Verify Command Outputs and SARIF Report
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Exit code: ${{ steps.exec_test.outputs.exit-code }}"
+          test "${{ steps.exec_test.outputs.exit-code }}" = "0"
+
+          SARIF_FILE="${{ steps.exec_test.outputs.sarif-path }}"
+          echo "SARIF report path: ${SARIF_FILE}"
+          test -n "${SARIF_FILE}"
+          test -f "${SARIF_FILE}"
+          grep -q '"version": "2.1.0"' "${SARIF_FILE}"
+          echo "SARIF report format verified successfully."
+
+      - name: Test Agent Parameter Wiring
+        id: agent_test
+        uses: ./
+        with:
+          command: 'echo "agent allowlist wiring test"'
+          agent: 'aider'
+          net: 'off'
+          profile: 'default'
+          report: 'json,sarif'
+          fail-on-block: 'false'
+
+      - name: Verify Agent Execution Result
+        shell: bash
+        run: |
+          test "${{ steps.agent_test.outputs.exit-code }}" = "0"

@@ -117,10 +117,22 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
         "aider" => vec![
             "api.openai.com".into(),
             "api.anthropic.com".into(),
+            "auth.anthropic.com".into(),
             "openrouter.ai".into(),
             "api.deepseek.com".into(),
             "api.groq.com".into(),
             "generativelanguage.googleapis.com".into(),
+            "api.mistral.ai".into(),
+            "api.cohere.ai".into(),
+            "api.cohere.com".into(),
+            "api.together.xyz".into(),
+            "api.perplexity.ai".into(),
+            "aider.chat".into(),
+            "api.github.com".into(),
+            "github.com".into(),
+            "registry.npmjs.org".into(),
+            "pypi.org".into(),
+            "files.pythonhosted.org".into(),
         ],
         "opencode" => {
             let mut domains = vec![
@@ -663,10 +675,19 @@ mod tests {
             vec![
                 "api.openai.com",
                 "api.anthropic.com",
+                "auth.anthropic.com",
                 "openrouter.ai",
                 "api.deepseek.com",
                 "api.groq.com",
                 "generativelanguage.googleapis.com",
+                "api.mistral.ai",
+                "api.cohere.ai",
+                "api.cohere.com",
+                "api.together.xyz",
+                "api.perplexity.ai",
+                "aider.chat",
+                "api.github.com",
+                "github.com",
                 "registry.npmjs.org",
                 "pypi.org",
                 "files.pythonhosted.org",
@@ -677,10 +698,19 @@ mod tests {
             vec![
                 "api.openai.com",
                 "api.anthropic.com",
+                "auth.anthropic.com",
                 "openrouter.ai",
                 "api.deepseek.com",
                 "api.groq.com",
                 "generativelanguage.googleapis.com",
+                "api.mistral.ai",
+                "api.cohere.ai",
+                "api.cohere.com",
+                "api.together.xyz",
+                "api.perplexity.ai",
+                "aider.chat",
+                "api.github.com",
+                "github.com",
                 "registry.npmjs.org",
                 "pypi.org",
                 "files.pythonhosted.org",
@@ -981,5 +1011,36 @@ mod tests {
         let limits = agent_default_limits("opencode").expect("opencode default limits");
         assert_eq!(limits.file_size_bytes, Some(2147483648));
         assert!(agent_default_limits("claude").is_none());
+    }
+
+    #[test]
+    fn aider_network_allowlist_covers_all_supported_providers() {
+        let domains = agent_network_allowlist("aider");
+        let expected = [
+            "api.openai.com",
+            "api.anthropic.com",
+            "auth.anthropic.com",
+            "openrouter.ai",
+            "api.deepseek.com",
+            "api.groq.com",
+            "generativelanguage.googleapis.com",
+            "api.mistral.ai",
+            "api.cohere.ai",
+            "api.cohere.com",
+            "api.together.xyz",
+            "api.perplexity.ai",
+            "aider.chat",
+            "api.github.com",
+            "github.com",
+            "registry.npmjs.org",
+            "pypi.org",
+            "files.pythonhosted.org",
+        ];
+        for d in expected {
+            assert!(
+                domains.iter().any(|item| item == d),
+                "aider allowlist missing expected domain: {d}"
+            );
+        }
     }
 }

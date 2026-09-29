@@ -193,6 +193,7 @@ pub struct RunConfig {
     pub no_proxy: Option<String>,
     pub block_doh: bool,
     pub windows_sandbox: bool,
+    pub benchmark: bool,
     pub agent: Vec<String>,
 }
 
@@ -408,6 +409,24 @@ impl RunConfig {
             matches!(net, NetMode::Allowlist(_) | NetMode::Strict(_))
         };
 
+        let benchmark = cli.benchmark;
+        let tui = if benchmark { TuiMode::None } else { tui };
+        let ci = if benchmark { true } else { cli.ci };
+        let ephemeral = if benchmark { true } else { ephemeral };
+        let mask_secrets = if benchmark { true } else { mask_secrets };
+        let auto_deny_secrets = if benchmark {
+            true
+        } else {
+            cli.auto_deny_secrets
+        };
+        let snapshot = if benchmark { false } else { snapshot };
+        let report_formats = if benchmark {
+            Vec::new()
+        } else {
+            report_formats
+        };
+        let tmpfs_tmp = if benchmark { true } else { cli.tmpfs_tmp };
+
         Ok(Self {
             profile,
             preset,
@@ -437,7 +456,7 @@ impl RunConfig {
             verify_preflight,
             shadow,
             dry_run: cli.dry_run,
-            ci: cli.ci,
+            ci,
             agent_preset,
             deny_glob: cli.deny_glob.clone(),
             git_guard: cli.git_guard,
@@ -446,15 +465,16 @@ impl RunConfig {
             ephemeral,
             ephemeral_auto_accept: false,
             ephemeral_force_discard: false,
-            auto_deny_secrets: cli.auto_deny_secrets,
+            auto_deny_secrets,
             read_only_caches: cli.read_only_caches,
             anonymous_telemetry: cli.anonymous_telemetry
                 || global.anonymous_telemetry.unwrap_or(false),
-            tmpfs_tmp: cli.tmpfs_tmp,
+            tmpfs_tmp,
             mask_secrets,
             net_quota,
             block_doh,
             windows_sandbox: cli.windows_sandbox,
+            benchmark,
             agent: cli.agent.clone(),
             http_proxy,
             https_proxy,
@@ -973,13 +993,13 @@ mod tests {
             "allowlist:omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
-        // Aider defaults to api.openai.com,api.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Aider defaults to full supported AI providers + VCS + package registries
         let cli = Cli::try_parse_from(["vetto", "--", "aider"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("aider"));
         assert_eq!(
             cfg.net.label(),
-            "allowlist:api.openai.com,api.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
+            "allowlist:api.openai.com,api.anthropic.com,auth.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,api.mistral.ai,api.cohere.ai,api.cohere.com,api.together.xyz,api.perplexity.ai,aider.chat,api.github.com,github.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
         // OpenCode defaults to api.openai.com,api.anthropic.com,openrouter.ai,opencode.ai,integrate.api.nvidia.com,agentrouter.org,aihubmix.com,api.github.com,github.com,localhost,127.0.0.1,registry.npmjs.org,pypi.org,files.pythonhosted.org
