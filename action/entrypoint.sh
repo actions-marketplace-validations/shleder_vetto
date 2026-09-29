@@ -8,7 +8,13 @@ fi
 
 binary="vetto"
 if ! command -v "${binary}" >/dev/null 2>&1; then
-  if [[ -x "${HOME}/.local/bin/vetto" ]]; then
+  if [[ -x "${RUNNER_TOOL_CACHE:-$HOME/.vetto}/bin/vetto" ]]; then
+    binary="${RUNNER_TOOL_CACHE:-$HOME/.vetto}/bin/vetto"
+  elif [[ -x "${RUNNER_TOOL_CACHE:-$HOME/.vetto}/bin/vetto.exe" ]]; then
+    binary="${RUNNER_TOOL_CACHE:-$HOME/.vetto}/bin/vetto.exe"
+  elif [[ -x "${HOME}/.vetto/bin/vetto" ]]; then
+    binary="${HOME}/.vetto/bin/vetto"
+  elif [[ -x "${HOME}/.local/bin/vetto" ]]; then
     binary="${HOME}/.local/bin/vetto"
   else
     echo "vetto action: vetto executable not found in PATH" >&2
@@ -22,13 +28,30 @@ mkdir -p -- "${report_dir}"
 args=(
   --ci
   --profile "${VETTO_ACTION_PROFILE:-strict}"
-  --net "${VETTO_ACTION_NET:-off}"
   --report "${VETTO_ACTION_REPORT:-json,sarif}"
   --report-dir "${report_dir}"
 )
 
+# Agent preset handling:
+# If agent is specified (e.g. aider, claude, codex), pass --agent "${VETTO_ACTION_AGENT}".
+# If net is also specified, pass explicit --net "${VETTO_ACTION_NET}".
+# If net is NOT specified, omit --net so vetto can automatically apply agent_network_allowlist!
+# If agent is NOT specified, default net to off if not set.
+if [[ -n "${VETTO_ACTION_AGENT:-}" ]]; then
+  args+=(--agent "${VETTO_ACTION_AGENT}")
+  if [[ -n "${VETTO_ACTION_NET:-}" ]]; then
+    args+=(--net "${VETTO_ACTION_NET}")
+  fi
+else
+  args+=(--net "${VETTO_ACTION_NET:-off}")
+fi
+
 if [[ -n "${VETTO_ACTION_POLICY:-}" ]]; then
   args+=(--policy "${VETTO_ACTION_POLICY}")
+fi
+
+if [[ "${VETTO_ACTION_TELEMETRY:-false}" == "true" || "${VETTO_ACTION_TELEMETRY:-false}" == "1" ]]; then
+  args+=(--telemetry)
 fi
 
 case "${VETTO_ACTION_FAIL_ON_BLOCK:-false}" in

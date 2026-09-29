@@ -1,0 +1,34 @@
+name: Vetto Claude Code CI Sandbox
+
+on:
+  pull_request:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  claude-sandbox:
+    name: Run Claude Code under Vetto Sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Execute Claude Code in Vetto Sandbox
+        uses: shleder/vetto@v0.5.10
+        with:
+          command: 'npx @anthropic-ai/claude-code -p "Analyze pull request for security vulnerabilities and code style regressions"'
+          agent: 'claude'
+          profile: 'strict'
+          fail-on-block: '1'
+          upload-sarif: 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

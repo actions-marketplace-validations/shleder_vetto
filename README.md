@@ -159,17 +159,17 @@ vetto fleet kill --all
 
 Running AI coding agents in CI pipelines commonly relies on Docker-in-Docker (DinD). DinD introduces 30–120 second base image pull delays, requires insecure `--privileged` flags that expose the host runner, and lacks native support on macOS and Windows runner VMs.
 
-Vetto provides a standard, 10–50x faster, zero-Docker replacement across GitHub Actions workflows:
+Vetto provides a standard, zero-Docker replacement published on GitHub Marketplace (`shleder/vetto`):
 
-- **10–50x Faster Execution**: Zero container images to download; prebuilt binaries (<15MB) install in under 1 second.
+- **Sub-4ms Cold Start**: Pre-compiled binaries (<15MB) with SHA-256 integrity verification install in under 1 second without container image pulls.
 - **Rootless Kernel Sandboxing**: Enforces Landlock LSM and cgroups v2 boundaries on standard Ubuntu runners without `--privileged` flags or root access.
 - **Host Toolchain & Cache Access**: Directly executes against `$GITHUB_WORKSPACE` and runner caching layers (`actions/cache`, `actions/setup-node`, `actions/setup-python`), avoiding costly container rebuilds.
-- **Synchronous Process Reaping**: Eliminates orphaned background workers and zombie processes via cgroups v2 (`cgroup.kill`).
+- **Deterministic Process Reaping**: Eliminates orphaned background workers and fork-bombs via cgroups v2 (`cgroup.kill`).
 - **Cross-Platform Support**: Operates consistently across `ubuntu-latest` (Landlock LSM), `macos-latest` (Seatbelt SBPL), and `windows-latest` (Job Objects).
 
-### Option A: Composite Command Runner (`vetto-action`)
+### Option A: Universal Marketplace Action (`shleder/vetto`)
 
-Execute a sandboxed agent command with automatic audit logs and CodeQL SARIF reporting:
+Execute a sandboxed agent command with automatic preset allowlisting, audit logs, and CodeQL SARIF reporting:
 
 ```yaml
 name: Agent Security Gate
@@ -185,21 +185,24 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Sandboxed Agent
-        uses: shleder/vetto/action@v0.5.9
+        uses: shleder/vetto@v0.5.10
         with:
-          command: 'npx claude-code -p "Run linter and fix basic formatting"'
+          command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
+          agent: 'claude'
           profile: 'strict'
           fail-on-block: '1'
           upload-sarif: 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Option B: Setup Action for Multi-Step Workflows (`Setup Vetto`)
+### Option B: Setup Mode for Multi-Step Workflows
 
-Install the standalone `vetto` CLI into `$GITHUB_PATH` to isolate custom scripts and build steps:
+When `command` is omitted, `shleder/vetto` verifies and installs the standalone `vetto` binary into `$GITHUB_PATH`:
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.5.9
+        uses: shleder/vetto@v0.5.10
         with:
           version: 'latest'
 

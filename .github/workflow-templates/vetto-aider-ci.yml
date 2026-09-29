@@ -1,0 +1,42 @@
+name: Vetto Aider CI Sandbox
+
+on:
+  pull_request:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  aider-sandbox:
+    name: Run Aider under Vetto Sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Aider CLI
+        run: pip install --upgrade aider-chat
+
+      - name: Execute Aider in Vetto Sandbox
+        uses: shleder/vetto@v0.5.10
+        with:
+          command: 'aider --yes-always --no-git --message "Review code changes for potential regressions and security flaws"'
+          agent: 'aider'
+          profile: 'strict'
+          fail-on-block: '1'
+          upload-sarif: 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
