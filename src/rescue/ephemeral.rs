@@ -106,7 +106,9 @@ pub fn handle_ephemeral_completion(
         if trimmed.eq_ignore_ascii_case("n") || trimmed.eq_ignore_ascii_case("no") {
             if find_snapshot_archive(session_id).is_some() {
                 crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
-                eprintln!("[VETTO EPHEMERAL] Changes discarded. Working tree restored to clean state.");
+                eprintln!(
+                    "[VETTO EPHEMERAL] Changes discarded. Working tree restored to clean state."
+                );
             } else {
                 eprintln!("[VETTO EPHEMERAL] No pre-session snapshot found to restore.");
             }

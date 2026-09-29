@@ -19,11 +19,11 @@ mod doctor_parity;
 mod doctor_preflight;
 mod ecosystem_tier7;
 mod enable_wrapper;
-mod ephemeral;
 #[cfg(unix)]
 mod entrypoint_contract_parity;
 #[cfg(target_os = "linux")]
 mod env_stripping;
+mod ephemeral;
 mod fleet_concurrency;
 mod git_hooks;
 mod heavy_scenarios;

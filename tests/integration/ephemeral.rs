@@ -1,7 +1,7 @@
 //! Integration tests for `vetto ephemeral` and automatic workspace rollback.
 
-use std::fs;
 use crate::common::*;
+use std::fs;
 
 #[test]
 fn test_ephemeral_discards_changes_on_failure() {
