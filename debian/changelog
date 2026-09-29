@@ -1,3 +1,9 @@
+vetto (0.5.9-1) unstable; urgency=medium
+
+  * Release 0.5.9: Linux seccomp SYS_clone3 ENOSYS fallback, ephemeral rollback fix, and TUI live policy.
+
+ -- vetto contributors <noreply@github.com>  Tue, 29 Sep 2026 13:53:48 +0000
+
 vetto (0.5.8-1) unstable; urgency=medium
 
   * Release 0.5.8: Interactive live policy Allow/Deny in TUI Mission Control and SYS_openat2 Landlock hardening.
