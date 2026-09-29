@@ -96,7 +96,6 @@ const HARDENING_SYSCALLS: &[u32] = &[
     NR_SWAPOFF,
     NR_UNSHARE,
     NR_SETNS,
-    NR_CLONE3,
 ];
 
 // In agent-min profile, deny additional legacy/exotic syscalls unneeded by
@@ -253,6 +252,12 @@ pub fn build_program_for_profile(
     let socketpair_index = program.len();
     program.push(bpf_jump(JEQ, NR_SOCKETPAIR, 0, 0));
 
+    // SYS_clone3: must return ENOSYS (not EPERM) so glibc/musl cleanly fall back to
+    // clone(2). Returning EPERM causes glibc pthread_create to fail immediately, breaking
+    // all Node.js (V8 WorkerThreadsTaskRunner), Bun, Rust, and Python multithreading.
+    let clone3_index = program.len();
+    program.push(bpf_jump(JEQ, NR_CLONE3, 0, 0));
+
     let hardening_start = program.len();
     for syscall in HARDENING_SYSCALLS {
         program.push(bpf_jump(JEQ, *syscall, 0, 0));
@@ -266,6 +271,8 @@ pub fn build_program_for_profile(
     program.push(bpf_stmt(RET, SECCOMP_RET_ALLOW));
     let hardening_deny_index = program.len();
     program.push(bpf_stmt(RET, SECCOMP_RET_ERRNO | libc::EPERM as u32));
+    let clone3_deny_index = program.len();
+    program.push(bpf_stmt(RET, SECCOMP_RET_ERRNO | libc::ENOSYS as u32));
 
     let socket_check_start = program.len();
     // Check args[1] (offset 24): socket type masked with 0x0f (SOCK_TYPE_MASK)
@@ -290,9 +297,11 @@ pub fn build_program_for_profile(
 
     // The socket and socketpair branches jump directly to the argument
     // inspection. Every hardening syscall branch jumps to one shared EPERM
-    // return. All offsets are guaranteed to fit in u8 for this compact filter.
+    // return. clone3 jumps to its dedicated ENOSYS return. All offsets are
+    // guaranteed to fit in u8 for this compact filter.
     program[socket_index].jt = jump_offset(socket_index, socket_check_start);
     program[socketpair_index].jt = jump_offset(socketpair_index, socket_check_start);
+    program[clone3_index].jt = jump_offset(clone3_index, clone3_deny_index);
     program[raw_jump_index].jt = jump_offset(raw_jump_index, raw_deny_index);
     for (index, instruction) in program
         .iter_mut()
@@ -433,7 +442,7 @@ mod tests {
         ] {
             assert_eq!(
                 program.len(),
-                6 + 2 + HARDENING_SYSCALLS.len() + 2 + 3 + 6 + 1
+                6 + 2 + 1 + HARDENING_SYSCALLS.len() + 3 + 3 + 6 + 1
             );
             for syscall in [NR_SOCKET, NR_SOCKETPAIR] {
                 let (index, branch) = program
@@ -447,6 +456,18 @@ mod tests {
                 assert_eq!(program[target].code, BPF_LD_BPF_W_BPF_ABS);
                 assert_eq!(program[target].k, 24, "socket branch must inspect args[1]");
             }
+        }
+    }
+
+    #[test]
+    fn clone3_returns_enosys_in_all_socket_policies() {
+        let denied = SECCOMP_RET_ERRNO | libc::ENOSYS as u32;
+        for program in [
+            build_program(SocketPolicy::UnixOnly),
+            build_program(SocketPolicy::UnixAndIp),
+        ] {
+            assert_eq!(eval(&program, NR_CLONE3, AF_UNIX), denied);
+            assert_eq!(eval(&program, NR_CLONE3, AF_INET), denied);
         }
     }
 
@@ -617,6 +638,18 @@ mod tests {
                 let target = idx + 1 + instruction.jt as usize;
                 assert_eq!(program[target].k, denied);
             }
+            let (clone3_idx, clone3_instruction) = program
+                .iter()
+                .enumerate()
+                .find(|(_, instruction)| {
+                    instruction.code == BPF_JMP_JEQ_K && instruction.k == NR_CLONE3
+                })
+                .expect("clone3 must have a filter branch");
+            let clone3_target = clone3_idx + 1 + clone3_instruction.jt as usize;
+            assert_eq!(
+                program[clone3_target].k,
+                SECCOMP_RET_ERRNO | libc::ENOSYS as u32
+            );
             for (idx, instruction) in program.iter().enumerate() {
                 if instruction.code != BPF_JMP_JEQ_K && instruction.code != BPF_JMP_JSET_K {
                     continue;
@@ -641,6 +674,10 @@ mod tests {
     fn agent_min_profile_blocks_extra_syscalls() {
         let program = build_program_for_profile(SocketPolicy::UnixOnly, SeccompProfile::AgentMin);
         let denied = SECCOMP_RET_ERRNO | libc::EPERM as u32;
+        assert_eq!(
+            eval(&program, NR_CLONE3, AF_UNIX),
+            SECCOMP_RET_ERRNO | libc::ENOSYS as u32
+        );
         for syscall in HARDENING_SYSCALLS {
             assert_eq!(eval(&program, *syscall, AF_UNIX), denied);
         }

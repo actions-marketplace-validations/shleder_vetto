@@ -152,6 +152,10 @@ int main(int argc, char **argv) {
         printf("blocked:%s:EPERM\n", argv[1]);
         return 0;
     }
+    if (result == -1 && saved == ENOSYS) {
+        printf("blocked:%s:ENOSYS\n", argv[1]);
+        return 0;
+    }
     fprintf(stderr, "probe was not blocked: %s result=%ld errno=%d\n", argv[1], result, saved);
     return 1;
 }
