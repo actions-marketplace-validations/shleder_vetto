@@ -104,8 +104,9 @@ mod tests {
 
     #[test]
     fn test_non_existent_child_of_allowed_root_drops_silently_without_warning() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let parent = temp.path().to_path_buf();
+        let temp = std::env::temp_dir().join(format!("vetto-chk-child-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp);
+        let parent = temp.clone();
         let child = parent.join("non_existent_subdir/plugins");
 
         let mut policy = Policy {
@@ -113,7 +114,9 @@ mod tests {
             ..Default::default()
         };
 
-        check(&mut policy).expect("check succeeds");
+        let res = check(&mut policy);
+        let _ = std::fs::remove_dir_all(&temp);
+        res.expect("check succeeds");
 
         assert_eq!(policy.allow_write, vec![parent]);
         assert!(
@@ -125,8 +128,8 @@ mod tests {
 
     #[test]
     fn test_non_existent_independent_path_drops_with_warning() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let non_existent = temp.path().join("completely_missing_independent_path");
+        let temp = std::env::temp_dir().join(format!("vetto-chk-indep-{}", std::process::id()));
+        let non_existent = temp.join("completely_missing_independent_path");
 
         let mut policy = Policy {
             allow_write: vec![non_existent.clone()],
