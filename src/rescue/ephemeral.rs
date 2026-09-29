@@ -74,11 +74,18 @@ pub fn handle_ephemeral_completion(
     force_discard: bool,
 ) -> Result<()> {
     if force_discard || exit_code != 0 {
-        crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
-        eprintln!(
-            "[VETTO EPHEMERAL] Session ended (exit {exit_code}). \
-             Working tree automatically restored to clean pre-session state."
-        );
+        if find_snapshot_archive(session_id).is_some() {
+            crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
+            eprintln!(
+                "[VETTO EPHEMERAL] Session ended (exit {exit_code}). \
+                 Working tree automatically restored to clean pre-session state."
+            );
+        } else {
+            eprintln!(
+                "[VETTO EPHEMERAL] Session ended (exit {exit_code}). \
+                 No pre-session snapshot found for automatic rollback."
+            );
+        }
         return Ok(());
     }
 
@@ -97,8 +104,14 @@ pub fn handle_ephemeral_completion(
         let _ = std::io::stdin().read_line(&mut input);
         let trimmed = input.trim();
         if trimmed.eq_ignore_ascii_case("n") || trimmed.eq_ignore_ascii_case("no") {
-            crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
-            eprintln!("[VETTO EPHEMERAL] Changes discarded. Working tree restored to clean state.");
+            if find_snapshot_archive(session_id).is_some() {
+                crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
+                eprintln!(
+                    "[VETTO EPHEMERAL] Changes discarded. Working tree restored to clean state."
+                );
+            } else {
+                eprintln!("[VETTO EPHEMERAL] No pre-session snapshot found to restore.");
+            }
         } else {
             eprintln!("[VETTO EPHEMERAL] Changes kept in workspace.");
         }
@@ -232,5 +245,21 @@ mod tests {
         if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
             let _ = fs::remove_dir_all(root.join(&session_id));
         }
+    }
+
+    #[test]
+    fn test_ephemeral_graceful_when_no_snapshot() {
+        let project_dir = temp_test_dir("no-snap");
+        let non_existent_session = "non-existent-session-id-999999";
+
+        // Must exit Ok(()) without panicking or bailing even if session snapshot does not exist
+        let res = handle_ephemeral_completion(non_existent_session, &project_dir, 1, false, false);
+        assert!(res.is_ok());
+
+        let res_discard =
+            handle_ephemeral_completion(non_existent_session, &project_dir, 0, false, true);
+        assert!(res_discard.is_ok());
+
+        let _ = fs::remove_dir_all(&project_dir);
     }
 }

@@ -1178,6 +1178,18 @@ impl DashboardState {
                     &["deny_domains"],
                     &domain,
                 );
+                if let Some(net_table) = table.get_mut("network").and_then(|v| v.as_table_mut()) {
+                    let should_switch = matches!(
+                        net_table.get("mode").and_then(|m| m.as_str()),
+                        None | Some("off")
+                    );
+                    if should_switch {
+                        net_table.insert(
+                            "mode".to_string(),
+                            toml::Value::String("allowlist".to_string()),
+                        );
+                    }
+                }
                 match save_policy_toml_table(&policy_path, &table) {
                     Ok(()) => {
                         self.reload_policy_tab();
