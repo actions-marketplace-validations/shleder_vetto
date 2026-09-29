@@ -334,6 +334,20 @@ fn run() -> Result<()> {
             } else {
                 resolve_target_agent(&mut cfg, &args, run_args, true)?;
             }
+            if args.benchmark {
+                let bench_args = cli::bench::BenchArgs {
+                    workspace: None,
+                    timeout: cfg.session_timeout.map(|d| d.as_secs()).unwrap_or(180),
+                    memory_mb: 4096,
+                    net: args.net.clone(),
+                    json: false,
+                    instance_id: None,
+                    profile: "swebench".to_string(),
+                    env: vec![],
+                    command: cfg.agent.clone(),
+                };
+                return cli::bench::execute_bench(&bench_args, &args);
+            }
             supervise(cfg)
         }
 
@@ -403,6 +417,9 @@ fn run() -> Result<()> {
         Some(cli::Command::Eval(eval_args)) => {
             let cfg = cli::eval::configure_eval_run(eval_args, &args)?;
             supervise(cfg)
+        }
+        Some(cli::Command::Bench(bench_args)) => {
+            cli::bench::execute_bench(bench_args, &args)
         }
         Some(cli::Command::Diff(args)) => cli::diff::run_diff(args),
         Some(cli::Command::Pack(args)) => cli::bundle::run_pack(args),
@@ -810,6 +827,20 @@ fn run() -> Result<()> {
             {
                 cfg.tui = TuiMode::None;
             }
+            if args.benchmark {
+                let bench_args = cli::bench::BenchArgs {
+                    workspace: None,
+                    timeout: cfg.session_timeout.map(|d| d.as_secs()).unwrap_or(180),
+                    memory_mb: 4096,
+                    net: args.net.clone(),
+                    json: false,
+                    instance_id: None,
+                    profile: "swebench".to_string(),
+                    env: vec![],
+                    command: cfg.agent.clone(),
+                };
+                return cli::bench::execute_bench(&bench_args, &args);
+            }
             supervise(cfg)
         }
     }
@@ -988,18 +1019,20 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
     agent_cmd[0] = resolve_in_path(&agent_cmd[0])?;
 
     let user_config = vetto::version::load_user_config().unwrap_or_default();
-    vetto::version::print_banner_if_update_available(
-        env!("CARGO_PKG_VERSION"),
-        &user_config.channel,
-    );
+    if !cfg.benchmark {
+        vetto::version::print_banner_if_update_available(
+            env!("CARGO_PKG_VERSION"),
+            &user_config.channel,
+        );
 
-    // Opt-in background staging (default off): when a newer release is known
-    // and this is a direct-binary install, download+verify it now so a later
-    // startup can apply it. Synchronous and cache-gated (24h), so at most one
-    // download per day. Managed installs (npm/cargo/brew) are left to their
-    // package managers.
-    if vetto::version::auto_update_enabled(&user_config) {
-        stage_update_if_available(&user_config);
+        // Opt-in background staging (default off): when a newer release is known
+        // and this is a direct-binary install, download+verify it now so a later
+        // startup can apply it. Synchronous and cache-gated (24h), so at most one
+        // download per day. Managed installs (npm/cargo/brew) are left to their
+        // package managers.
+        if vetto::version::auto_update_enabled(&user_config) {
+            stage_update_if_available(&user_config);
+        }
     }
 
     let backend_res = sandbox::Backend::detect_with_backend(
@@ -1148,7 +1181,7 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         };
 
     // Only capture a project manifest if diff reporting or snapshotting is requested
-    let diff_requested = cfg.snapshot || cfg.ephemeral || !cfg.report_formats.is_empty();
+    let diff_requested = (cfg.snapshot || cfg.ephemeral || !cfg.report_formats.is_empty()) && !cfg.benchmark;
 
     let diff_enabled = diff_requested && !is_home_or_root;
 
@@ -1174,7 +1207,9 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         }
     }
 
-    if (pol.snapshot || cfg.snapshot || cfg.ephemeral || !cfg.agent.is_empty()) && !is_home_or_root
+    if !cfg.benchmark
+        && (pol.snapshot || cfg.snapshot || cfg.ephemeral || !cfg.agent.is_empty())
+        && !is_home_or_root
     {
         match rescue::snapshot::create_snapshot(
             &project,
@@ -1501,16 +1536,18 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         }
     }
 
-    if let Ok(reg) = cli::status::SessionRegistry::new() {
-        let agent_name = cfg.agent_preset.as_deref().unwrap_or_else(|| &cfg.agent[0]);
-        let _ = reg.register(
-            &session_id,
-            root_pid,
-            agent_name,
-            &pol.name,
-            tier_label(tier),
-            &project,
-        );
+    if !cfg.benchmark {
+        if let Ok(reg) = cli::status::SessionRegistry::new() {
+            let agent_name = cfg.agent_preset.as_deref().unwrap_or_else(|| &cfg.agent[0]);
+            let _ = reg.register(
+                &session_id,
+                root_pid,
+                agent_name,
+                &pol.name,
+                tier_label(tier),
+                &project,
+            );
+        }
     }
 
     if cfg.system_log || pol.system_log {
@@ -1536,10 +1573,12 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         .join(".vetto")
         .join("logs")
         .join(format!("session-{root_pid}.jsonl"));
-    if let Some(parent) = default_log_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+    if !cfg.benchmark {
+        if let Some(parent) = default_log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        logger::jsonl::JsonlSink::spawn(&bus, default_log_path.clone());
     }
-    logger::jsonl::JsonlSink::spawn(&bus, default_log_path.clone());
 
     let jsonl_path = cfg.jsonl_path.clone();
     if let Some(path) = &jsonl_path {
@@ -1906,19 +1945,21 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
     if let Ok(reg) = cli::status::SessionRegistry::new() {
         reg.unregister(&session_id);
     }
-    let agent_name = cfg
-        .agent_preset
-        .clone()
-        .unwrap_or_else(|| cfg.agent[0].clone());
-    let _ = history::append_session_history(
-        &project,
-        &history::SessionHistoryRecord {
-            agent: agent_name,
-            duration_secs,
-            ts: events::types::now().to_rfc3339(),
-            exit_code,
-        },
-    );
+    if !cfg.benchmark {
+        let agent_name = cfg
+            .agent_preset
+            .clone()
+            .unwrap_or_else(|| cfg.agent[0].clone());
+        let _ = history::append_session_history(
+            &project,
+            &history::SessionHistoryRecord {
+                agent: agent_name,
+                duration_secs,
+                ts: events::types::now().to_rfc3339(),
+                exit_code,
+            },
+        );
+    }
 
     let blocked_file_total: u64 = snap.blocked_attempts.iter().map(|b| b.count).sum();
     let blocked_network_total = snap
@@ -2088,7 +2129,9 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
         report_path: primary_report.as_ref().map(|p| p.display().to_string()),
         log_path: Some(default_log_path.display().to_string()),
     };
-    let _ = vetto::audit::record_session_history(&history_record);
+    if !cfg.benchmark {
+        let _ = vetto::audit::record_session_history(&history_record);
+    }
 
     if cfg.ephemeral {
         rescue::ephemeral::handle_ephemeral_completion(
