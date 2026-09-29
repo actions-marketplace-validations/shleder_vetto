@@ -217,6 +217,13 @@ fn test_aider_filesystem_history_and_cache_allowed() {
     fs::create_dir_all(&project).expect("create project dir");
     fs::create_dir_all(&home).expect("create home dir");
 
+    let input_history = project.join(".aider.input.history");
+    let tags_cache = project.join(".aider.tags.cache.v3");
+    let chat_history = project.join(".aider.chat.history.md");
+    fs::write(&input_history, "").expect("create input history");
+    fs::write(&tags_cache, "").expect("create tags cache");
+    fs::write(&chat_history, "").expect("create chat history");
+
     let opts = PolicyLoadOptions {
         agent: Some("aider".to_string()),
         include_project_policy: false,
@@ -225,10 +232,6 @@ fn test_aider_filesystem_history_and_cache_allowed() {
 
     let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
         .expect("load aider policy");
-
-    let input_history = project.join(".aider.input.history");
-    let tags_cache = project.join(".aider.tags.cache.v3");
-    let chat_history = project.join(".aider.chat.history.md");
 
     assert!(
         pol.allow_write.iter().any(|p| p == &input_history),
