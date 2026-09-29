@@ -68,6 +68,8 @@ mod resource_limits_e2e;
 mod secret_masking;
 mod shim_interception;
 mod test_agent_profiles_e2e;
+mod test_aider_preset;
+mod test_bench_mode;
 mod test_eval_mode;
 #[cfg(target_os = "linux")]
 mod test_job_control;

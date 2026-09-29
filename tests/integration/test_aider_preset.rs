@@ -116,7 +116,10 @@ fn test_aider_network_allowlist_completeness() {
     let raw: RawLayer =
         toml::from_str(AIDER_AGENT_TOML).expect("parse aider.toml for network section");
     let net = raw.network.expect("aider.toml must have [network]");
-    let allow = net.allow.expect("[network] must have allow list").into_vec();
+    let allow = net
+        .allow
+        .expect("[network] must have allow list")
+        .into_vec();
 
     for expected in expected_providers {
         assert!(
@@ -214,6 +217,13 @@ fn test_aider_filesystem_history_and_cache_allowed() {
     fs::create_dir_all(&project).expect("create project dir");
     fs::create_dir_all(&home).expect("create home dir");
 
+    let input_history = project.join(".aider.input.history");
+    let tags_cache = project.join(".aider.tags.cache.v3");
+    let chat_history = project.join(".aider.chat.history.md");
+    fs::write(&input_history, "").expect("create input history");
+    fs::write(&tags_cache, "").expect("create tags cache");
+    fs::write(&chat_history, "").expect("create chat history");
+
     let opts = PolicyLoadOptions {
         agent: Some("aider".to_string()),
         include_project_policy: false,
@@ -222,10 +232,6 @@ fn test_aider_filesystem_history_and_cache_allowed() {
 
     let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
         .expect("load aider policy");
-
-    let input_history = project.join(".aider.input.history");
-    let tags_cache = project.join(".aider.tags.cache.v3");
-    let chat_history = project.join(".aider.chat.history.md");
 
     assert!(
         pol.allow_write.iter().any(|p| p == &input_history),
@@ -294,7 +300,12 @@ fn test_aider_destructive_git_commands_suite_fails_closed_125() {
         vec!["reset".into(), "--hard=HEAD~1".into()],
         vec!["push".into(), "--force".into()],
         vec!["push".into(), "-f".into()],
-        vec!["push".into(), "origin".into(), "--delete".into(), "branch".into()],
+        vec![
+            "push".into(),
+            "origin".into(),
+            "--delete".into(),
+            "branch".into(),
+        ],
         vec!["clean".into(), "-f".into()],
         vec!["clean".into(), "-fd".into()],
         vec!["clean".into(), "-fdx".into()],
