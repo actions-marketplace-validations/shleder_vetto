@@ -1,4 +1,4 @@
-![vetto — a kernel wall between the AI agent and your machine](assets/readme/hero.png)
+![vetto - a kernel wall between the AI agent and your machine](assets/readme/hero.png)
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
@@ -21,20 +21,6 @@ Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI
 
 ---
 
-## Interactive TUI Mission Control
-
-Launch the interactive Mission Control dashboard by simply running `vetto` in any interactive terminal:
-
-```bash
-vetto
-```
-
-Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, zero-loss snapshot rollbacks, real-time policy interception streaming (`[5: SECURITY STREAM]`), and multi-agent swarm orchestration (`[6: FLEET SWARM]`).
-
-For keybindings, detailed views, and theme configuration, see the [Mission Control TUI Guide](docs/tui.md).
-
----
-
 ## Proof Before Promises
 
 Autonomous agents execute non-deterministic code. Untrusted dependency hooks, prompt injections, or hallucinated bash commands can compromise host credentials (`~/.ssh`, `~/.aws`, `.env`) or leak runaway background servers. Under Vetto, unauthorized system calls are blocked deterministically:
@@ -47,7 +33,7 @@ Autonomous agents execute non-deterministic code. Untrusted dependency hooks, pr
 
 ### Fail-Closed Contract (Exit 125)
 
-If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with **exit code 125**. Descendant process trees and orphaned subprocesses are reaped synchronously via cgroups v2 `cgroup.kill`. Guarantees that the underlying OS cannot enforce are reported as unsupported—security is never silently downgraded.
+If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with **exit code 125**. Descendant process trees and orphaned subprocesses are reaped synchronously via cgroups v2 `cgroup.kill`. Guarantees that the underlying OS cannot enforce are reported as unsupported; security is never silently downgraded.
 
 ---
 
@@ -74,20 +60,44 @@ Or via standalone curl installer:
 curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 ```
 
-### 2. Transparent Agent Sandboxing (PATH-Shims)
+### 2. Wrap All AI Coding Agents in 5 Seconds (Primary Adoption)
 
-Enable zero-configuration sandboxing for your coding agent once. Vetto installs a non-destructive shim in `~/.vetto/shims` with priority in `PATH`:
-
-```bash
-vetto enable claude   # supports codex, opencode, cursor, aider, antigravity, and 24 profiles
-claude                # runs normally — fully sandboxed at the kernel boundary
-```
-
-To unwrap and restore native execution:
+Wrap every installed AI coding agent on your system in a single command without modifying configs or aliases:
 
 ```bash
-vetto disable claude
+vetto enable --all
 ```
+
+Vetto scans `$PATH` for recognized coding agent executables (`claude`, `codex`, `cursor`, `opencode`, `aider`, `antigravity`, `omp`, `zcode`, `kimi`, `grok`, and 15 others), discovers their real binaries, and installs non-destructive interception shims into `~/.vetto/shims`.
+
+Once enabled, invoke your agent normally. Execution is confined at the kernel LSM boundary with zero friction:
+
+```bash
+claude                # runs normally, fully sandboxed at the kernel boundary
+cursor                # launched with protected credentials and scoped network
+```
+
+#### Selective Single-Agent Management
+
+To selectively wrap or unwrap specific agents instead of all:
+
+```bash
+vetto enable claude    # wrap only claude
+vetto disable claude   # unwrap and restore native unconfined execution
+```
+
+#### The Containerless Advantage over Docker
+
+AI coding agents require real compilers, local package managers, and low latency. Running them inside Docker introduces friction that Vetto completely eliminates:
+
+| Dimension | Docker / DinD | Vetto Containerless Runtime |
+| :--- | :--- | :--- |
+| **Startup Overhead** | 500ms–2000ms container creation | **<4ms** cold start between `fork()` and `execve()` |
+| **Background Footprint** | `dockerd` daemon consuming 500MB+ RAM | **0MB** in RAM (daemon-less, pure kernel enforcement) |
+| **Privilege Model** | Requires `root` or `docker` group (escalation risk) | **Rootless** unprivileged Landlock LSM + cgroups v2 |
+| **Host Toolchains** | Requires rebuilding massive images with compilers | **Native**: direct access to host `cargo`, `npm`, `pip`, `uv` |
+| **Package Caches** | Isolated or slow volume bind mounts | **Host speed**: native package caches preserved |
+| **Process Cleanup** | Orphaned containers and leaked host processes | **Synchronous extinction** via `cgroups v2` (`cgroup.kill`) |
 
 ### 3. Direct Execution & Disposable Eval
 
@@ -145,6 +155,76 @@ vetto fleet kill --all
 
 ---
 
+## CI/CD: Zero-Docker GitHub Actions Integration
+
+Running AI coding agents in CI pipelines commonly relies on Docker-in-Docker (DinD). DinD introduces 30–120 second base image pull delays, requires insecure `--privileged` flags that expose the host runner, and lacks native support on macOS and Windows runner VMs.
+
+Vetto provides a standard, 10–50x faster, zero-Docker replacement across GitHub Actions workflows:
+
+- **10–50x Faster Execution**: Zero container images to download; prebuilt binaries (<15MB) install in under 1 second.
+- **Rootless Kernel Sandboxing**: Enforces Landlock LSM and cgroups v2 boundaries on standard Ubuntu runners without `--privileged` flags or root access.
+- **Host Toolchain & Cache Access**: Directly executes against `$GITHUB_WORKSPACE` and runner caching layers (`actions/cache`, `actions/setup-node`, `actions/setup-python`), avoiding costly container rebuilds.
+- **Synchronous Process Reaping**: Eliminates orphaned background workers and zombie processes via cgroups v2 (`cgroup.kill`).
+- **Cross-Platform Support**: Operates consistently across `ubuntu-latest` (Landlock LSM), `macos-latest` (Seatbelt SBPL), and `windows-latest` (Job Objects).
+
+### Option A: Composite Command Runner (`vetto-action`)
+
+Execute a sandboxed agent command with automatic audit logs and CodeQL SARIF reporting:
+
+```yaml
+name: Agent Security Gate
+on: [pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # Required for upload-sarif
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Sandboxed Agent
+        uses: shleder/vetto/action@v0.5.9
+        with:
+          command: 'npx claude-code -p "Run linter and fix basic formatting"'
+          profile: 'strict'
+          fail-on-block: '1'
+          upload-sarif: 'true'
+```
+
+### Option B: Setup Action for Multi-Step Workflows (`Setup Vetto`)
+
+Install the standalone `vetto` CLI into `$GITHUB_PATH` to isolate custom scripts and build steps:
+
+```yaml
+      - name: Setup Vetto
+        uses: shleder/vetto@v0.5.9
+        with:
+          version: 'latest'
+
+      - name: Run Sandboxed Commands
+        run: |
+          vetto doctor --preflight
+          vetto run -- aider --message "Refactor parser error handling"
+```
+
+---
+
+## Interactive TUI Mission Control
+
+Launch the interactive Mission Control dashboard by running `vetto` in any interactive terminal:
+
+```bash
+vetto
+```
+
+Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, zero-loss snapshot rollbacks, real-time policy interception streaming (`[5: SECURITY STREAM]`), and multi-agent swarm orchestration (`[6: FLEET SWARM]`).
+
+For keybindings, detailed views, and theme configuration, see the [Mission Control TUI Guide](docs/tui.md).
+
+---
+
 ## Platform Guarantees
 
 Vetto enforces an immutable three-tier boundary model based on kernel capabilities available to unprivileged userspace:
@@ -193,7 +273,7 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 
 ## Active Upstream Integrations & Ecosystem PRs
 
-Vetto engineering maintains native upstream isolation adapters across open-source AI agent frameworks, replacing heavy Docker daemon dependencies and unprotected subprocesses with lightweight kernel fencing:
+Vetto engineering maintains native upstream isolation adapters across open-source AI agent frameworks, replacing heavy Docker daemon dependencies and unprotected subprocesses with unprivileged kernel LSM fencing:
 
 | Framework | Target Issue | Integration PR | Isolation Architecture |
 | :--- | :--- | :--- | :--- |

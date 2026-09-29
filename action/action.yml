@@ -33,7 +33,7 @@ inputs:
     required: false
     default: 'false'
   upload-sarif:
-    description: 'Upload generated SARIF report to GitHub Code Scanning.'
+    description: 'Upload generated SARIF report to GitHub Code Scanning (requires permissions: security-events: write).'
     required: false
     default: 'false'
 outputs:
@@ -59,20 +59,58 @@ runs:
         fi
         if ! command -v vetto >/dev/null 2>&1; then
           # Fallback: install native binary directly
-          kernel="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          arch="$(uname -m)"
-          case "${arch}" in
-            x86_64|amd64) arch="x86_64" ;;
-            aarch64|arm64) arch="aarch64" ;;
+          os_raw="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch_raw="$(uname -m)"
+
+          case "${os_raw}" in
+            linux*)   target_os="linux" ;;
+            darwin*)  target_os="macos" ;;
+            msys*|mingw*|cygwin*) target_os="windows" ;;
+            *) echo "::error::Unsupported OS: ${os_raw}"; exit 1 ;;
           esac
+
+          case "${arch_raw}" in
+            x86_64|amd64)  arch="x86_64" ;;
+            aarch64|arm64) arch="aarch64" ;;
+            *) echo "::error::Unsupported architecture: ${arch_raw}"; exit 1 ;;
+          esac
+
           ver="${{ inputs.version }}"
-          [ "${ver}" = "latest" ] && ver="0.5.9"
-          ver="${ver#v}"
-          bin_url="https://github.com/shleder/vetto/releases/download/v${ver}/vetto-${kernel}-${arch}.tar.gz"
-          echo "Fetching native binary from ${bin_url}..."
-          mkdir -p "${HOME}/.local/bin"
-          curl -sSLf --retry 3 "${bin_url}" | tar -xz -C "${HOME}/.local/bin" 2>/dev/null || true
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+          if [ -z "${ver}" ] || [ "${ver}" = "latest" ]; then
+            resolved_tag=$(curl -sSL -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            if [ -z "${resolved_tag}" ]; then
+              resolved_tag="v0.5.9"
+            fi
+          elif [[ "${ver}" =~ ^v ]]; then
+            resolved_tag="${ver}"
+          else
+            resolved_tag="v${ver}"
+          fi
+
+          install_dir="${HOME}/.local/bin"
+          mkdir -p "${install_dir}"
+
+          if [ "${target_os}" = "windows" ]; then
+            asset_name="vetto-windows-${arch}.zip"
+            bin_url="https://github.com/shleder/vetto/releases/download/${resolved_tag}/${asset_name}"
+            echo "Fetching native binary from ${bin_url}..."
+            tmp_zip="$(mktemp 2>/dev/null || echo "/tmp/vetto-$$").zip"
+            curl -sSLf --retry 3 "${bin_url}" -o "${tmp_zip}" || true
+            if [ -f "${tmp_zip}" ]; then
+              unzip -q -o "${tmp_zip}" -d "${install_dir}" 2>/dev/null || true
+              rm -f "${tmp_zip}"
+            fi
+          else
+            asset_name="vetto-${target_os}-${arch}.tar.gz"
+            bin_url="https://github.com/shleder/vetto/releases/download/${resolved_tag}/${asset_name}"
+            echo "Fetching native binary from ${bin_url}..."
+            curl -sSLf --retry 3 "${bin_url}" | tar -xz -C "${install_dir}" 2>/dev/null || true
+            if [ -f "${install_dir}/vetto" ]; then
+              chmod +x "${install_dir}/vetto"
+            fi
+          fi
+          echo "${install_dir}" >> "${GITHUB_PATH}"
         fi
 
     - name: Run sandboxed command
@@ -88,6 +126,9 @@ runs:
         VETTO_ACTION_FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
       run: bash "$GITHUB_ACTION_PATH/entrypoint.sh"
 
+    # Note: Uploading SARIF reports requires the calling workflow job to declare:
+    # permissions:
+    #   security-events: write
     - name: Upload SARIF report
       if: ${{ inputs.upload-sarif == 'true' && steps.run.outputs.sarif-path != '' && always() }}
       uses: github/codeql-action/upload-sarif@v3
