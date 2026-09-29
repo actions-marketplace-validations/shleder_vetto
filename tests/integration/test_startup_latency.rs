@@ -42,11 +42,7 @@ fn test_snapshot_creation_on_home_bypasses_crawl() {
     let home = std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::var_os("USERPROFILE").map(std::path::PathBuf::from))
-        .unwrap_or_else(|| {
-            let tmp = std::env::temp_dir();
-            std::env::set_var("HOME", &tmp);
-            tmp
-        });
+        .unwrap_or_else(std::env::temp_dir);
 
     let start = Instant::now();
     let meta = vetto::rescue::snapshot::create_snapshot(&home, "test-sess", 50 * 1024 * 1024)

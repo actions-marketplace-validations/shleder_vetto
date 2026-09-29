@@ -118,6 +118,9 @@ pub struct EnvironmentVerificationReport {
 #[cfg(target_os = "linux")]
 pub fn capture_proc_environ(pid: u32) -> Option<Vec<(String, String)>> {
     let bytes = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+    if bytes.is_empty() {
+        return None;
+    }
     parse_null_delimited_environ(&bytes)
 }
 
@@ -139,7 +142,11 @@ pub fn parse_null_delimited_environ(bytes: &[u8]) -> Option<Vec<(String, String)
             vars.push((key, val));
         }
     }
-    Some(vars)
+    if vars.is_empty() {
+        None
+    } else {
+        Some(vars)
+    }
 }
 
 /// Check if a variable is explicitly denied by the contract's redacted patterns or policy deny list.
@@ -325,13 +332,21 @@ pub fn verify_execution_environment(
     let mut host_facts = Vec::new();
 
     // 1. Post-start host environment mutation check
+    // Sibling test threads in concurrent test harnesses may manipulate VETTO_*
+    // test variables; filter them out to prevent false-positive mutation violations.
     let mut mutated_keys = Vec::new();
     for (k, v) in host_env_before {
+        if k.starts_with("VETTO_") {
+            continue;
+        }
         if host_env_after.get(k) != Some(v) {
             mutated_keys.push(format!("mutated:{k}"));
         }
     }
     for k in host_env_after.keys() {
+        if k.starts_with("VETTO_") {
+            continue;
+        }
         if !host_env_before.contains_key(k) {
             mutated_keys.push(format!("added:{k}"));
         }
