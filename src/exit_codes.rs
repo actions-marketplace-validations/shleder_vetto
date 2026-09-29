@@ -106,6 +106,8 @@ pub fn map_error_to_exit_code(err: &anyhow::Error) -> i32 {
     } else if msg.contains("lockdown violation") || msg.contains("fail-on-block") {
         EXIT_POLICY_BLOCKED
     } else if msg.contains("fail-closed")
+        || msg.contains("git_guard")
+        || msg.contains("destructive")
         || msg.contains("boundary verification failed")
         || msg.contains("refusing to run")
         || msg.contains("not supported")
@@ -177,6 +179,18 @@ mod tests {
         assert_eq!(
             map_error_to_exit_code(&anyhow!("invalid CLI argument provided")),
             EXIT_AGENT_ERROR
+        );
+        assert_eq!(
+            map_error_to_exit_code(&anyhow!(
+                "fail-closed: destructive git command blocked by git_guard: destructive 'git reset --hard' blocked by vetto git_guard"
+            )),
+            EXIT_FAIL_CLOSED
+        );
+        assert_eq!(
+            map_error_to_exit_code(&anyhow!(
+                "destructive git push (force/delete) blocked by vetto git_guard"
+            )),
+            EXIT_FAIL_CLOSED
         );
     }
 

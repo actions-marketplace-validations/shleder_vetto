@@ -361,8 +361,8 @@ pub fn dispatch(binary_name: &str, args: &[String]) -> Result<i32> {
         && !bypass_active
     {
         if let Some(reason) = is_destructive_git_command(&clean_args) {
-            eprintln!("vetto: {reason}");
-            bail!("{reason}");
+            eprintln!("vetto: fail-closed: destructive git command blocked by git_guard: {reason}");
+            bail!("fail-closed: destructive git command blocked by git_guard: {reason}");
         }
     }
 

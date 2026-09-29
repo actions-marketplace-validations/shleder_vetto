@@ -1298,6 +1298,10 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".omnigent"));
                         let _ = std::fs::create_dir_all(home.join(".config/omnigent"));
                     }
+                    Some("aider") => {
+                        let _ = std::fs::create_dir_all(home.join(".aider"));
+                        let _ = std::fs::create_dir_all(home.join(".config/aider"));
+                    }
                     _ => {}
                 }
                 let _ = std::fs::create_dir_all(home.join(".npm/_npx"));
