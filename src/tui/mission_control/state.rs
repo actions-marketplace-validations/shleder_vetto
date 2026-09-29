@@ -1213,7 +1213,9 @@ impl DashboardState {
                 match save_policy_toml_table(&policy_path, &table) {
                     Ok(()) => {
                         self.reload_policy_tab();
-                        self.set_status(format!("Allowed path '{clean_path}' in .vetto/policy.toml"));
+                        self.set_status(format!(
+                            "Allowed path '{clean_path}' in .vetto/policy.toml"
+                        ));
                     }
                     Err(e) => {
                         self.set_status(format!(
@@ -1284,7 +1286,9 @@ impl DashboardState {
                 match save_policy_toml_table(&policy_path, &table) {
                     Ok(()) => {
                         self.reload_policy_tab();
-                        self.set_status(format!("Denied path '{clean_path}' in .vetto/policy.toml"));
+                        self.set_status(format!(
+                            "Denied path '{clean_path}' in .vetto/policy.toml"
+                        ));
                     }
                     Err(e) => {
                         self.set_status(format!(
@@ -2071,19 +2075,13 @@ mod tests {
         // Event 1: Allow safe filesystem path
         state.selected_event = 1;
         state.allow_selected_security_event();
-        assert!(state
-            .active_status()
-            .unwrap_or("")
-            .contains("Allowed path"));
+        assert!(state.active_status().unwrap_or("").contains("Allowed path"));
         assert!(state.live_allow_write.contains(&safe_project_path));
         assert!(state.live_allow_read.contains(&safe_project_path));
 
         // Event 1: Deny filesystem path (moves from allow_write/read to deny)
         state.deny_selected_security_event();
-        assert!(state
-            .active_status()
-            .unwrap_or("")
-            .contains("Denied path"));
+        assert!(state.active_status().unwrap_or("").contains("Denied path"));
         assert!(!state.live_allow_write.contains(&safe_project_path));
         assert!(state.live_deny_paths.contains(&safe_project_path));
 
@@ -2094,9 +2092,7 @@ mod tests {
             .active_status()
             .unwrap_or("")
             .contains("Refused fail-closed"));
-        assert!(!state
-            .live_allow_write
-            .contains(&"/etc/shadow".to_string()));
+        assert!(!state.live_allow_write.contains(&"/etc/shadow".to_string()));
 
         // Event 3: Refuse allowing mandatory secret .ssh
         state.selected_event = 3;

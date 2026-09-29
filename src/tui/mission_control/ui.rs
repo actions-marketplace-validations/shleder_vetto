@@ -573,8 +573,11 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
             preset.network_domains.join(", ")
         };
 
-        let mut write_roots: Vec<String> =
-            preset.write_roots.iter().map(|s| (*s).to_string()).collect();
+        let mut write_roots: Vec<String> = preset
+            .write_roots
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
         for p in &state.live_allow_write {
             if !write_roots.contains(p) {
                 write_roots.push(p.clone());
@@ -587,8 +590,11 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
                 read_roots.push(p.clone());
             }
         }
-        let mut secret_denies: Vec<String> =
-            preset.secret_denies.iter().map(|s| (*s).to_string()).collect();
+        let mut secret_denies: Vec<String> = preset
+            .secret_denies
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
         for p in &state.live_deny_paths {
             if !secret_denies.contains(p) {
                 secret_denies.push(p.clone());
