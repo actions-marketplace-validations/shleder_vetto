@@ -116,7 +116,10 @@ fn test_aider_network_allowlist_completeness() {
     let raw: RawLayer =
         toml::from_str(AIDER_AGENT_TOML).expect("parse aider.toml for network section");
     let net = raw.network.expect("aider.toml must have [network]");
-    let allow = net.allow.expect("[network] must have allow list").into_vec();
+    let allow = net
+        .allow
+        .expect("[network] must have allow list")
+        .into_vec();
 
     for expected in expected_providers {
         assert!(
@@ -294,7 +297,12 @@ fn test_aider_destructive_git_commands_suite_fails_closed_125() {
         vec!["reset".into(), "--hard=HEAD~1".into()],
         vec!["push".into(), "--force".into()],
         vec!["push".into(), "-f".into()],
-        vec!["push".into(), "origin".into(), "--delete".into(), "branch".into()],
+        vec![
+            "push".into(),
+            "origin".into(),
+            "--delete".into(),
+            "branch".into(),
+        ],
         vec!["clean".into(), "-f".into()],
         vec!["clean".into(), "-fd".into()],
         vec!["clean".into(), "-fdx".into()],
