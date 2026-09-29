@@ -5,6 +5,8 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-09-29
+
 ### Fixed
 - **Linux Seccomp-BPF `SYS_clone3` Fallback (`ENOSYS`)**:
   - Route `SYS_clone3` to a dedicated `SECCOMP_RET_ERRNO | ENOSYS` termination branch instead of generic `EPERM`.
