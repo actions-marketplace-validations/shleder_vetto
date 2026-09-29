@@ -167,13 +167,20 @@ def main():
         update_file(doc, rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
         update_file(doc, rf'badge/npm-v{re.escape(current)}-CB3837', f'badge/npm-v{target}-CB3837')
         update_file(doc, rf'badge/crates\.io-v{re.escape(current)}-orange', f'badge/crates.io-v{target}-orange')
+        update_file(doc, rf'shleder/vetto@v{re.escape(current)}', f'shleder/vetto@v{target}', count=0)
 
-    
-    # GitHub Actions
-    update_file(os.path.join(REPO_ROOT, "action.yml"), r'\(e\.g\. "' + re.escape(current) + r'" or "latest"\)', f'(e.g. "{target}" or "latest")')
-    update_file(os.path.join(REPO_ROOT, "action.yml"), rf'RESOLVED_TAG="v{re.escape(current)}"', f'RESOLVED_TAG="v{target}"')
-    update_file(os.path.join(REPO_ROOT, "action", "action.yml"), r'\[ "\${ver}" = "latest" \] && ver="' + re.escape(current) + '"', f'[ "${{ver}}" = "latest" ] && ver="{target}"')
+    # GitHub Actions & Workflow Templates
+    for act in [os.path.join(REPO_ROOT, "action.yml"), os.path.join(REPO_ROOT, "action", "action.yml")]:
+        update_file(act, r'\(e\.g\. "' + re.escape(current) + r'" or "latest"\)', f'(e.g. "{target}" or "latest")')
+        update_file(act, rf'RESOLVED_TAG="v{re.escape(current)}"', f'RESOLVED_TAG="v{target}"')
     update_file(os.path.join(REPO_ROOT, "action", "README.md"), rf'shleder/vetto/action@v{re.escape(current)}', f'shleder/vetto/action@v{target}', count=0)
+    update_file(os.path.join(REPO_ROOT, "action", "README.md"), rf'shleder/vetto@v{re.escape(current)}', f'shleder/vetto@v{target}', count=0)
+    update_file(os.path.join(REPO_ROOT, "docs", "ci-cd.md"), rf'shleder/vetto@v{re.escape(current)}', f'shleder/vetto@v{target}', count=0)
+    update_file(os.path.join(REPO_ROOT, "docs", "ci-cd.md"), rf"'{re.escape(current)}'", f"'{target}'", count=0)
+    update_file(os.path.join(REPO_ROOT, "docs", "ci-cd.md"), rf'`{re.escape(current)}`', f'`{target}`', count=0)
+    update_file(os.path.join(REPO_ROOT, "docs", "tutorials", "ci.md"), rf'shleder/vetto@v{re.escape(current)}', f'shleder/vetto@v{target}', count=0)
+    for wf_tmpl in ["vetto-aider-ci.yml", "vetto-claude-ci.yml"]:
+        update_file(os.path.join(REPO_ROOT, ".github", "workflow-templates", wf_tmpl), rf'shleder/vetto@v{re.escape(current)}', f'shleder/vetto@v{target}', count=0)
 
     # Kubernetes manifests
     update_file(os.path.join(REPO_ROOT, "k8s", "daemonset.yaml"), rf'image:\s*ghcr\.io/shleder/vetto:{re.escape(current)}', f'image: ghcr.io/shleder/vetto:{target}')

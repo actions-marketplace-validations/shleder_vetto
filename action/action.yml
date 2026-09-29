@@ -34,7 +34,7 @@ inputs:
     required: false
     default: '.vetto/reports'
   version:
-    description: 'Vetto version to install (e.g. "0.5.10" or "latest").'
+    description: 'Vetto version to install (e.g. "0.5.11" or "latest").'
     required: false
     default: 'latest'
   fail-on-block:
@@ -92,7 +92,7 @@ runs:
           RESOLVED_TAG=$(curl -sSL ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | (grep '"tag_name":' || true) | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/') || true
           if [ -z "$RESOLVED_TAG" ]; then
-            RESOLVED_TAG="v0.5.10"
+            RESOLVED_TAG="v0.5.11"
           fi
         elif [[ "$REQUESTED_VERSION" =~ ^v ]]; then
           RESOLVED_TAG="$REQUESTED_VERSION"
