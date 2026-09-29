@@ -573,9 +573,31 @@ fn render_tab_sandbox(f: &mut Frame, state: &DashboardState, area: Rect) {
             preset.network_domains.join(", ")
         };
 
-        let write_roots_str = preset.write_roots.join("  |  ");
-        let read_roots_str = preset.read_roots.join("  |  ");
-        let secret_denies_str = preset.secret_denies.join("  |  ");
+        let mut write_roots: Vec<String> =
+            preset.write_roots.iter().map(|s| (*s).to_string()).collect();
+        for p in &state.live_allow_write {
+            if !write_roots.contains(p) {
+                write_roots.push(p.clone());
+            }
+        }
+        let mut read_roots: Vec<String> =
+            preset.read_roots.iter().map(|s| (*s).to_string()).collect();
+        for p in &state.live_allow_read {
+            if !read_roots.contains(p) {
+                read_roots.push(p.clone());
+            }
+        }
+        let mut secret_denies: Vec<String> =
+            preset.secret_denies.iter().map(|s| (*s).to_string()).collect();
+        for p in &state.live_deny_paths {
+            if !secret_denies.contains(p) {
+                secret_denies.push(p.clone());
+            }
+        }
+
+        let write_roots_str = write_roots.join("  |  ");
+        let read_roots_str = read_roots.join("  |  ");
+        let secret_denies_str = secret_denies.join("  |  ");
 
         let lines = vec![
             Line::from(vec![
@@ -1061,6 +1083,13 @@ fn render_tab_security_stream(f: &mut Frame, state: &DashboardState, area: Rect)
             Line::from(vec![
                 Span::styled("  ENFORCEMENT ACTION: ", Style::default().fg(theme.muted)),
                 Span::styled(&selected.detail, Style::default().fg(theme.text)),
+            ]),
+            Line::from(vec![
+                Span::styled("  LIVE POLICY: ", Style::default().fg(theme.muted)),
+                Span::styled(
+                    "[a] Allow  [d] Deny  (updates .vetto/policy.toml immediately)",
+                    Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+                ),
             ]),
         ];
         f.render_widget(Paragraph::new(detail_lines).block(detail_block), chunks[2]);
@@ -2168,6 +2197,43 @@ fn render_footer(f: &mut Frame, state: &DashboardState, area: Rect) {
             ),
             Span::styled(" Quit", Style::default().fg(theme.text)),
         ],
+        MissionTab::SecurityStream => vec![
+            Span::styled(
+                "[1-6]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Tabs  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[↑↓/jk]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Select  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[a]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Allow  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[d]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Deny  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[t]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Theme  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[r]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Refresh  ", Style::default().fg(theme.text)),
+            Span::styled(
+                "[q/Esc]",
+                Style::default().fg(theme.logo).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" Quit", Style::default().fg(theme.text)),
+        ],
         _ => vec![
             Span::styled(
                 "[1-6]",
@@ -2377,6 +2443,86 @@ mod tests {
         assert!(content.contains("169.254.169.254:80"));
         assert!(content.contains("[LANDLOCK]"));
         assert!(content.contains("[SECCOMP]"));
+        assert!(content.contains("[a] Allow  [d] Deny"));
+    }
+
+    #[test]
+    fn test_security_stream_live_policy_allow_deny_updates_ui_and_policy_tab() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let tmp = std::env::temp_dir().join(format!(
+            "vetto-ui-live-policy-test-{}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).expect("create temp workspace");
+
+        let backend = TestBackend::new(140, 35);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut state = DashboardState::new(None);
+        state.workspace_root = Some(tmp.clone());
+        state.active_tab = MissionTab::SecurityStream;
+
+        state
+            .security_events
+            .push_back(super::super::state::SecurityEventItem {
+                ts: chrono::Utc::now(),
+                event_type: super::super::state::SecurityEventType::BlockedNetwork,
+                subject: "telemetry.example.org:443".to_string(),
+                detail: "Egress blocked".to_string(),
+                source: "net_relay".to_string(),
+            });
+
+        state.selected_event = 0;
+        state.allow_selected_security_event();
+
+        terminal.draw(|f| draw(f, &state)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("Allowed domain 'telemetry.example.org' in .vetto/policy.toml"));
+        assert!(content.contains("[a] Allow  [d] Deny"));
+
+        // Verify Policy Inspector on Sandbox tab immediately reflects the allowed domain
+        state.active_tab = MissionTab::Sandbox;
+        terminal.draw(|f| draw(f, &state)).unwrap();
+        let buffer_sandbox = terminal.backend().buffer();
+        let sandbox_content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer_sandbox.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(sandbox_content.contains("telemetry.example.org"));
+
+        // Now deny the event and verify status updates
+        state.active_tab = MissionTab::SecurityStream;
+        state.deny_selected_security_event();
+        terminal.draw(|f| draw(f, &state)).unwrap();
+        let buffer_deny = terminal.backend().buffer();
+        let deny_content: String = (0..35)
+            .map(|y| {
+                (0..140)
+                    .map(|x| buffer_deny.get(x, y).symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            deny_content.contains("Denied domain 'telemetry.example.org' in .vetto/policy.toml")
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

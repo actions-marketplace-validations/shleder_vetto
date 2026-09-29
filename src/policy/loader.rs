@@ -171,6 +171,8 @@ pub struct RawFilesystem {
     #[serde(default)]
     pub allow_read: Option<RawStringList>,
     #[serde(default)]
+    pub deny: Option<RawStringList>,
+    #[serde(default)]
     pub deny_write: Option<RawStringList>,
     #[serde(default)]
     pub deny_read: Option<RawStringList>,
@@ -227,7 +229,11 @@ pub struct RawNetwork {
     #[serde(default)]
     pub allow: Option<RawStringList>,
     #[serde(default)]
+    pub allow_domains: Option<RawStringList>,
+    #[serde(default)]
     pub deny: Option<RawStringList>,
+    #[serde(default)]
+    pub deny_domains: Option<RawStringList>,
     #[serde(default)]
     pub deny_network: Option<RawStringList>,
     #[serde(default)]
@@ -680,6 +686,12 @@ impl MergedPolicy {
             if let Some(allow_read) = &filesystem.allow_read {
                 self.allow_read.extend(allow_read.clone().into_vec());
             }
+            if let Some(deny) = &filesystem.deny {
+                let items = deny.clone().into_vec();
+                self.deny_write.extend(items.clone());
+                self.deny_read.extend(items.clone());
+                self.deny_paths.extend(items);
+            }
             if let Some(deny_write) = &filesystem.deny_write {
                 self.deny_write.extend(deny_write.clone().into_vec());
             }
@@ -756,8 +768,14 @@ impl MergedPolicy {
                 if let Some(allow) = &network.allow {
                     self.network_allow.extend(allow.clone().into_vec());
                 }
+                if let Some(allow_domains) = &network.allow_domains {
+                    self.network_allow.extend(allow_domains.clone().into_vec());
+                }
                 if let Some(deny) = &network.deny {
                     self.deny_network.extend(deny.clone().into_vec());
+                }
+                if let Some(deny_domains) = &network.deny_domains {
+                    self.deny_network.extend(deny_domains.clone().into_vec());
                 }
                 if let Some(deny_network) = &network.deny_network {
                     self.deny_network.extend(deny_network.clone().into_vec());

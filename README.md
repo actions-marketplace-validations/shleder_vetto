@@ -2,9 +2,9 @@
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.7"><img src="https://img.shields.io/badge/version-0.5.7-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.7-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.7-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
+  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.8"><img src="https://img.shields.io/badge/version-0.5.8-blue?style=flat-square" alt="Version"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.8-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.8-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
@@ -201,7 +201,10 @@ Vetto engineering maintains native upstream isolation adapters across open-sourc
 | **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | Pre-flight DNS watchdog blocking loopback, RFC 1918, CGNAT, and AWS/GCP instance metadata. |
 | **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` containerless backend with dynamic Linux Landlock ABI (1–6) detection and rootless path bounding. |
 | **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` containerless process fencer with `PR_SET_PDEATHSIG`, subreaper, and namespace sandboxing. |
+| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | ACP local shell execution policy (`GOOSE_ACP_CLIENT_TERMINAL`) and automatic sandbox confinement detection. |
 | **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Multi-tier terminal sandbox execution and secret masking (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
+| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | Credential egress scrubbing across 8 surfaces and workspace tombstones (`splitAuxModelSelector`). |
+| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | Session resume CLI flags and shell-metacharacter validation in Tauri backend. |
 
 ---
 

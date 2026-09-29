@@ -1,5 +1,5 @@
 Name:           vetto
-Version: 0.5.7
+Version: 0.5.8
 Release:        1%{?dist}
 Summary:        Daemon-less sandbox and audit layer for AI coding agents
 License:        Apache-2.0
@@ -34,6 +34,9 @@ cp -a profiles/. %{buildroot}%{_datadir}/vetto/profiles/
 %{_datadir}/vetto/profiles
 
 %changelog
+* Tue Sep 29 2026 vetto contributors - 0.5.8-1
+- Release 0.5.8: Interactive live policy Allow/Deny in TUI Mission Control and SYS_openat2 Landlock hardening.
+
 * Mon Sep 28 2026 vetto contributors - 0.5.7-1
 - Release 0.5.7: Interactive TUI Mission Control Dashboard and real-time security monitor.
 

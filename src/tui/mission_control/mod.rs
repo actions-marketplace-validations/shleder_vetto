@@ -22,7 +22,10 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-pub use state::{AgentCard, DashboardState, MissionTab, SecurityEventItem, SecurityEventType};
+pub use state::{
+    AgentCard, DashboardState, MissionTab, SecurityEventItem, SecurityEventKind, SecurityEventRow,
+    SecurityEventType, TabId,
+};
 pub use theme::{Theme, ThemeMode};
 
 const TICK_RATE: Duration = Duration::from_millis(250);
@@ -128,6 +131,28 @@ pub fn run_dashboard(theme_override: Option<&str>) -> Result<()> {
                             // Vertical navigation (Up/k, Down/j)
                             KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
                             KeyCode::Down | KeyCode::Char('j') => state.select_next(),
+
+                            // 'a': Allow selected security event in .vetto/policy.toml
+                            KeyCode::Char('a') => {
+                                if state.active_tab == MissionTab::SecurityStream {
+                                    state.allow_selected_security_event();
+                                } else {
+                                    state.set_status(
+                                        "Live policy Allow [a] is available on Security Stream tab ([5])",
+                                    );
+                                }
+                            }
+
+                            // 'd': Deny selected security event in .vetto/policy.toml
+                            KeyCode::Char('d') => {
+                                if state.active_tab == MissionTab::SecurityStream {
+                                    state.deny_selected_security_event();
+                                } else {
+                                    state.set_status(
+                                        "Live policy Deny [d] is available on Security Stream tab ([5])",
+                                    );
+                                }
+                            }
 
                             // 'v': Trigger isolation verification probe on Fleet or Sessions tab
                             KeyCode::Char('v') => {

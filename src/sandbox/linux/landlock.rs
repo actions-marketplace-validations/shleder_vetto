@@ -390,24 +390,92 @@ pub fn prepare_ruleset_with_net(
     ))
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct OpenHow {
+    flags: u64,
+    mode: u64,
+    resolve: u64,
+}
+
+const RESOLVE_NO_MAGICLINKS: u64 = 0x02;
+const RESOLVE_NO_SYMLINKS: u64 = 0x04;
+
 struct OpenPath {
     _fd: OwnedFd,
     is_dir: bool,
 }
 
-fn open_path_fd(path: &Path) -> VettoResult<OpenPath> {
-    let c = CString::new(path.to_string_lossy().as_bytes())
-        .map_err(|_| VettoError::Landlock(format!("NUL in path {}", path.display())))?;
-    // SAFETY: c is a valid NUL-terminated string.
-    let fd = unsafe { libc::open(c.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };
-    if fd < 0 {
-        return Err(VettoError::Landlock(format!(
-            "open {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        )));
+/// Opens a filesystem path for Landlock rule attachment using `SYS_openat2` with
+/// `RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` (`0x04 | 0x02`) so neither symlinks
+/// nor `/proc/self/fd/*` magiclinks can be traversed during rule registration.
+pub fn open_landlock_path_fd(path: &Path) -> Result<OwnedFd, std::io::Error> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let c_path = CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("NUL byte in path {}", path.display()),
+        )
+    })?;
+
+    let how = OpenHow {
+        flags: (libc::O_PATH | libc::O_CLOEXEC) as u64,
+        mode: 0,
+        resolve: RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS,
+    };
+
+    // SAFETY: c_path is a valid NUL-terminated string and how is a valid repr(C) OpenHow struct.
+    let fd = unsafe {
+        libc::syscall(
+            libc::SYS_openat2,
+            libc::AT_FDCWD,
+            c_path.as_ptr(),
+            &how as *const OpenHow,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+
+    if fd >= 0 {
+        // SAFETY: fd is a fresh descriptor returned by openat2.
+        return Ok(unsafe { OwnedFd::from_raw_fd(fd as i32) });
     }
-    let owned = unsafe { OwnedFd::from_raw_fd(fd) };
+
+    let err = std::io::Error::last_os_error();
+    if matches!(err.raw_os_error(), Some(libc::ENOSYS) | Some(libc::EPERM)) {
+        // Fallback for older container seccomp profiles that block openat2.
+        // SAFETY: c_path is a valid NUL-terminated string.
+        let fallback_fd = unsafe {
+            libc::openat(
+                libc::AT_FDCWD,
+                c_path.as_ptr(),
+                libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if fallback_fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: fallback_fd is a fresh descriptor returned by openat.
+        let owned = unsafe { OwnedFd::from_raw_fd(fallback_fd) };
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: valid fd + valid out-pointer.
+        if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // O_PATH | O_NOFOLLOW opens the symlink inode itself; reject symlinks with ELOOP.
+        let mode = unsafe { stat.assume_init() }.st_mode;
+        if (mode & libc::S_IFMT) == libc::S_IFLNK {
+            return Err(std::io::Error::from_raw_os_error(libc::ELOOP));
+        }
+        return Ok(owned);
+    }
+
+    Err(err)
+}
+
+fn open_path_fd(path: &Path) -> VettoResult<OpenPath> {
+    let owned = open_landlock_path_fd(path)
+        .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?;
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
     // SAFETY: valid fd + valid out-pointer.
     if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
@@ -652,8 +720,32 @@ pub fn apply_policy_advanced(
 
     for rule in prepared.rules {
         let rule_path = rule.path.clone();
-        let opened = open_path_fd(&rule.path)?;
-        let effective = if opened.is_dir {
+        let owned = match open_landlock_path_fd(&rule.path) {
+            Ok(fd) => fd,
+            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
+                // Reject symlink or magiclink traversal: never attach Landlock rules
+                // through a symlink, while allowing real paths in the ruleset to proceed.
+                continue;
+            }
+            Err(err) => {
+                return Err(VettoError::Landlock(format!(
+                    "open {}: {err}",
+                    rule_path.display()
+                )));
+            }
+        };
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: valid fd + valid out-pointer.
+        if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+            return Err(VettoError::Landlock(format!(
+                "fstat {}: {}",
+                rule_path.display(),
+                std::io::Error::last_os_error()
+            )));
+        }
+        // SAFETY: fstat initialized the value.
+        let is_dir = unsafe { stat.assume_init() }.st_mode & libc::S_IFMT == libc::S_IFDIR;
+        let effective = if is_dir {
             rule.allowed_access
         } else {
             rule.allowed_access & file_mask
@@ -663,7 +755,7 @@ pub fn apply_policy_advanced(
         }
         let rule = LandlockPathBeneathAttr {
             allowed_access: effective,
-            parent_fd: opened._fd.as_raw_fd(),
+            parent_fd: owned.as_raw_fd(),
         };
         // SAFETY: valid rule pointer referencing a live fd.
         let r = unsafe {
@@ -750,6 +842,7 @@ mod tests {
         assert_eq!(std::mem::size_of::<LandlockRulesetAttr>(), 24);
         assert_eq!(std::mem::size_of::<LandlockPathBeneathAttr>(), 16);
         assert_eq!(std::mem::size_of::<LandlockNetPortAttr>(), 16);
+        assert_eq!(std::mem::size_of::<OpenHow>(), 24);
 
         assert_eq!(ruleset_attr_size_for_abi(1), 8);
         assert_eq!(ruleset_attr_size_for_abi(2), 8);
@@ -924,5 +1017,36 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir(&path);
+    }
+
+    #[test]
+    fn open_landlock_path_fd_succeeds_on_real_paths_and_rejects_symlinks_with_eloop() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base_dir = std::env::temp_dir().join(format!(
+            "vetto_openat2_test_{}_{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&base_dir).expect("create test dir");
+
+        let real_file = base_dir.join("real_file.txt");
+        std::fs::write(&real_file, b"landlock-test").expect("write real file");
+
+        let symlink_path = base_dir.join("symlink_to_file.txt");
+        std::os::unix::fs::symlink(&real_file, &symlink_path).expect("create symlink");
+
+        let dir_fd = open_landlock_path_fd(&base_dir).expect("open real directory");
+        assert!(dir_fd.as_raw_fd() >= 0);
+
+        let file_fd = open_landlock_path_fd(&real_file).expect("open real file");
+        assert!(file_fd.as_raw_fd() >= 0);
+
+        let symlink_err = open_landlock_path_fd(&symlink_path)
+            .expect_err("symlink must be rejected by open_landlock_path_fd");
+        assert_eq!(symlink_err.raw_os_error(), Some(libc::ELOOP));
+
+        let _ = std::fs::remove_dir_all(&base_dir);
     }
 }
