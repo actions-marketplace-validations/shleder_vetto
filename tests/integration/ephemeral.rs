@@ -3,8 +3,21 @@
 use crate::common::*;
 use std::fs;
 
+#[cfg(target_os = "windows")]
+fn backend_available() -> bool {
+    let doctor = doctor_output();
+    doctor.contains("appcontainer-api=yes")
+        && doctor.contains("experimental-process-sandbox=yes")
+}
+
 #[test]
 fn test_ephemeral_discards_changes_on_failure() {
+    #[cfg(target_os = "windows")]
+    if !backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable");
+        return;
+    }
+
     let project = TempProject::new("ephemeral-fail");
     let canary = project.path().join("canary.txt");
     write_file(&canary, "pristine content\n");
@@ -51,6 +64,12 @@ fn test_ephemeral_discards_changes_on_failure() {
 
 #[test]
 fn test_ephemeral_applies_changes_on_success() {
+    #[cfg(target_os = "windows")]
+    if !backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable");
+        return;
+    }
+
     let project = TempProject::new("ephemeral-success");
     let canary = project.path().join("canary.txt");
     write_file(&canary, "initial content\n");
