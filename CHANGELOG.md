@@ -5,6 +5,26 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-09-29
+
+### Added
+- **SWE-bench High-Throughput Runtime Adapter (`src/cli/bench.rs`, `tools/swebench/vetto_adapter.py`)**:
+  - Added `vetto bench` and `vetto run --benchmark` fast-path execution modes achieving `<4ms` cold-start latency and `<1MB` per-task memory overhead by bypassing interactive TUI, pre-session workspace snapshots, and post-session diff generation.
+  - Added hermetic `profiles/agents/swebench.toml` sandbox profile enforcing read-only CoW root overlays, isolated `/tmp` tmpfs mounts, `NetMode::Off` network blocking, and cgroups v2 memory/PID limits.
+  - Added `VettoTaskRunner` Python adapter (`tools/swebench/vetto_adapter.py`) implementing the Docker SDK `Container.exec_run` interface for drop-in SWE-bench harness integration without `dockerd`.
+  - Added reproducible benchmark comparison harness (`tools/benchmarks/compare_docker.py`), Criterion benchmarks (`benches/swebench_runtime.rs`), and integration suite (`tests/integration/test_bench_mode.rs`).
+- **GitHub Actions Marketplace Universal Action (`action.yml`, `action/action.yml`)**:
+  - Upgraded root `action.yml` and `action/action.yml` with cross-platform SHA-256 release tarball verification across Linux, macOS, and Windows runners.
+  - Added `--agent` profile selection flag in `action/entrypoint.sh` and automated CodeQL SARIF report upload when `upload-sarif: 'true'` is configured.
+  - Added zero-config workflow templates in `.github/workflow-templates/` (`vetto-aider-ci.yml`, `vetto-claude-ci.yml`) for containerless CI agent pipelines.
+- **Aider CLI Native Preset & Shim Integration (`profiles/agents/aider.toml`, `src/policy/presets.rs`)**:
+  - Added first-class `profiles/agents/aider.toml` preset and expanded `agent_network_allowlist("aider")` to 18 LLM provider and package registry domains (`registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org`).
+  - Protected `.git/config` via `/dev/null` bind-mount (`EBUSY` on removal attempts) and added 9 regression tests in `tests/integration/test_aider_preset.rs`.
+
+### Fixed
+- **Git Guard Fail-Closed Exit Code (`src/shim/mod.rs`, `src/exit_codes.rs`)**:
+  - Mapped `VettoError::GitGuardBlocked` to `ExitCode::SandboxSetupFailed` (`Exit 125`), ensuring destructive git commands (`git reset --hard`, `git push --force`, `git clean -fd`, refspec `HEAD:main`, root pathspecs `:/` and `:`) deterministically terminate fail-closed with code 125 instead of generic exit 1.
+
 ## [0.5.10] - 2026-09-29
 
 ### Changed
