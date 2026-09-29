@@ -485,7 +485,13 @@ if (isMainThread) {
 
     let out = run_vetto_in(
         project.path(),
-        &["--ci", "--net=off", "--", "node", script_path.to_str().unwrap()],
+        &[
+            "--ci",
+            "--net=off",
+            "--",
+            "node",
+            script_path.to_str().unwrap(),
+        ],
     );
     let out_str = stdout(&out);
     let err_str = stderr(&out);
