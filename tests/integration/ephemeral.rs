@@ -6,8 +6,7 @@ use std::fs;
 #[cfg(target_os = "windows")]
 fn backend_available() -> bool {
     let doctor = doctor_output();
-    doctor.contains("appcontainer-api=yes")
-        && doctor.contains("experimental-process-sandbox=yes")
+    doctor.contains("appcontainer-api=yes") && doctor.contains("experimental-process-sandbox=yes")
 }
 
 #[test]
