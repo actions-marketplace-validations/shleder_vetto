@@ -1601,7 +1601,7 @@ pub fn load_with_context(
     load_with_options(profile, custom_path, project, home, tier, options)
 }
 
-fn parse_layer(text: &str, label: &str) -> Result<RawLayer> {
+pub fn parse_layer(text: &str, label: &str) -> Result<RawLayer> {
     toml::from_str(text).with_context(|| format!("failed to parse policy '{label}'"))
 }
 
