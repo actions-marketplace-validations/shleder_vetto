@@ -1,5 +1,5 @@
 Name:           vetto
-Version: 0.5.9
+Version: 0.5.10
 Release:        1%{?dist}
 Summary:        Daemon-less sandbox and audit layer for AI coding agents
 License:        Apache-2.0
@@ -34,6 +34,9 @@ cp -a profiles/. %{buildroot}%{_datadir}/vetto/profiles/
 %{_datadir}/vetto/profiles
 
 %changelog
+* Tue Sep 29 2026 vetto contributors - 0.5.10-1
+- Release 0.5.10: Quick Start enable-all onboarding, GitHub Actions runner fixes, and policy warnings suppression.
+
 * Tue Sep 29 2026 vetto contributors - 0.5.9-1
 - Release 0.5.9: Linux seccomp SYS_clone3 ENOSYS fallback, ephemeral rollback fix, and TUI live policy.
 

@@ -80,7 +80,7 @@ runs:
             resolved_tag=$(curl -sSL -H "Accept: application/vnd.github+json" \
               https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
             if [ -z "${resolved_tag}" ]; then
-              resolved_tag="v0.5.9"
+              resolved_tag="v0.5.10"
             fi
           elif [[ "${ver}" =~ ^v ]]; then
             resolved_tag="${ver}"

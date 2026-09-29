@@ -5,6 +5,23 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-09-29
+
+### Changed
+- **Onboarding & Quick Start**:
+  - Featured `vetto enable --all` prominently as the primary 5-second adoption path in `README.md`.
+  - Added containerless comparison table documenting advantages over Docker (<4ms cold start, 0MB daemon overhead, unprivileged rootless Landlock LSM + cgroups v2 vs root/docker).
+
+### Fixed
+- **GitHub Actions Runner Compatibility (`action/action.yml`)**:
+  - Mapped macOS `uname -s` from `darwin` to `macos` to eliminate HTTP 404 tarball download errors on `macos-latest` runners.
+  - Added native `.zip` decompression for Windows runner archives.
+  - Documented requirement for `permissions: security-events: write` for SARIF uploads.
+- **Policy Checking (`src/policy/checker.rs`)**:
+  - Suppressed redundant `allow_write path ... does not exist; dropped` warnings when an existing ancestor directory is already allowed.
+- **Forensic Verification (`src/verify_ng/environment.rs`)**:
+  - Eliminated race condition when reading `/proc/<pid>/environ` on zombie process states.
+
 ## [0.5.9] - 2026-09-29
 
 ### Fixed

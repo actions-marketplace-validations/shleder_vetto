@@ -2,9 +2,9 @@
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.9"><img src="https://img.shields.io/badge/version-0.5.9-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.9-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.9-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
+  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.10"><img src="https://img.shields.io/badge/version-0.5.10-blue?style=flat-square" alt="Version"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.10-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.10-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
