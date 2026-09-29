@@ -63,6 +63,18 @@ fn sec_unshare_001_blocks_unshare_with_eperm() {
         out_str.contains("blocked:unshare:EPERM") || err_str.contains("EPERM"),
         "expected unshare to be blocked with EPERM, got stdout='{out_str}', stderr='{err_str}'"
     );
+
+    let clone3_out = run_vetto_in(project.path(), &["--ci", "--", &probe, "clone3"]);
+    let clone3_stdout = stdout(&clone3_out);
+    let clone3_stderr = stderr(&clone3_out);
+    if clone3_out.status.code() == Some(77) {
+        eprintln!("SKIP: clone3 unsupported on this architecture/kernel");
+    } else {
+        assert!(
+            clone3_stdout.contains("blocked:clone3:ENOSYS") || clone3_stderr.contains("ENOSYS"),
+            "expected clone3 to be blocked with ENOSYS, got stdout='{clone3_stdout}', stderr='{clone3_stderr}'"
+        );
+    }
 }
 
 /// 2. SEC-RAW-SOCK-002: raw socket denial via seccomp socket type filter (args[1] & 0x0f == SOCK_RAW).
@@ -438,5 +450,52 @@ fn proxy_bypass_001_blocks_cloud_metadata_ip() {
     assert!(
         !out_str.contains("ami-id") && !out_str.contains("instance-id"),
         "cloud metadata must never be returned through relay proxy; got: '{out_str}'"
+    );
+}
+
+/// 13. NODE-WORKER-001: Node.js worker_threads / libuv thread creation succeeds via clone3 ENOSYS fallback.
+#[test]
+#[cfg(target_os = "linux")]
+fn sec_node_worker_threads_spawns_cleanly() {
+    if !have_landlock() {
+        eprintln!("SKIP: no Linux enforcement tier on this machine");
+        return;
+    }
+    if !tool_available("node") {
+        eprintln!("SKIP: node is unavailable");
+        return;
+    }
+    let project = TempProject::new("node-worker");
+    let script = r#"
+const { Worker, isMainThread, parentPort } = require('node:worker_threads');
+if (isMainThread) {
+    const worker = new Worker(__filename);
+    worker.on('message', (msg) => {
+        if (msg === 'pong') {
+            process.stdout.write('NODE_WORKER_OK\n');
+            process.exit(0);
+        }
+    });
+} else {
+    parentPort.postMessage('pong');
+}
+"#;
+    let script_path = project.path().join("worker_test.js");
+    write_file(&script_path, script);
+
+    let out = run_vetto_in(
+        project.path(),
+        &["--ci", "--net=off", "--", "node", script_path.to_str().unwrap()],
+    );
+    let out_str = stdout(&out);
+    let err_str = stderr(&out);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "node worker threads failed: stdout='{out_str}', stderr='{err_str}'"
+    );
+    assert!(
+        out_str.contains("NODE_WORKER_OK"),
+        "expected NODE_WORKER_OK in stdout, got stdout='{out_str}', stderr='{err_str}'"
     );
 }

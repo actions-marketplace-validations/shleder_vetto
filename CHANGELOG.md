@@ -6,6 +6,9 @@ Keep a Changelog; versioning follows SemVer.
 ## [Unreleased]
 
 ### Fixed
+- **Linux Seccomp-BPF `SYS_clone3` Fallback (`ENOSYS`)**:
+  - Route `SYS_clone3` to a dedicated `SECCOMP_RET_ERRNO | ENOSYS` termination branch instead of generic `EPERM`.
+  - Enables glibc 2.34+ `pthread_create` to cleanly fall back to `clone(2)`, unblocking Node.js (V8 `WorkerThreadsTaskRunner`), Bun, Rust, and Python thread pools that previously crashed with exit 133 (SIGTRAP) or exit 134 (SIGABRT).
 - **Ephemeral Sandbox Auto-Rollback (`vetto ephemeral`)**:
   - Eliminated `session_id` variable shadowing in `src/main.rs`, ensuring the timestamp-pid session ID used during initial snapshot capture matches the ID passed to post-session completion handlers.
   - Hardened `handle_ephemeral_completion` in `src/rescue/ephemeral.rs` to gracefully handle cases where pre-session snapshots are absent without throwing unhandled errors.
