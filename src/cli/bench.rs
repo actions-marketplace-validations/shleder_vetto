@@ -154,13 +154,14 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
     }
 
     if let Some(home) = std::env::var_os("HOME") {
+        let home_path = PathBuf::from(home);
         candidates.push(
-            PathBuf::from(home)
+            home_path
                 .join(".vetto/profiles/agents")
                 .join(format!("{profile_name}.toml")),
         );
         candidates.push(
-            PathBuf::from(home)
+            home_path
                 .join(".vetto/profiles")
                 .join(format!("{profile_name}.toml")),
         );
@@ -428,7 +429,7 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
         scenario_id,
     );
     let prepared = unprepared.prepare()?;
-    let mut spawned = prepared.spawn()?;
+    let spawned = prepared.spawn()?;
     let cold_start_ns = t_cold_start.elapsed().as_nanos() as u64;
     let cold_start_ms = cold_start_ns as f64 / 1_000_000.0;
 
@@ -493,7 +494,7 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
     let raw_exit_code = prod_result.exit_code.unwrap_or(-1);
     let timed_out = prod_result.timed_out;
     let oom_killed = raw_exit_code == 137 || (raw_exit_code == -1 && !timed_out);
-    let blocked_attempts = 0usize;
+    let blocked_attempts = prod_result.blocked_attempts;
 
     // Contract: Fail-closed Exit 125 on timeout, OOM or sandbox security breach
     let final_exit_code = if timed_out || oom_killed || raw_exit_code == 125 || blocked_attempts > 0

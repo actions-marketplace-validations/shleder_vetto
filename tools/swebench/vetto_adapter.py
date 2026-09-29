@@ -111,8 +111,10 @@ class VettoTaskRunner:
     @staticmethod
     def _find_vetto_binary(custom_bin: Optional[str] = None) -> str:
         """Locate usable vetto executable."""
-        if custom_bin and (Path(custom_bin).is_file() or shutil.which(custom_bin)):
-            return custom_bin
+        if custom_bin:
+            if Path(custom_bin).is_file() or shutil.which(custom_bin):
+                return custom_bin
+            raise FileNotFoundError(f"Custom vetto binary not found: {custom_bin}")
 
         env_bin = os.environ.get("VETTO_BIN")
         if env_bin and Path(env_bin).is_file():
@@ -125,7 +127,6 @@ class VettoTaskRunner:
 
         # Check repository target directories
         repo_roots = [
-            Path("/home/shleder/prod/vetto"),
             Path(__file__).resolve().parent.parent.parent,
             Path.cwd(),
         ]
@@ -226,9 +227,9 @@ class VettoTaskRunner:
                 duration_ms=wall_time_ms,
                 peak_memory_bytes=0,
                 peak_memory_mb=0.0,
-                blocked_attempts=0,
+                blocked_attempts=1 if proc.returncode == 125 else 0,
                 verdict="pass" if proc.returncode == 0 else "fail_closed",
-                timed_out=proc.returncode in (124, 125),
+                timed_out=proc.returncode == 124,
                 oom_killed=proc.returncode == 137,
                 status="COMPLETED" if proc.returncode == 0 else "FAIL_CLOSED",
                 instance_id=instance_id,

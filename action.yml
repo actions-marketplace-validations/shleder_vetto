@@ -56,10 +56,14 @@ inputs:
     description: 'Opt-in anonymous telemetry (default: false).'
     required: false
     default: 'false'
-  github-token:
+  token:
     description: 'GitHub token for authenticated API requests when resolving the latest release version.'
     required: false
-    default: ''
+    default: ${{ github.token }}
+  github-token:
+    description: 'Alias for token: GitHub token for authenticated API requests when resolving the latest release version.'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   vetto-version:
@@ -85,7 +89,7 @@ runs:
         set -euo pipefail
 
         REQUESTED_VERSION="${{ inputs.version }}"
-        TOKEN="${{ inputs.github-token }}"
+        TOKEN="${{ inputs.token || inputs.github-token }}"
 
         AUTH_HEADER=()
         if [ -n "$TOKEN" ]; then
@@ -95,7 +99,7 @@ runs:
         # Resolve version tag
         if [ -z "$REQUESTED_VERSION" ] || [ "$REQUESTED_VERSION" = "latest" ]; then
           RESOLVED_TAG=$(curl -sSL ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+            https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | (grep '"tag_name":' || true) | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/') || true
           if [ -z "$RESOLVED_TAG" ]; then
             RESOLVED_TAG="v0.5.10"
           fi

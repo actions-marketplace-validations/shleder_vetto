@@ -993,13 +993,13 @@ mod tests {
             "allowlist:omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
-        // Aider defaults to api.openai.com,api.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Aider defaults to full supported AI providers + VCS + package registries
         let cli = Cli::try_parse_from(["vetto", "--", "aider"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("aider"));
         assert_eq!(
             cfg.net.label(),
-            "allowlist:api.openai.com,api.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
+            "allowlist:api.openai.com,api.anthropic.com,auth.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,api.mistral.ai,api.cohere.ai,api.cohere.com,api.together.xyz,api.perplexity.ai,aider.chat,api.github.com,github.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
         );
 
         // OpenCode defaults to api.openai.com,api.anthropic.com,openrouter.ai,opencode.ai,integrate.api.nvidia.com,agentrouter.org,aihubmix.com,api.github.com,github.com,localhost,127.0.0.1,registry.npmjs.org,pypi.org,files.pythonhosted.org

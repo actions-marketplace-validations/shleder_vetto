@@ -1379,6 +1379,11 @@ impl SpawnedProductionExecution {
             .expect("prepared backend always holds a report");
         let diagnostic = self.capability.diagnostic();
         let backend_kind = self.capability.kind();
+        let blocked_attempts = if final_verdict_obj.status == VerdictStatus::Fail && !timed_out {
+            1
+        } else {
+            0
+        };
         self.capability.teardown();
         ProductionResult {
             backend: backend_kind,
@@ -1396,6 +1401,7 @@ impl SpawnedProductionExecution {
             diagnostic,
             verdict: Some(final_verdict_obj),
             fsm_state: Some(self.fsm.current_state()),
+            blocked_attempts,
         }
     }
 }
@@ -1457,6 +1463,7 @@ pub struct ProductionResult {
     pub diagnostic: Option<String>,
     pub verdict: Option<FinalVerdict>,
     pub fsm_state: Option<ExecutionState>,
+    pub blocked_attempts: usize,
 }
 
 impl ProductionResult {
