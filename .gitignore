@@ -24,3 +24,12 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# AI agent metadata and internal artifacts
+.claude/
+.cursor/
+.cursorrules
+.codex/
+AGENTS.md
+prompts/
+scratch/
