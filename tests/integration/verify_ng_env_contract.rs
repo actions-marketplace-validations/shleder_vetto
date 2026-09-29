@@ -143,6 +143,7 @@ fn run_linux_contract(
     env_extra: BTreeMap<String, String>,
     enable_host_control: bool,
 ) -> (runner::ExecutionOutcome, runner::SpawnLog) {
+    let host_env: BTreeMap<String, String> = std::env::vars().collect();
     run_linux_contract_with_host_env(
         scen,
         contract,
@@ -150,7 +151,7 @@ fn run_linux_contract(
         sentinels,
         env_extra,
         enable_host_control,
-        None,
+        Some(host_env),
     )
 }
 
