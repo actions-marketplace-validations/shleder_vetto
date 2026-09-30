@@ -265,10 +265,13 @@ fn measure_peak_memory_bytes(pid: Option<u32>) -> u64 {
                     if p.is_dir() {
                         if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
                             let is_matching_session = name.starts_with(&self_prefix)
-                                || child_prefix.as_deref().is_some_and(|cp| name.starts_with(cp));
+                                || child_prefix
+                                    .as_deref()
+                                    .is_some_and(|cp| name.starts_with(cp));
 
                             if is_matching_session {
-                                if let Ok(content) = std::fs::read_to_string(p.join("memory.peak")) {
+                                if let Ok(content) = std::fs::read_to_string(p.join("memory.peak"))
+                                {
                                     if let Ok(bytes) = content.trim().parse::<u64>() {
                                         if bytes > matched_peak {
                                             matched_peak = bytes;

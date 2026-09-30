@@ -12,9 +12,7 @@ use serde::Deserialize;
 
 use crate::cli::Cli;
 use crate::error::VettoError;
-use crate::policy::presets::{
-    agent_network_allowlist, Preset, CANONICAL_PACKAGE_REGISTRY_DOMAINS,
-};
+use crate::policy::presets::{agent_network_allowlist, Preset, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 pub enum NetMode {
@@ -974,13 +972,14 @@ mod tests {
 
     #[test]
     fn agent_preset_defaults_network_to_allowlist_when_net_omitted() {
-        let claude_expected =
-            format!("allowlist:{}", agent_network_allowlist("claude").join(","));
+        let claude_expected = format!("allowlist:{}", agent_network_allowlist("claude").join(","));
         let codex_expected = format!("allowlist:{}", agent_network_allowlist("codex").join(","));
         let omp_expected = format!("allowlist:{}", agent_network_allowlist("omp").join(","));
         let aider_expected = format!("allowlist:{}", agent_network_allowlist("aider").join(","));
-        let opencode_expected =
-            format!("allowlist:{}", agent_network_allowlist("opencode").join(","));
+        let opencode_expected = format!(
+            "allowlist:{}",
+            agent_network_allowlist("opencode").join(",")
+        );
         let cursor_expected = format!("allowlist:{}", agent_network_allowlist("cursor").join(","));
         let amp_expected = format!("allowlist:{}", agent_network_allowlist("amp").join(","));
 

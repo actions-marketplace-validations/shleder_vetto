@@ -660,45 +660,23 @@ mod tests {
         );
         assert_eq!(
             agent_network_allowlist("zcode"),
-            expected_allowlist(&[
-                "z.ai",
-                "api.z.ai",
-                "glm.z.ai",
-                "api.openai.com",
-            ])
+            expected_allowlist(&["z.ai", "api.z.ai", "glm.z.ai", "api.openai.com",])
         );
         assert_eq!(
             agent_network_allowlist("zcode-cli"),
-            expected_allowlist(&[
-                "z.ai",
-                "api.z.ai",
-                "glm.z.ai",
-                "api.openai.com",
-            ])
+            expected_allowlist(&["z.ai", "api.z.ai", "glm.z.ai", "api.openai.com",])
         );
         assert_eq!(
             agent_network_allowlist("kimi"),
-            expected_allowlist(&[
-                "code.kimi.com",
-                "api.moonshot.cn",
-                "api.moonshot.ai",
-            ])
+            expected_allowlist(&["code.kimi.com", "api.moonshot.cn", "api.moonshot.ai",])
         );
         assert_eq!(
             agent_network_allowlist("grok"),
-            expected_allowlist(&[
-                "x.ai",
-                "api.x.ai",
-                "grok.com",
-            ])
+            expected_allowlist(&["x.ai", "api.x.ai", "grok.com",])
         );
         assert_eq!(
             agent_network_allowlist("grok-build"),
-            expected_allowlist(&[
-                "x.ai",
-                "api.x.ai",
-                "grok.com",
-            ])
+            expected_allowlist(&["x.ai", "api.x.ai", "grok.com",])
         );
         assert_eq!(
             agent_network_allowlist("antigravity"),
@@ -828,48 +806,27 @@ mod tests {
         );
         assert_eq!(
             agent_network_allowlist("copilot"),
-            expected_allowlist(&[
-                "api.github.com",
-                "copilot-proxy.githubusercontent.com",
-            ])
+            expected_allowlist(&["api.github.com", "copilot-proxy.githubusercontent.com",])
         );
         assert_eq!(
             agent_network_allowlist("github-copilot-cli"),
-            expected_allowlist(&[
-                "api.github.com",
-                "copilot-proxy.githubusercontent.com",
-            ])
+            expected_allowlist(&["api.github.com", "copilot-proxy.githubusercontent.com",])
         );
         assert_eq!(
             agent_network_allowlist("windsurf"),
-            expected_allowlist(&[
-                "api.codeium.com",
-                "windsurf.codeium.com",
-            ])
+            expected_allowlist(&["api.codeium.com", "windsurf.codeium.com",])
         );
         assert_eq!(
             agent_network_allowlist("goose"),
-            expected_allowlist(&[
-                "api.openai.com",
-                "api.anthropic.com",
-                "openrouter.ai",
-            ])
+            expected_allowlist(&["api.openai.com", "api.anthropic.com", "openrouter.ai",])
         );
         assert_eq!(
             agent_network_allowlist("openhands"),
-            expected_allowlist(&[
-                "api.all-hands.dev",
-                "api.openai.com",
-                "api.anthropic.com",
-            ])
+            expected_allowlist(&["api.all-hands.dev", "api.openai.com", "api.anthropic.com",])
         );
         assert_eq!(
             agent_network_allowlist("devin"),
-            expected_allowlist(&[
-                "api.devin.ai",
-                "cognition.ai",
-                "api.openai.com",
-            ])
+            expected_allowlist(&["api.devin.ai", "cognition.ai", "api.openai.com",])
         );
         assert_eq!(
             agent_network_allowlist("smolagents"),
