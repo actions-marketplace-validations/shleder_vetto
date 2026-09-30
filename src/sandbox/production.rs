@@ -143,7 +143,7 @@ pub fn prod_tier_mapping(tier: Option<Tier>, net: &NetMode) -> TierMapping {
         // emulated.
         if crate::sandbox::macos::MacosSandbox::seatbelt_available() {
             enforced.push(SecurityCapability::FilesystemIsolation);
-            if net_off || matches!(net, NetMode::Allowlist(_)) {
+            if net_off {
                 enforced.push(SecurityCapability::NetworkIsolation);
             }
             enforced.push(SecurityCapability::ProcessIsolation);
@@ -2081,12 +2081,7 @@ mod production_unit_tests {
             .mandatory
             .contains(&SecurityCapability::FilesystemIsolation));
         let full_relay = prod_tier_mapping(Some(Tier::Full), &relay);
-        #[cfg(not(target_os = "macos"))]
         assert!(!full_relay
-            .enforced
-            .contains(&SecurityCapability::NetworkIsolation));
-        #[cfg(target_os = "macos")]
-        assert!(full_relay
             .enforced
             .contains(&SecurityCapability::NetworkIsolation));
         assert!(

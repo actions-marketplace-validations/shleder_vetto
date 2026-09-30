@@ -102,9 +102,9 @@ pub fn generate_sbpl_template_and_params(
             );
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
             if let Some(port) = proxy_port {
-                sb.push_str("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_IPV4\")))\n");
+                sb.push_str("(allow network-outbound (remote ip (param \"LOCAL_PROXY_IPV4\")))\n");
                 sb.push_str(
-                    "(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))\n",
+                    "(allow network-outbound (remote ip (param \"LOCAL_PROXY_LOCALHOST\")))\n",
                 );
                 params.push(("LOCAL_PROXY_IPV4".to_string(), format!("127.0.0.1:{port}")));
                 params.push((
@@ -394,10 +394,10 @@ mod tests {
         let (template, params) = generate_sbpl_template_and_params(&policy, &net, Some(54321));
 
         assert!(
-            template.contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_IPV4\")))")
+            template.contains("(allow network-outbound (remote ip (param \"LOCAL_PROXY_IPV4\")))")
         );
         assert!(template
-            .contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))"));
+            .contains("(allow network-outbound (remote ip (param \"LOCAL_PROXY_LOCALHOST\")))"));
         assert!(template.contains("(path-literal \"/private/var/run/mDNSResponder\")"));
 
         let param_map: std::collections::HashMap<_, _> = params.into_iter().collect();
