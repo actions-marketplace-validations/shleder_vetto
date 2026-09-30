@@ -1,3 +1,9 @@
+vetto (0.5.14-1) unstable; urgency=medium
+
+  * Production toolchain transparency, rootless CI/CD, native Python & TypeScript SDKs, and Sourcegraph Amp preset.
+
+ -- vetto contributors <noreply@github.com>  Wed, 30 Sep 2026 19:35:00 +0000
+
 vetto (0.5.13-1) unstable; urgency=medium
 
   * Native CrewAI and AutoGen sandbox presets, ecosystem integrations showcase.

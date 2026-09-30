@@ -5,6 +5,25 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-09-30
+
+### Added
+- **Production Toolchain Transparency & Automatic Network Allowlisting (`src/config.rs`, `src/policy/presets.rs`)**:
+  - Implemented automatic `NetMode::Allowlist` for 9 top package managers (`npm`, `pnpm`, `yarn`, `pip`, `pip3`, `poetry`, `uv`, `cargo`, `go`) when invoked without `--net`.
+  - Expanded `CANONICAL_PACKAGE_REGISTRY_DOMAINS` to 14 canonical registry endpoints.
+  - Added dynamic base URL parsing for model endpoint variables (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `DEEPSEEK_BASE_URL`, `OLLAMA_BASE_URL`, `OPENROUTER_BASE_URL`, `MISTRAL_BASE_URL`, `GROQ_BASE_URL`) with loopback host resolution.
+- **Native Python & TypeScript SDKs (`sdk/python/`, `sdk/typescript/`)**:
+  - Published `vetto-python` SDK providing `VettoSandbox` with fail-closed Exit 125 (`VettoSecurityError`), timeout Exit 124 (`VettoTimeoutError`), and LangGraph `VettoToolNode` integration.
+  - Published `@vetto/sdk` TypeScript SDK with sync/async execution APIs and fail-closed security error handling.
+- **Sourcegraph Amp Sandbox Profile & TUI Catalog Expansion (`profiles/agents/amp.toml`, `src/tui/mission_control/`)**:
+  - Added native profile for Sourcegraph Amp CLI with state directory containment (`~/.config/amp`, `~/.local/share/amp`) and provider allowlisting.
+  - Expanded Mission Control TUI preset catalog to 30 presets and supported agents roster to 28.
+- **Rootless CI/CD & SWE-bench Concurrency (`action/action.yml`, `src/cli/bench.rs`)**:
+  - Synchronized composite action with `setup-only` installation, outputs `vetto-version` and `vetto-path`, and test-branch switching under `git_guard`.
+  - Scoped cgroups v2 metrics collection by session PID prefix (`vetto-session-{pid}-`) for 100+ concurrent benchmark workers.
+- **Community Policy-as-Code Templates (`policies/community/`)**:
+  - Added production-grade starter templates: `monorepo.toml`, `web-stack.toml`, `microservices.toml`.
+
 ## [0.5.13] - 2026-09-30
 
 ### Added
