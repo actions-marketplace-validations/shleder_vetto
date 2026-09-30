@@ -6,9 +6,14 @@ branding:
   color: 'blue'
 
 inputs:
+  version:
+    description: 'Vetto version to install (e.g. "0.5.13" or "latest")'
+    required: false
+    default: 'latest'
   command:
-    description: 'Agent command to execute through vetto sandbox.'
-    required: true
+    description: 'Agent command to execute inside the sandbox. If omitted, runs in setup-only mode.'
+    required: false
+    default: ''
   agent:
     description: 'Target agent preset (e.g. aider, claude, codex, cursor, opencode) for automatic profile and network allowlist.'
     required: false
@@ -17,14 +22,14 @@ inputs:
     description: 'Optional custom policy file path or community policy.'
     required: false
     default: ''
+  profile:
+    description: 'Built-in policy profile (strict, default, permissive, audit).'
+    required: false
+    default: 'strict'
   net:
     description: 'Network mode (off, allowlist:..., strict:...). Default: auto-resolved from agent preset or off.'
     required: false
     default: ''
-  profile:
-    description: 'Built-in policy profile (default, strict, permissive, audit).'
-    required: false
-    default: 'strict'
   report:
     description: 'Comma-separated report formats (json, sarif, md, html).'
     required: false
@@ -33,10 +38,6 @@ inputs:
     description: 'Directory for generated audit and security reports.'
     required: false
     default: '.vetto/reports'
-  version:
-    description: 'Vetto version to install (e.g. "0.5.13" or "latest").'
-    required: false
-    default: 'latest'
   fail-on-block:
     description: 'Fail step if at least one blocked attempt is observed (true/false/threshold).'
     required: false
@@ -59,26 +60,27 @@ inputs:
     default: ${{ github.token }}
 
 outputs:
+  vetto-version:
+    description: 'Installed Vetto version'
+    value: ${{ steps.install.outputs.version }}
+  vetto-path:
+    description: 'Path to the installed vetto binary'
+    value: ${{ steps.install.outputs.path }}
   sarif-path:
-    description: 'Path to the generated SARIF report file.'
+    description: 'Path to the generated SARIF report file (when command is provided)'
     value: ${{ steps.run.outputs.sarif-path }}
   exit-code:
-    description: 'Exit code of the sandboxed command.'
+    description: 'Exit code of the sandboxed command (when command is provided)'
     value: ${{ steps.run.outputs.exit-code }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Install vetto sandbox
+    - id: install
+      name: Install and verify Vetto binary
       shell: bash
       run: |
         set -euo pipefail
-
-        if command -v vetto >/dev/null 2>&1; then
-          echo "Vetto is already available in PATH: $(command -v vetto)"
-          vetto --version
-          exit 0
-        fi
 
         REQUESTED_VERSION="${{ inputs.version }}"
         TOKEN="${{ inputs.token || inputs.github-token }}"
@@ -88,6 +90,7 @@ runs:
           AUTH_HEADER=(-H "Authorization: token $TOKEN")
         fi
 
+        # Resolve version tag
         if [ -z "$REQUESTED_VERSION" ] || [ "$REQUESTED_VERSION" = "latest" ]; then
           RESOLVED_TAG=$(curl -sSL ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/shleder/vetto/releases/latest 2>/dev/null | (grep '"tag_name":' || true) | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/') || true
@@ -102,6 +105,7 @@ runs:
 
         VERSION_STR="${RESOLVED_TAG#v}"
 
+        # Detect OS & Arch
         OS_RAW="$(uname -s | tr '[:upper:]' '[:lower:]')"
         ARCH_RAW="$(uname -m)"
 
@@ -138,7 +142,7 @@ runs:
           elif command -v powershell.exe >/dev/null 2>&1; then
             powershell.exe -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath '$target_file').Hash.ToLower()" | tr -d " \r\n"
           else
-            echo "::error::No SHA-256 calculation utility found" >&2
+            echo "::error::No SHA-256 calculation utility found (requires sha256sum, shasum, openssl, certutil, or powershell)" >&2
             exit 1
           fi
         }
@@ -192,12 +196,17 @@ runs:
         fi
 
         BIN_PATH="$INSTALL_DIR/$BIN_NAME"
+
         echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        echo "version=$VERSION_STR" >> "$GITHUB_OUTPUT"
+        echo "path=$BIN_PATH" >> "$GITHUB_OUTPUT"
+
         echo "Vetto $VERSION_STR successfully installed at $BIN_PATH"
         "$BIN_PATH" --version
 
     - name: Run sandboxed command
       id: run
+      if: ${{ inputs.command != '' }}
       shell: bash
       env:
         VETTO_ACTION_COMMAND: ${{ inputs.command }}
@@ -209,10 +218,18 @@ runs:
         VETTO_ACTION_REPORT_DIR: ${{ inputs.report-dir }}
         VETTO_ACTION_FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
         VETTO_ACTION_TELEMETRY: ${{ inputs.telemetry }}
-      run: bash "$GITHUB_ACTION_PATH/entrypoint.sh"
+      run: |
+        if [ -f "$GITHUB_ACTION_PATH/action/entrypoint.sh" ]; then
+          bash "$GITHUB_ACTION_PATH/action/entrypoint.sh"
+        elif [ -f "$GITHUB_ACTION_PATH/entrypoint.sh" ]; then
+          bash "$GITHUB_ACTION_PATH/entrypoint.sh"
+        else
+          echo "::error::entrypoint.sh not found in action path: $GITHUB_ACTION_PATH"
+          exit 1
+        fi
 
-    - name: Upload SARIF report
-      if: ${{ always() && inputs.upload-sarif == 'true' && steps.run.outputs.sarif-path != '' }}
+    - name: Upload SARIF report to GitHub Code Scanning
+      if: ${{ always() && inputs.command != '' && inputs.upload-sarif == 'true' && steps.run.outputs.sarif-path != '' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ steps.run.outputs.sarif-path }}

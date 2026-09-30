@@ -34,9 +34,10 @@ pub const DEEPSEEK_HARNESS_AGENT_TOML: &str =
 pub const OMNIGENT_AGENT_TOML: &str = include_str!("../../profiles/agents/omnigent.toml");
 pub const CREWAI_AGENT_TOML: &str = include_str!("../../profiles/agents/crewai.toml");
 pub const AUTOGEN_AGENT_TOML: &str = include_str!("../../profiles/agents/autogen.toml");
+pub const AMP_AGENT_TOML: &str = include_str!("../../profiles/agents/amp.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
 
-pub const AGENT_PROFILE_NAMES: [&str; 27] = [
+pub const AGENT_PROFILE_NAMES: [&str; 28] = [
     "codex",
     "claude",
     "antigravity",
@@ -63,6 +64,7 @@ pub const AGENT_PROFILE_NAMES: [&str; 27] = [
     "omnigent",
     "crewai",
     "autogen",
+    "amp",
     "custom",
 ];
 
@@ -165,6 +167,7 @@ pub fn canonical_agent_name(name: &str) -> Option<&'static str> {
         "omnigent" | "omnigent-ai" | "omnigent-cli" => Some("omnigent"),
         "crewai" | "crew-ai" => Some("crewai"),
         "autogen" | "autogen-studio" | "autogenstudio" => Some("autogen"),
+        "amp" | "amp-cli" => Some("amp"),
         "custom" => Some("custom"),
         _ => None,
     }
@@ -198,6 +201,7 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
         "omnigent" => Some(OMNIGENT_AGENT_TOML),
         "crewai" => Some(CREWAI_AGENT_TOML),
         "autogen" => Some(AUTOGEN_AGENT_TOML),
+        "amp" => Some(AMP_AGENT_TOML),
         "custom" => Some(CUSTOM_AGENT_TOML),
         _ => None,
     }

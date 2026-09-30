@@ -1,0 +1,78 @@
+[metadata]
+name = "monorepo"
+description = "Community policy tailored for monorepo development (Turborepo, Nx, pnpm/npm/yarn workspaces)"
+
+[filesystem]
+allow_write = [
+    "${PROJECT}/packages",
+    "${PROJECT}/apps",
+    "${PROJECT}/libs",
+    "${PROJECT}/.turbo",
+    "${PROJECT}/.nx",
+    "${PROJECT}/node_modules",
+    "${HOME}/.pnpm-store",
+    "${HOME}/.local/share/pnpm",
+    "${HOME}/.npm",
+    "${HOME}/.cache/yarn",
+    "${HOME}/.cache/turbo",
+    "${HOME}/.cache/nx",
+    "${TMPDIR}",
+    "/tmp",
+]
+allow_read = [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/etc",
+    "${PROJECT}",
+    "${HOME}/.pnpm-store",
+    "${HOME}/.local/share/pnpm",
+    "${HOME}/.npm",
+    "${HOME}/.cache/yarn",
+    "${HOME}/.cache/turbo",
+    "${HOME}/.cache/nx",
+]
+deny_write = [
+    "${PROJECT}/.git",
+    "${PROJECT}/package.json",
+    "${PROJECT}/pnpm-workspace.yaml",
+    "${PROJECT}/pnpm-lock.yaml",
+    "${PROJECT}/turbo.json",
+    "${PROJECT}/nx.json",
+    "${PROJECT}/yarn.lock",
+    "${PROJECT}/package-lock.json",
+    "${HOME}/.ssh",
+    "${HOME}/.aws",
+    "${HOME}/.gnupg",
+]
+deny_read = [
+    "${HOME}/.ssh/id_*",
+    "${HOME}/.aws/credentials",
+    "${HOME}/.gnupg/secring.gpg",
+    "${HOME}/.npmrc",
+    "${PROJECT}/.env",
+    "${PROJECT}/.env.*",
+]
+
+[network]
+mode = "allowlist"
+allowlist = [
+    "registry.npmjs.org",
+    "registry.yarnpkg.com",
+    "github.com",
+    "api.github.com",
+]
+
+[environment]
+pass_through = [
+    "PATH",
+    "NODE_ENV",
+    "TURBO_TOKEN",
+    "TURBO_TEAM",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+]

@@ -1,0 +1,68 @@
+[metadata]
+name = "web-stack"
+description = "Community policy tailored for fullstack web development (Next.js, Vite, Remix, dev servers, build outputs)"
+
+[filesystem]
+allow_write = [
+    "${PROJECT}",
+    "${PROJECT}/dist",
+    "${PROJECT}/build",
+    "${PROJECT}/.next",
+    "${PROJECT}/.svelte-kit",
+    "${PROJECT}/.nuxt",
+    "${PROJECT}/node_modules",
+    "${TMPDIR}",
+    "/tmp",
+]
+allow_read = [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/etc",
+    "${PROJECT}",
+    "${HOME}/.npm",
+    "${HOME}/.cache",
+]
+deny_write = [
+    "${PROJECT}/.git",
+    "${HOME}/.ssh",
+    "${HOME}/.aws",
+    "${HOME}/.gnupg",
+]
+deny_read = [
+    "${PROJECT}/.env.local",
+    "${PROJECT}/.env.production",
+    "${PROJECT}/.env.production.local",
+    "${PROJECT}/.env",
+    "${HOME}/.ssh/id_*",
+    "${HOME}/.aws/credentials",
+    "${HOME}/.gnupg/secring.gpg",
+]
+
+[network]
+mode = "allowlist"
+allowlist = [
+    "registry.npmjs.org",
+    "github.com",
+    "api.github.com",
+    "localhost",
+    "127.0.0.1",
+]
+allow_tcp_bind = [3000, 5173, 8000, 8080]
+allow_tcp_connect = [3000, 5173, 8000, 8080]
+
+[environment]
+pass_through = [
+    "PATH",
+    "NODE_ENV",
+    "PORT",
+    "HOST",
+    "VITE_*",
+    "NEXT_PUBLIC_*",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+]

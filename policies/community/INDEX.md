@@ -53,3 +53,24 @@ This copies the selected policy into `./vetto.toml`.
 - **Use case**: Fast-paced web development requiring broad package ecosystem access.
 - **Egress**: Multiple major package registries and developer APIs.
 - **Write scope**: Project workspace and temporary directories.
+
+### 8. `monorepo`
+- **File**: [`monorepo.toml`](monorepo.toml)
+- **Use case**: Turborepo, Nx, and pnpm/npm/yarn workspaces with multi-package isolation.
+- **Egress**: Package registries (npmjs, yarnpkg) and GitHub API.
+- **Write scope**: Sub-packages (`packages/`, `apps/`, `libs/`), shared caches (`.turbo/`, `.nx/`, `.pnpm-store`), protecting root configs (`package.json`, `pnpm-workspace.yaml`).
+
+### 9. `web-stack`
+- **File**: [`web-stack.toml`](web-stack.toml)
+- **Use case**: Fullstack web applications (Next.js, Vite, Remix, dev servers, build outputs).
+- **Egress**: Package registries, GitHub API, localhost loopback dev servers.
+- **Write scope**: Project workspace, build outputs (`dist/`, `.next/`, `build/`), masking `.env.local` secrets.
+- **Network ports**: Local dev server bind/connect on ports 3000, 5173, 8000, 8080.
+
+### 10. `microservices`
+- **File**: [`microservices.toml`](microservices.toml)
+- **Use case**: Containerless microservices backends with IPC sockets, db connections, and cloud metadata blocking.
+- **Egress**: Localhost loopback IPC, db sockets (`/tmp/.s.PGSQL.*`, `mysql.sock`, `redis.sock`), blocking `169.254.169.254`.
+- **Write scope**: Project directory and temporary runtime directories, blocking cloud/cluster credentials (`~/.aws`, `~/.kube`, `~/.docker`).
+- **Resource ceilings**: Strict containerless limits (max 128 processes, 1024 open files, 2GB memory).
+

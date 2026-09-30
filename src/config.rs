@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::cli::Cli;
 use crate::error::VettoError;
-use crate::policy::presets::{agent_network_allowlist, Preset};
+use crate::policy::presets::{agent_network_allowlist, Preset, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 pub enum NetMode {
@@ -234,6 +234,13 @@ impl RunConfig {
                     } else {
                         NetMode::Off
                     }
+                } else if is_toolchain_command(&cli.agent) {
+                    NetMode::Allowlist(
+                        CANONICAL_PACKAGE_REGISTRY_DOMAINS
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                    )
                 } else {
                     NetMode::Off
                 }
@@ -730,6 +737,23 @@ pub fn detect_agent_preset(command: &[String]) -> Option<String> {
     crate::policy::defaults::canonical_agent_name(&stem).map(|s| s.to_string())
 }
 
+/// Returns true if the command being executed is a standard package manager or toolchain binary.
+pub fn is_toolchain_command(command: &[String]) -> bool {
+    let Some(first) = command.first() else {
+        return false;
+    };
+    let normalized = first.replace('\\', "/");
+    let path = std::path::Path::new(&normalized);
+    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        return false;
+    };
+    let stem = stem.to_ascii_lowercase();
+    matches!(
+        stem.as_str(),
+        "npm" | "pnpm" | "yarn" | "pip" | "pip3" | "poetry" | "uv" | "cargo" | "go"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -948,77 +972,70 @@ mod tests {
 
     #[test]
     fn agent_preset_defaults_network_to_allowlist_when_net_omitted() {
-        // Claude defaults to api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        let claude_expected = format!("allowlist:{}", agent_network_allowlist("claude").join(","));
+        let codex_expected = format!("allowlist:{}", agent_network_allowlist("codex").join(","));
+        let omp_expected = format!("allowlist:{}", agent_network_allowlist("omp").join(","));
+        let aider_expected = format!("allowlist:{}", agent_network_allowlist("aider").join(","));
+        let opencode_expected = format!(
+            "allowlist:{}",
+            agent_network_allowlist("opencode").join(",")
+        );
+        let cursor_expected = format!("allowlist:{}", agent_network_allowlist("cursor").join(","));
+        let amp_expected = format!("allowlist:{}", agent_network_allowlist("amp").join(","));
+
+        // Claude defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "claude", "-p", "hello"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("claude"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), claude_expected);
 
-        // Claude-code alias defaults to api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Claude-code alias defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "claude-code"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("claude"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), claude_expected);
 
-        // Codex defaults to api.openai.com,chatgpt.com,auth.openai.com,cdn.oaistatic.com,chat.openai.com,platform.openai.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Codex defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "codex", "exec"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("codex"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.openai.com,chatgpt.com,auth.openai.com,cdn.oaistatic.com,chat.openai.com,platform.openai.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), codex_expected);
 
-        // Codex-cli alias defaults to api.openai.com,chatgpt.com,auth.openai.com,cdn.oaistatic.com,chat.openai.com,platform.openai.com,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Codex-cli alias defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "codex-cli"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("codex"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.openai.com,chatgpt.com,auth.openai.com,cdn.oaistatic.com,chat.openai.com,platform.openai.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), codex_expected);
 
-        // OMP defaults to omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // OMP defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "omp"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("omp"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:omp.sh,api.anthropic.com,api.openai.com,generativelanguage.googleapis.com,openrouter.ai,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), omp_expected);
 
         // Aider defaults to full supported AI providers + VCS + package registries
         let cli = Cli::try_parse_from(["vetto", "--", "aider"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("aider"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.openai.com,api.anthropic.com,auth.anthropic.com,openrouter.ai,api.deepseek.com,api.groq.com,generativelanguage.googleapis.com,api.mistral.ai,api.cohere.ai,api.cohere.com,api.together.xyz,api.perplexity.ai,aider.chat,api.github.com,github.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), aider_expected);
 
-        // OpenCode defaults to api.openai.com,api.anthropic.com,openrouter.ai,opencode.ai,integrate.api.nvidia.com,agentrouter.org,aihubmix.com,api.github.com,github.com,localhost,127.0.0.1,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // OpenCode defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "opencode"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("opencode"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.openai.com,api.anthropic.com,openrouter.ai,opencode.ai,integrate.api.nvidia.com,agentrouter.org,aihubmix.com,api.github.com,github.com,localhost,127.0.0.1,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), opencode_expected);
 
-        // Cursor defaults to api2.cursor.sh,api.cursor.sh,auth.cursor.sh,repo.cursor.sh,registry.npmjs.org,pypi.org,files.pythonhosted.org
+        // Cursor defaults to agent allowlist
         let cli = Cli::try_parse_from(["vetto", "--", "cursor-server"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("cursor"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api2.cursor.sh,api.cursor.sh,auth.cursor.sh,repo.cursor.sh,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), cursor_expected);
+
+        // Amp defaults to agent allowlist
+        let cli = Cli::try_parse_from(["vetto", "--", "amp"]).unwrap();
+        let cfg = RunConfig::from_cli(&cli).unwrap();
+        assert_eq!(cfg.agent_preset.as_deref(), Some("amp"));
+        assert_eq!(cfg.net.label(), amp_expected);
 
         // Explicit --agent flag with alias also defaults to agent allowlist
         let cli = Cli::try_parse_from([
@@ -1032,12 +1049,20 @@ mod tests {
         .unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("claude"));
-        assert_eq!(
-            cfg.net.label(),
-            "allowlist:api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
-        );
+        assert_eq!(cfg.net.label(), claude_expected);
 
-        // Non-agent commands default to NetMode::Off
+        // Standard toolchain binaries default to NetMode::Allowlist(CANONICAL_PACKAGE_REGISTRY_DOMAINS)
+        let toolchain_net = format!("allowlist:{}", CANONICAL_PACKAGE_REGISTRY_DOMAINS.join(","));
+        for cmd in [
+            "npm", "pnpm", "yarn", "pip", "pip3", "poetry", "uv", "cargo", "go",
+        ] {
+            let cli = Cli::try_parse_from(["vetto", "--", cmd, "install"]).unwrap();
+            let cfg = RunConfig::from_cli(&cli).unwrap();
+            assert_eq!(cfg.agent_preset, None);
+            assert_eq!(cfg.net.label(), toolchain_net, "failed for command {cmd}");
+        }
+
+        // Non-agent, non-toolchain commands default to NetMode::Off
         let cli = Cli::try_parse_from(["vetto", "--", "python", "script.py"]).unwrap();
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset, None);
@@ -1049,6 +1074,11 @@ mod tests {
         assert_eq!(cfg.agent_preset.as_deref(), Some("claude"));
         assert_eq!(cfg.net.label(), "off");
 
+        // Explicit --net off overrides toolchain default
+        let cli = Cli::try_parse_from(["vetto", "--net", "off", "--", "cargo", "build"]).unwrap();
+        let cfg = RunConfig::from_cli(&cli).unwrap();
+        assert_eq!(cfg.net.label(), "off");
+
         // Explicit --net allowlist overrides agent default
         let cli =
             Cli::try_parse_from(["vetto", "--net", "allowlist:custom.api.com", "--", "codex"])
@@ -1056,6 +1086,26 @@ mod tests {
         let cfg = RunConfig::from_cli(&cli).unwrap();
         assert_eq!(cfg.agent_preset.as_deref(), Some("codex"));
         assert_eq!(cfg.net.label(), "allowlist:custom.api.com");
+    }
+
+    #[test]
+    fn test_is_toolchain_command() {
+        for bin in [
+            "npm", "pnpm", "yarn", "pip", "pip3", "poetry", "uv", "cargo", "go",
+        ] {
+            assert!(
+                is_toolchain_command(&[bin.to_string()]),
+                "expected {bin} to be recognized"
+            );
+            assert!(
+                is_toolchain_command(&[format!("/usr/bin/{bin}")]),
+                "expected /usr/bin/{bin} to be recognized"
+            );
+        }
+        assert!(!is_toolchain_command(&["python".to_string()]));
+        assert!(!is_toolchain_command(&["node".to_string()]));
+        assert!(!is_toolchain_command(&["bash".to_string()]));
+        assert!(!is_toolchain_command(&[]));
     }
 
     #[test]

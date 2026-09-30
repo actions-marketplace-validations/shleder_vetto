@@ -234,27 +234,56 @@ fn resolve_binary_in_path(cmd: &str) -> Result<String> {
     bail!("benchmark target binary '{cmd}' not found in PATH")
 }
 
-fn measure_peak_memory_bytes(_pid: Option<u32>) -> u64 {
+fn measure_peak_memory_bytes(pid: Option<u32>) -> u64 {
+    let _ = pid;
+
     #[cfg(target_os = "linux")]
     {
-        // Try reading peak memory from active cgroups v2 scope
+        // 1. If child PID is provided, attempt direct inspection via procfs if still available
+        if let Some(child_pid) = pid {
+            if let Some(dir) = crate::verify_ng::linux_enforce::child_cgroup_dir(child_pid) {
+                if let Ok(content) = std::fs::read_to_string(dir.join("memory.peak")) {
+                    if let Ok(bytes) = content.trim().parse::<u64>() {
+                        if bytes > 0 {
+                            return bytes;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Try reading peak memory from active cgroups v2 scope matching this process session or PID
         if let Some(root) = crate::sandbox::linux::cgroup::find_cgroup_root() {
             if let Ok(entries) = std::fs::read_dir(&root) {
+                let self_pid = std::process::id();
+                let self_prefix = format!("vetto-session-{self_pid}-");
+                let child_prefix = pid.map(|p| format!("vetto-session-{p}-"));
+
+                let mut matched_peak: u64 = 0;
                 for entry in entries.flatten() {
                     let p = entry.path();
-                    if p.is_dir()
-                        && p.file_name()
-                            .and_then(|n| n.to_str())
-                            .is_some_and(|n| n.starts_with("vetto-session-"))
-                    {
-                        if let Ok(content) = std::fs::read_to_string(p.join("memory.peak")) {
-                            if let Ok(bytes) = content.trim().parse::<u64>() {
-                                if bytes > 0 {
-                                    return bytes;
+                    if p.is_dir() {
+                        if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                            let is_matching_session = name.starts_with(&self_prefix)
+                                || child_prefix
+                                    .as_deref()
+                                    .is_some_and(|cp| name.starts_with(cp));
+
+                            if is_matching_session {
+                                if let Ok(content) = std::fs::read_to_string(p.join("memory.peak"))
+                                {
+                                    if let Ok(bytes) = content.trim().parse::<u64>() {
+                                        if bytes > matched_peak {
+                                            matched_peak = bytes;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                }
+                if matched_peak > 0 {
+                    return matched_peak;
                 }
             }
         }
@@ -634,5 +663,14 @@ mod tests {
         assert_eq!(res.exit_code, 125);
         assert_eq!(res.verdict, "fail_closed");
         assert!(res.timed_out);
+    }
+
+    #[test]
+    fn test_measure_peak_memory_bytes() {
+        let mem_none = measure_peak_memory_bytes(None);
+        assert!(mem_none >= 512 * 1024);
+
+        let mem_pid = measure_peak_memory_bytes(Some(std::process::id()));
+        assert!(mem_pid >= 512 * 1024);
     }
 }
