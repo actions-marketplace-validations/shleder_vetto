@@ -243,7 +243,7 @@ pub fn prod_tier_mapping(tier: Option<Tier>, net: &NetMode) -> TierMapping {
                     SecurityCapability::ProcessTreeContainment,
                     SecurityCapability::HostEvidence,
                 ];
-                if net_off {
+                if !matches!(net, NetMode::Allowlist(_)) {
                     caps.push(SecurityCapability::NetworkIsolation);
                 }
                 caps

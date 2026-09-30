@@ -103,9 +103,7 @@ pub fn generate_sbpl_template_and_params(
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
             if let Some(port) = proxy_port {
                 sb.push_str(&format!(
-                    "(allow network-outbound (remote tcp \"127.0.0.1:{port}\"))\n\
-                     (allow network-outbound (remote tcp \"localhost:{port}\"))\n\
-                     (allow network-outbound (remote ip \"127.0.0.1:{port}\"))\n\
+                    "(allow network-outbound (remote tcp \"localhost:{port}\"))\n\
                      (allow network-outbound (remote ip \"localhost:{port}\"))\n"
                 ));
             }
@@ -390,14 +388,11 @@ mod tests {
         let net = NetMode::Allowlist(vec!["example.com".to_string()]);
         let (template, _params) = generate_sbpl_template_and_params(&policy, &net, Some(54321));
 
-        assert!(template.contains("(allow network-outbound (remote tcp \"127.0.0.1:54321\"))"));
         assert!(template.contains("(allow network-outbound (remote tcp \"localhost:54321\"))"));
-        assert!(template.contains("(allow network-outbound (remote ip \"127.0.0.1:54321\"))"));
         assert!(template.contains("(allow network-outbound (remote ip \"localhost:54321\"))"));
         assert!(template.contains("(path-literal \"/private/var/run/mDNSResponder\")"));
 
         let inlined = generate(&policy, &net, Some(54321));
-        assert!(inlined.contains("\"127.0.0.1:54321\""));
         assert!(inlined.contains("\"localhost:54321\""));
     }
 }
