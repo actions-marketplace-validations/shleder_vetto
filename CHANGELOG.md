@@ -5,6 +5,18 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-09-30
+
+### Added
+- **Native Sandbox Presets for CrewAI and AutoGen (`profiles/agents/crewai.toml`, `profiles/agents/autogen.toml`)**:
+  - Added dedicated policy presets isolating local state directories (`~/.crewai`, `~/.autogen`, `~/.autogenstudio`).
+  - Configured deterministic environment variable pass-through (`CREWAI_*`, `AUTOGEN_*`) and domain egress allowlists for major model providers and cloud APIs.
+  - Integrated auto-detection in `src/onboard.rs`, `src/doctor/agent_check.rs`, and `src/init.rs`.
+  - Registered presets in `src/policy/defaults.rs` (expanding `AGENT_PROFILE_NAMES` to 27) and updated Mission Control TUI (`src/tui/mission_control/state.rs`, `src/tui/mission_control/ui.rs`).
+  - Added end-to-end integration tests `test_crewai_profile_consistency` and `test_autogen_profile_consistency` in `tests/integration/test_agent_profiles_e2e.rs`.
+- **Upstream Integrations Showcase Expansion (`README.md`)**:
+  - Added CrewAI (#7831), Microsoft AutoGen (#8299), and OpenClaw (#161125) to the Active Upstream Integrations & Ecosystem PRs showcase table.
+
 ## [0.5.12] - 2026-09-30
 
 ### Added

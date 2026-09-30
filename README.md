@@ -2,9 +2,9 @@
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.12"><img src="https://img.shields.io/badge/version-0.5.12-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.12-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.12-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
+  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.13"><img src="https://img.shields.io/badge/version-0.5.13-blue?style=flat-square" alt="Version"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.13-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.13-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
@@ -185,7 +185,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.5.12
+        uses: shleder/vetto@v0.5.13
         with:
           command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
           agent: 'claude'
@@ -202,7 +202,7 @@ When `command` is omitted, `shleder/vetto` verifies and installs the standalone 
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.5.12
+        uses: shleder/vetto@v0.5.13
         with:
           version: 'latest'
 
