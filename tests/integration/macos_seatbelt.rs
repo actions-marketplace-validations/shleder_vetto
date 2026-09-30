@@ -50,9 +50,9 @@ fn secret_reads_are_not_yet_isolated_on_macos() {
 #[cfg(target_os = "macos")]
 #[test]
 fn relay_net_modes_are_rejected_loudly_before_spawn() {
-    // Both relay modes must fail closed with an explicit reason on macOS —
+    // Strict relay modes must fail closed with an explicit reason on macOS -
     // never silently degrade to --net=off.
-    for mode in ["--net=allowlist:example.com", "--net=strict:github.com:22"] {
+    for mode in ["--net=strict:github.com:22", "--net=ask"] {
         let out = std::process::Command::new(env!("CARGO_BIN_EXE_vetto"))
             .args(["--tui=none", mode, "--", "true"])
             .output()
@@ -64,6 +64,20 @@ fn relay_net_modes_are_rejected_loudly_before_spawn() {
             "{mode} rejection must explain why: {stderr}"
         );
     }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn allowlist_net_mode_is_accepted_on_macos() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_vetto"))
+        .args(["--tui=none", "--net=allowlist:example.com", "--", "true"])
+        .output()
+        .expect("vetto run");
+    assert!(
+        out.status.success(),
+        "--net=allowlist must succeed on macOS: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[cfg(target_os = "macos")]

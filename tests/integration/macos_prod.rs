@@ -143,13 +143,13 @@ fn test_macos_backend_prepare_001() {
     }
 }
 
-/// TEST-MACOS-BACKEND-RELAY-FAIL-001: relay net modes fail preparation
-/// closed (`preparation_ok == false`, network `Failed`) — never a silent
+/// TEST-MACOS-BACKEND-RELAY-FAIL-001: unsupported strict relay net modes fail preparation
+/// closed (`preparation_ok == false`, network `Failed`) - never a silent
 /// downgrade to `--net=off`.
 #[test]
 fn test_macos_backend_relay_fail_001() {
     use vetto::verify_ng::sandbox_backend::select_backend;
-    let (policy, identity) = canonical_policy("allowlist:example.com");
+    let (policy, identity) = canonical_policy("strict:github.com:22");
     let mut backend = select_backend(BackendKind::Macos);
     let report = backend.prepare(&policy, &identity);
     #[cfg(target_os = "macos")]
@@ -157,7 +157,7 @@ fn test_macos_backend_relay_fail_001() {
         use vetto::verify_ng::sandbox_backend::PreparationFailureKind;
         assert!(
             !report.preparation_ok,
-            "relay net must fail preparation on macOS"
+            "strict relay net must fail preparation on macOS"
         );
         assert_eq!(
             report.state(SecurityCapability::NetworkIsolation),
@@ -171,6 +171,33 @@ fn test_macos_backend_relay_fail_001() {
                 Some(PreparationFailureKind::UnsupportedOnPlatform)
             )),
             "typed failure reason, got: {failed:?}"
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        for cap in SecurityCapability::all() {
+            assert_eq!(report.state(cap), EnforcementState::Unsupported);
+        }
+    }
+}
+
+/// TEST-MACOS-BACKEND-ALLOWLIST-CONFIGURED-001: allowlist net mode succeeds
+/// preparation on macOS with NetworkIsolation in Configured state.
+#[test]
+fn test_macos_backend_allowlist_configured_001() {
+    use vetto::verify_ng::sandbox_backend::select_backend;
+    let (policy, identity) = canonical_policy("allowlist:example.com");
+    let mut backend = select_backend(BackendKind::Macos);
+    let report = backend.prepare(&policy, &identity);
+    #[cfg(target_os = "macos")]
+    {
+        assert!(
+            report.preparation_ok,
+            "allowlist net must succeed preparation on macOS"
+        );
+        assert_eq!(
+            report.state(SecurityCapability::NetworkIsolation),
+            EnforcementState::Configured
         );
     }
     #[cfg(not(target_os = "macos"))]
@@ -225,15 +252,28 @@ fn test_macos_tier_mapping_001() {
     assert!(!mapping
         .mandatory
         .contains(&SecurityCapability::ResourceLimits));
-    let relay = NetMode::Allowlist(vec!["example.com".to_string()]);
-    let relay_mapping = prod_tier_mapping(None, &relay);
+    let strict = NetMode::Strict(vec![vetto::config::NetRule {
+        domain: "example.com".to_string(),
+        port: 443,
+    }]);
+    let strict_mapping = prod_tier_mapping(None, &strict);
     assert!(
-        !relay_mapping
+        !strict_mapping
             .enforced
             .contains(&SecurityCapability::NetworkIsolation),
-        "relay net is never enforced on macOS"
+        "strict relay net is never enforced on macOS"
     );
-    assert!(!relay_mapping.allows_pass_possible);
+    assert!(!strict_mapping.allows_pass_possible);
+
+    let allowlist = NetMode::Allowlist(vec!["example.com".to_string()]);
+    let allow_mapping = prod_tier_mapping(None, &allowlist);
+    assert!(
+        !allow_mapping
+            .enforced
+            .contains(&SecurityCapability::NetworkIsolation),
+        "allowlist net is a relay net and not a total network isolation claim"
+    );
+    assert!(allow_mapping.allows_pass_possible);
 }
 
 /// TEST-MACOS-MATRIX-001: the platform matrix reflects the real macOS
@@ -671,8 +711,8 @@ fn test_macos_prod_timeout_001() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// TEST-MACOS-PROD-PREPARE-FAIL-NO-SPAWN-001: a relay-mode preparation
-/// through the REAL production object yields `Err` with zero spawn — spawn
+/// TEST-MACOS-PROD-PREPARE-FAIL-NO-SPAWN-001: a strict relay-mode preparation
+/// through the REAL production object yields `Err` with zero spawn - spawn
 /// counters unchanged, no child, no fallback.
 #[cfg(target_os = "macos")]
 #[test]
@@ -685,7 +725,10 @@ fn test_macos_prod_prepare_fail_no_spawn_001() {
     let entered_before = PROD_BACKEND_ENTERED.load(std::sync::atomic::Ordering::SeqCst);
     let spawned_before = PROD_SPAWN_COUNT.load(std::sync::atomic::Ordering::SeqCst);
     let root = scratch("prepare-fail");
-    let net = NetMode::Allowlist(vec!["example.com".to_string()]);
+    let net = NetMode::Strict(vec![vetto::config::NetRule {
+        domain: "example.com".to_string(),
+        port: 443,
+    }]);
     let backend = Backend::detect(net.clone(), false).expect("detect macOS mechanics");
     let unprepared = UnpreparedProductionExecution::new(
         backend,
@@ -703,7 +746,7 @@ fn test_macos_prod_prepare_fail_no_spawn_001() {
         PROD_SCENARIO_ID.to_string(),
     );
     let err = match unprepared.prepare() {
-        Ok(_) => panic!("relay on macOS must fail closed with no spawn"),
+        Ok(_) => panic!("strict relay on macOS must fail closed with no spawn"),
         Err(e) => e,
     };
     assert!(
@@ -719,6 +762,55 @@ fn test_macos_prod_prepare_fail_no_spawn_001() {
         PROD_SPAWN_COUNT.load(std::sync::atomic::Ordering::SeqCst),
         spawned_before,
         "spawn count unchanged: zero spawn"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// TEST-MACOS-PROD-ALLOWLIST-SPAWN-001: an allowlist-mode preparation and spawn
+/// on macOS succeeds, runs through Seatbelt with local proxy configured,
+/// and reports NetworkIsolation as enforced.
+#[cfg(target_os = "macos")]
+#[test]
+fn test_macos_prod_allowlist_spawn_001() {
+    let _guard = macos_prod_serial().lock().unwrap();
+    use vetto::sandbox::production::UnpreparedProductionExecution;
+    use vetto::sandbox::{Backend, StdioMode};
+    let root = scratch("allowlist-spawn");
+    let staged = root.join("run.sh");
+    std::fs::write(&staged, "exit 0\n").expect("stage child script");
+    let net = NetMode::Allowlist(vec!["example.com".to_string()]);
+    let backend = Backend::detect(net.clone(), false).expect("detect macOS mechanics");
+    let unprepared = UnpreparedProductionExecution::new(
+        backend,
+        Policy::default(),
+        vec!["/bin/sh".to_string(), staged.display().to_string()],
+        root.clone(),
+        HashMap::new(),
+        net,
+        Some(Duration::from_secs(15)),
+        StdioMode::Inherit,
+        PROD_SCENARIO_ID.to_string(),
+    );
+    let prepared = unprepared.prepare().expect("prepare macOS allowlist child");
+    assert_eq!(prepared.backend_kind(), BackendKind::Macos);
+    let pre = prepared
+        .enforcement_report()
+        .expect("prepare report")
+        .clone();
+    assert!(pre.preparation_ok);
+    assert_eq!(
+        pre.state(SecurityCapability::NetworkIsolation),
+        EnforcementState::Configured
+    );
+    let spawned = prepared.spawn().expect("spawn macOS allowlist child");
+    let result = spawned.wait_collect();
+    assert_eq!(result.exit_code, Some(0));
+    assert!(
+        result
+            .report
+            .is_enforced(SecurityCapability::NetworkIsolation),
+        "network isolation must be enforced under allowlist: {}",
+        result.render_deterministic()
     );
     let _ = std::fs::remove_dir_all(&root);
 }

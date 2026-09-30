@@ -256,8 +256,14 @@ fn test_aider_filesystem_history_and_cache_allowed() {
     );
 }
 
+fn aider_git_guard_serial() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
 #[test]
 fn test_aider_destructive_git_reset_fails_closed_125() {
+    let _guard = aider_git_guard_serial().lock().unwrap();
     // 1. Check is_destructive_git_command detects reset --hard HEAD~10
     let reset_cmd: Vec<String> = vec!["reset".into(), "--hard".into(), "HEAD~10".into()];
     let reason = is_destructive_git_command(&reset_cmd);
@@ -295,6 +301,7 @@ fn test_aider_destructive_git_reset_fails_closed_125() {
 
 #[test]
 fn test_aider_destructive_git_commands_suite_fails_closed_125() {
+    let _guard = aider_git_guard_serial().lock().unwrap();
     let test_cases: Vec<Vec<String>> = vec![
         vec!["reset".into(), "--hard".into()],
         vec!["reset".into(), "--hard=HEAD~1".into()],
@@ -316,6 +323,7 @@ fn test_aider_destructive_git_commands_suite_fails_closed_125() {
 
     std::env::set_var("VETTO_GIT_GUARD", "1");
     for cmd in test_cases {
+        std::env::set_var("VETTO_GIT_GUARD", "1");
         let dispatch_result = dispatch("git", &cmd);
         assert!(
             dispatch_result.is_err(),

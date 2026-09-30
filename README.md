@@ -236,8 +236,10 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 | :--- | :--- | :--- | :--- | :--- |
 | **Linux (Native)**<br>Tier 1 | **Landlock LSM (ABI 1–6)**<br>Inode-level VFS masking over `~/.ssh`, `~/.aws`, `.env` (mode 0000 tmpfs) | **Network Namespaces (`CLONE_NEWNET`)**<br>Loopback isolation + local TCP/TLS broker with SNI inspection | **PID Namespaces (`CLONE_NEWPID`)**<br>Deterministic process tree extinction via `cgroups v2` | Production |
 | **Linux (WSL2)**<br>Tier 1 | **Landlock LSM via WSL2 kernel**<br>Full inode restriction | **Network Namespaces inside VM**<br>Isolated broker egress | **PID Namespaces + `/proc` sweep**<br>Full tree extinction | Production (Recommended for Windows) |
-| **macOS (Darwin)**<br>Tier 2 | **Seatbelt (`libsandbox.1.dylib`)**<br>Write confinement to `$PROJECT` and `/tmp` | **Network Lockdown**<br>`--net=off` via `(deny network*)` rules | **Process Group Sweeping**<br>`pidfd` / kqueue watchdog supervision | Standard (Requires Full Disk Access for `~/Documents`) |
+| **macOS (Darwin)**<br>Tier 2 | **Seatbelt (`libsandbox.1.dylib`)**<br>Write confinement to `$PROJECT` and `/tmp` | **Network Lockdown**<br>`--net=off` (mDNS blocked) & `--net=allowlist` (local proxy)* | **Process Group Sweeping**<br>`pidfd` / kqueue watchdog supervision | Standard (Requires Full Disk Access for `~/Documents`) |
 | **Windows Native**<br>Tier 3 | **AppContainer & LPAC**<br>DACL token restriction | **Capability Lockdown**<br>Restricted network SIDs | **Job Objects**<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Use WSL2 for Tier 1 kernel namespaces) |
+
+\* **macOS Tier 2 Seatbelt Enforcement**: Darwin lacks unprivileged network namespaces (`CLONE_NEWNET`). Vetto enforces strict filesystem write isolation via native Seatbelt (`libsandbox.1.dylib`) and masks host secrets. `--net=off` blocks all IP egress and IPC to `mDNSResponder`. `--net=allowlist` runs an ephemeral in-process loopback proxy on `127.0.0.1:<port>` with Seatbelt confining TCP egress strictly to that port. Read isolation remains broad due to Apple's dyld linker regression on fragmented profiles (use Linux VM / OrbStack for hermetic read-isolation).
 
 ---
 

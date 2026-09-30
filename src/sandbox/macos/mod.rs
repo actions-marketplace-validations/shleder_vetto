@@ -18,6 +18,7 @@
 
 pub mod fsevents;
 pub mod limits;
+pub mod net_proxy;
 pub mod pdeath_watch;
 pub mod prod_verify;
 pub mod seatbelt;
@@ -59,26 +60,39 @@ impl MacosSandbox {
         }
         // Relay modes require the Linux netns + broker stack. Both are
         // rejected loudly here instead of silently degrading to --net=off.
-        if matches!(self.net, NetMode::Allowlist(_)) {
-            bail!(
-                "--net=allowlist requires the Linux network-namespace relay and is unavailable on macOS; \
-                 refusing silently-weaker enforcement (fail-closed)\n\
-                 action: run with `--net=off` on macOS; run `vetto doctor` for the full capability picture"
-            );
-        }
         if matches!(self.net, NetMode::Strict(_)) {
             bail!(
                 "--net=strict requires the Linux network-namespace relay and is unavailable on macOS; \
                  refusing silently-weaker enforcement (fail-closed)\n\
-                 action: run with `--net=off` on macOS; run `vetto doctor` for the full capability picture"
+                 action: run with `--net=off` or `--net=allowlist` on macOS; run `vetto doctor` for the full capability picture"
             );
         }
         if matches!(self.net, NetMode::Ask) {
             bail!(
                 "--net=ask requires the Linux network-namespace relay and is unavailable on macOS; \
                  refusing silently-weaker enforcement (fail-closed)\n\
-                 action: run with `--net=off` on macOS; run `vetto doctor` for the full capability picture"
+                 action: run with `--net=off` or `--net=allowlist` on macOS; run `vetto doctor` for the full capability picture"
             );
+        }
+
+        let (broker, proxy_port) = match &self.net {
+            NetMode::Allowlist(_) => {
+                let policy = net_proxy::BrokerPolicy::new(
+                    self.net.clone(),
+                    "127.0.0.1:0"
+                        .parse()
+                        .expect("valid loopback socket address"),
+                )?;
+                let broker = net_proxy::LocalBroker::bind(policy)?;
+                let port = broker.local_addr()?.port();
+                (Some(broker), Some(port))
+            }
+            _ => (None, None),
+        };
+
+        let mut opts = opts;
+        if let Some(port) = proxy_port {
+            opts.env_extra.extend(net_proxy::build_proxy_env(port));
         }
 
         let (err_r, err_w) = pipe2()?;
@@ -100,9 +114,16 @@ impl MacosSandbox {
             bail!("fork: {}", std::io::Error::last_os_error());
         }
         if pid == 0 {
-            child(policy_ref, net_ref, agent_c, env_c, err_w_raw, opts_ref);
+            child(
+                policy_ref, net_ref, proxy_port, agent_c, env_c, err_w_raw, opts_ref,
+            );
         }
         drop(err_w);
+
+        // After fork, launch the background proxy broker thread in the supervisor.
+        if let Some(b) = broker {
+            let _broker_handle = b.start()?;
+        }
 
         // The parent-death watchdog must be forked HERE, from the parent —
         // never inside the child. A second fork in the child poisons
@@ -120,10 +141,26 @@ impl MacosSandbox {
         match (n, b[0]) {
             (1, b'R') => {}
             (1, b'E') => {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 256];
+                loop {
+                    let r = unsafe {
+                        libc::read(err_r.as_raw_fd(), chunk.as_mut_ptr().cast(), chunk.len())
+                    };
+                    if r <= 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..r as usize]);
+                }
                 let code = reap(pid);
-                return Err(anyhow::Error::new(VettoError::Sandbox(format!(
-                    "child exit {code} during setup"
-                ))));
+                let detail = String::from_utf8_lossy(&buf);
+                let trimmed = detail.trim();
+                let msg = if trimmed.is_empty() {
+                    format!("child exit {code} during setup")
+                } else {
+                    format!("child exit {code} during setup: {trimmed}")
+                };
+                return Err(anyhow::Error::new(VettoError::Sandbox(msg)));
             }
             _ => {
                 let code = reap(pid);
@@ -146,7 +183,7 @@ impl MacosSandbox {
                 }),
             },
             broker_ctrl_fd: None,
-            relay_port: None,
+            relay_port: proxy_port,
             notif_listener: None,
         })
     }
@@ -239,6 +276,7 @@ fn child_trace(stage: &str) {
 fn child(
     policy: &Policy,
     net: &NetMode,
+    proxy_port: Option<u16>,
     agent: Vec<CString>,
     env: Vec<CString>,
     err_w: RawFd,
@@ -396,7 +434,7 @@ fn child(
             }
         }
         _ => {
-            if let Err(err) = seatbelt::apply_seatbelt(policy, net) {
+            if let Err(err) = seatbelt::apply_seatbelt(policy, net, proxy_port) {
                 child_fail(err_w, 120, &format!("apply seatbelt: {err}"));
             }
         }
@@ -406,7 +444,7 @@ fn child(
         eprintln!(
             "vetto: child seatbelt profile:
 {}",
-            seatbelt::generate(policy, net)
+            seatbelt::generate(policy, net, proxy_port)
         );
     }
 

@@ -16,6 +16,7 @@ use crate::policy::Policy;
 pub fn generate_sbpl_template_and_params(
     policy: &Policy,
     net: &NetMode,
+    proxy_port: Option<u16>,
 ) -> (String, Vec<(String, String)>) {
     let mut sb = String::with_capacity(2048);
     let mut params = Vec::new();
@@ -54,12 +55,60 @@ pub fn generate_sbpl_template_and_params(
         params.push((key, val));
     }
 
-    // net=off: no IP traffic. The blanket network* denial requires the
-    // unix-socket outbound exception — exec-time LaunchConstraints checks and
-    // libSystem init perform local XPC over unix sockets, and without it the
-    // process either fails execve with EPERM or aborts silently after exec.
+    // Network isolation:
+    // The blanket network* denial requires the unix-socket outbound exception
+    // for exec-time LaunchConstraints checks and libSystem local XPC.
+    // However, DNS leaks via host mDNSResponder and non-essential daemon sockets
+    // (usbmuxd, docker) are explicitly blocked.
+    // In allowlist mode, outbound TCP is strictly permitted to the local proxy port.
     match net {
-        NetMode::Off | NetMode::Allowlist(_) | NetMode::Strict(_) | NetMode::Ask => {
+        NetMode::Off => {
+            sb.push_str("(deny network*)\n");
+            sb.push_str("(allow network-outbound (remote unix-socket))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
+        }
+        NetMode::Allowlist(_) => {
+            sb.push_str("(deny network*)\n");
+            sb.push_str("(allow network-outbound (remote unix-socket))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
+            if let Some(port) = proxy_port {
+                sb.push_str(&format!(
+                    "(allow network-outbound (remote tcp \"localhost:{port}\"))\n\
+                     (allow network-outbound (remote ip \"localhost:{port}\"))\n"
+                ));
+            }
+        }
+        NetMode::Strict(_) | NetMode::Ask => {
             sb.push_str("(deny network*)\n");
             sb.push_str("(allow network-outbound (remote unix-socket))\n");
         }
@@ -70,8 +119,8 @@ pub fn generate_sbpl_template_and_params(
 }
 
 /// Generate monolithic SBPL profile string with inlined paths (for diagnostic / legacy inspection).
-pub fn generate(policy: &Policy, net: &NetMode) -> String {
-    let (template, params) = generate_sbpl_template_and_params(policy, net);
+pub fn generate(policy: &Policy, net: &NetMode, proxy_port: Option<u16>) -> String {
+    let (template, params) = generate_sbpl_template_and_params(policy, net, proxy_port);
     let mut inlined = template;
     for (k, v) in params {
         let placeholder = format!("(param \"{k}\")");
@@ -109,8 +158,12 @@ pub fn is_native_seatbelt_available() -> bool {
 
 /// Apply in-memory Seatbelt sandbox directly to the current process via C API.
 /// Must be called post-fork before execve in the child process.
-pub fn apply_seatbelt(policy: &Policy, net: &NetMode) -> Result<(), String> {
-    let (template, params) = generate_sbpl_template_and_params(policy, net);
+pub fn apply_seatbelt(
+    policy: &Policy,
+    net: &NetMode,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
+    let (template, params) = generate_sbpl_template_and_params(policy, net, proxy_port);
     apply_seatbelt_raw(&template, &params)
 }
 
@@ -302,7 +355,7 @@ mod tests {
             is_dir: false,
         });
 
-        let (template, params) = generate_sbpl_template_and_params(&policy, &NetMode::Off);
+        let (template, params) = generate_sbpl_template_and_params(&policy, &NetMode::Off, None);
         // Write-isolation model: reads are broad, write roots and secret
         // denies are the parameterized clauses.
         assert!(template.contains("(param \"ALLOW_WRITE_DIR_0\")"));
@@ -310,6 +363,9 @@ mod tests {
         assert!(!template.contains("ALLOW_READ_DIR"));
         assert!(template.contains("(deny network*)"));
         assert!(template.contains("(allow network-outbound (remote unix-socket))"));
+        assert!(template.contains("(path-literal \"/private/var/run/mDNSResponder\")"));
+        assert!(template.contains("(path-literal \"/private/var/run/usbmuxd\")"));
+        assert!(template.contains("(path-literal \"/private/var/run/docker.sock\")"));
 
         assert_eq!(params.len(), 2);
         assert_eq!(
@@ -321,8 +377,22 @@ mod tests {
             ("DENY_PATH_0".to_string(), "/test/secret".to_string())
         );
 
-        let inlined = generate(&policy, &NetMode::Off);
+        let inlined = generate(&policy, &NetMode::Off, None);
         assert!(inlined.contains("\"/test/write\""));
         assert!(inlined.contains("\"/test/secret\""));
+    }
+
+    #[test]
+    fn allowlist_template_contains_proxy_ports_and_blocks_mdns() {
+        let policy = Policy::default();
+        let net = NetMode::Allowlist(vec!["example.com".to_string()]);
+        let (template, _params) = generate_sbpl_template_and_params(&policy, &net, Some(54321));
+
+        assert!(template.contains("(allow network-outbound (remote tcp \"localhost:54321\"))"));
+        assert!(template.contains("(allow network-outbound (remote ip \"localhost:54321\"))"));
+        assert!(template.contains("(path-literal \"/private/var/run/mDNSResponder\")"));
+
+        let inlined = generate(&policy, &net, Some(54321));
+        assert!(inlined.contains("\"localhost:54321\""));
     }
 }

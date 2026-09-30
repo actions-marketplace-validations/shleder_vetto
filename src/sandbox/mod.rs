@@ -16,8 +16,7 @@ pub mod macos;
 // broker is an opt-in library surface for later integration, not part of the
 // Seatbelt spawn path.
 #[cfg(target_os = "macos")]
-#[path = "macos/net_proxy.rs"]
-pub mod macos_net_proxy;
+pub use macos::net_proxy as macos_net_proxy;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
