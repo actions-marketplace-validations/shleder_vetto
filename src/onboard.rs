@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 27] = [
+pub const SUPPORTED_AGENTS: [&str; 28] = [
     "claude",
     "codex",
     "opencode",
@@ -42,6 +42,7 @@ pub const SUPPORTED_AGENTS: [&str; 27] = [
     "omnigent",
     "crewai",
     "autogen",
+    "amp",
 ];
 
 struct AgentSpec {
@@ -180,6 +181,11 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "autogen",
         binaries: &["autogen", "autogenstudio"],
         markers: &[".autogen", "autogen.json", ".autogenstudio"],
+    },
+    AgentSpec {
+        name: "amp",
+        binaries: &["amp", "amp-cli"],
+        markers: &[".amp", "amp.json", "amp.yaml"],
     },
 ];
 
@@ -357,7 +363,7 @@ mod tests {
         let net = layer.network.unwrap();
         assert_eq!(
             net.mode.unwrap(),
-            "allowlist:api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org"
+            "allowlist:api.anthropic.com,auth.anthropic.com,claude.ai,statsig.anthropic.com,platform.anthropic.com,registry.npmjs.org,pypi.org,files.pythonhosted.org,crates.io,index.crates.io,static.crates.io,proxy.golang.org,sum.golang.org,registry.yarnpkg.com,github.com,api.github.com,raw.githubusercontent.com,objects.githubusercontent.com"
         );
     }
 
@@ -429,6 +435,10 @@ mod tests {
         let autogen_bins = agent_candidate_binaries("autogen");
         assert!(autogen_bins.contains(&"autogen"));
         assert!(autogen_bins.contains(&"autogenstudio"));
+
+        let amp_bins = agent_candidate_binaries("amp");
+        assert!(amp_bins.contains(&"amp"));
+        assert!(amp_bins.contains(&"amp-cli"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

@@ -1,0 +1,70 @@
+[metadata]
+name = "amp"
+description = "Compatibility profile for Sourcegraph Amp agent."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.amp",
+    "$HOME/.config/amp",
+    "$HOME/.local/share/amp",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.amp",
+    "$HOME/.config/amp",
+    "$HOME/.local/share/amp",
+    "/tmp",
+    "$HOME/.cache",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "$HOME/.bun/install/cache",
+]
+
+[environment]
+pass_through = [
+    "AMP_*",
+    "SRC_ACCESS_TOKEN",
+    "SOURCEGRAPH_URL",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "ampcode.com",
+    "sourcegraph.com",
+    "auth.sourcegraph.com",
+    "api.anthropic.com",
+    "api.openai.com",
+    "github.com",
+    "api.github.com",
+    "localhost",
+    "127.0.0.1",
+]

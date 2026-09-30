@@ -14,7 +14,7 @@ Vetto provides a standard, 10-50x faster, zero-Docker replacement for Docker-in-
 ## Action Flavors
 
 1. **`shleder/vetto/action@v0.5.13`** (`vetto-action`): Composite execution action that wraps a single agent command, produces audit logs, and uploads SARIF security reports.
-2. **`shleder/vetto@v0.5.9`** (`Setup Vetto`): Root action that installs the standalone `vetto` CLI binary onto the runner and configures `$GITHUB_PATH` for multi-step workflows.
+2. **`shleder/vetto@v0.5.13`** (`Setup Vetto`): Root action that installs the standalone `vetto` CLI binary onto the runner and configures `$GITHUB_PATH` for multi-step workflows.
 
 ---
 
@@ -87,7 +87,7 @@ jobs:
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.5.9
+        uses: shleder/vetto@v0.5.13
         with:
           version: 'latest'
 
@@ -103,7 +103,7 @@ jobs:
 
 | Input | Description | Default | Required |
 |---|---|---|---|
-| `command` | Agent or shell command to execute in sandbox | - | **Yes** |
+| `command` | Agent or shell command to execute in sandbox (if omitted, runs in setup-only mode) | `""` | No |
 | `policy` | Path to custom policy TOML or community policy | `""` | No |
 | `net` | Network mode (`off`, `allowlist:...`, `strict:...`) | `off` | No |
 | `profile` | Built-in profile (`strict`, `default`, `audit`, `permissive`) | `strict` | No |
@@ -117,5 +117,7 @@ jobs:
 
 | Output | Description |
 |---|---|
-| `exit-code` | Exit code of the sandboxed command |
-| `sarif-path` | Path to the generated SARIF report file |
+| `vetto-version` | Installed Vetto version |
+| `vetto-path` | Path to the installed vetto binary |
+| `exit-code` | Exit code of the sandboxed command (when command is provided) |
+| `sarif-path` | Path to the generated SARIF report file (when command is provided) |

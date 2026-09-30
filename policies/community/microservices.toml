@@ -1,0 +1,80 @@
+[metadata]
+name = "microservices"
+description = "Community policy tailored for microservices backends (loopback IPC, db sockets, cloud metadata blocking, resource limits)"
+
+[filesystem]
+allow_write = [
+    "${PROJECT}",
+    "${TMPDIR}",
+    "/tmp",
+]
+allow_read = [
+    "/usr",
+    "/lib",
+    "/lib64",
+    "/bin",
+    "/etc",
+    "${PROJECT}",
+    "${HOME}/.cache",
+]
+deny_write = [
+    "${PROJECT}/.git",
+    "${HOME}/.ssh",
+    "${HOME}/.aws",
+    "${HOME}/.kube",
+    "${HOME}/.docker",
+    "${HOME}/.gnupg",
+]
+deny_read = [
+    "${HOME}/.aws/credentials",
+    "${HOME}/.kube/config",
+    "${HOME}/.docker/config.json",
+    "${HOME}/.ssh/id_*",
+    "${PROJECT}/.env",
+    "${PROJECT}/.env.*",
+]
+
+[unix_sockets]
+allow = [
+    "/tmp/.s.PGSQL.*",
+    "/var/run/postgresql/.s.PGSQL.*",
+    "/tmp/mysql.sock",
+    "/var/run/mysqld/mysqld.sock",
+    "/tmp/redis.sock",
+    "/var/run/redis/redis.sock",
+]
+
+[network]
+mode = "allowlist"
+allowlist = [
+    "localhost",
+    "127.0.0.1",
+]
+deny_network = [
+    "169.254.169.254",
+]
+allow_tcp_bind = [5000, 5001, 8080, 8081, 9090, 9091]
+allow_tcp_connect = [5432, 3306, 6379, 27017, 9092, 5000, 5001, 8080, 8081, 9090, 9091]
+
+[limits]
+processes = 128
+open_files = 1024
+
+[cgroup]
+memory_max = "2G"
+pids_max = "128"
+cpu_max = "2.0"
+
+[environment]
+pass_through = [
+    "PATH",
+    "APP_ENV",
+    "SERVICE_NAME",
+    "GRPC_PORT",
+    "HTTP_PORT",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+]
