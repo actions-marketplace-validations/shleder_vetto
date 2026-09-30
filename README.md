@@ -282,6 +282,9 @@ Vetto engineering maintains native upstream isolation adapters across open-sourc
 
 | Framework | Target Issue | Integration PR | Isolation Architecture |
 | :--- | :--- | :--- | :--- |
+| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | `VettoExecTool` and `VettoPythonTool` unprivileged process isolation with workspace boundary fencing and fail-closed timeout cleanup. |
+| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `VettoCommandLineCodeExecutor` containerless sandbox in `autogen-ext` with automatic preference over unsandboxed local execution. |
+| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | Worker-safe memory containment and catalog heap threshold rotation under `--max-old-space-size`. |
 | **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` with monotonic wall-clock timeout and process group extinction (`os.killpg(SIGKILL)`). |
 | **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | Pre-flight DNS watchdog blocking loopback, RFC 1918, CGNAT, and AWS/GCP instance metadata. |
 | **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` containerless backend with dynamic Linux Landlock ABI (1–6) detection and rootless path bounding. |
