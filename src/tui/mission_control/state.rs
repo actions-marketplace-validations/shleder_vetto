@@ -2011,8 +2011,8 @@ mod tests {
     #[test]
     fn test_built_in_presets_covers_all_supported_agents() {
         let presets = built_in_presets();
-        // 3 base presets + 24 canonical agent presets = 27
-        assert_eq!(presets.len(), 27);
+        // 3 base presets + 26 canonical agent presets = 29
+        assert_eq!(presets.len(), 29);
         for &agent_name in &SUPPORTED_AGENTS {
             let canon =
                 crate::policy::defaults::canonical_agent_name(agent_name).unwrap_or(agent_name);

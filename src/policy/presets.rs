@@ -1050,7 +1050,13 @@ mod tests {
         );
         assert_eq!(
             resolve_preset("autogen"),
-            Some(&["$HOME/.autogen", "$HOME/.autogenstudio", "$HOME/.config/autogen"][..])
+            Some(
+                &[
+                    "$HOME/.autogen",
+                    "$HOME/.autogenstudio",
+                    "$HOME/.config/autogen"
+                ][..]
+            )
         );
     }
 

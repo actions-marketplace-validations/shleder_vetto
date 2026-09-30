@@ -14,7 +14,8 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
     std::fs::create_dir_all(&home).expect("create home dir");
 
     let agents = vec![
-        "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok", "omnigent", "crewai", "autogen",
+        "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok", "omnigent",
+        "crewai", "autogen",
     ];
     for agent in agents {
         let opts = PolicyLoadOptions {
@@ -769,10 +770,7 @@ fn test_crewai_profile_consistency() {
         "~/.crewai must be writable"
     );
     assert!(
-        pol.environment
-            .pass_through
-            .iter()
-            .any(|v| v == "CREWAI_*"),
+        pol.environment.pass_through.iter().any(|v| v == "CREWAI_*"),
         "CREWAI_* env vars must be allowed in pass_through"
     );
     assert!(
@@ -802,10 +800,7 @@ fn test_autogen_profile_consistency() {
         "~/.autogen must be writable"
     );
     assert!(
-        pol.environment
-            .pass_through
-            .iter()
-            .any(|v| v == "AUTOGEN_*"),
+        pol.environment.pass_through.iter().any(|v| v == "AUTOGEN_*"),
         "AUTOGEN_* env vars must be allowed in pass_through"
     );
     assert!(
@@ -813,4 +808,3 @@ fn test_autogen_profile_consistency() {
         "api.openai.com must be allowed in network_allow"
     );
 }
-
