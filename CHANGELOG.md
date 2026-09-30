@@ -5,6 +5,22 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-09-30
+
+### Added
+- **macOS Network Allowlist Loopback Proxy (`src/sandbox/macos/net_proxy.rs`)**:
+  - Implemented local HTTP/CONNECT loopback domain-filtering proxy on `127.0.0.1:<ephemeral_port>` for `--net=allowlist` on macOS.
+  - Injected `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY` into the sandboxed child environment.
+  - Confined macOS Seatbelt SBPL profile outbound TCP socket connections strictly to `localhost:<proxy_port>` with SNI domain inspection.
+
+### Fixed
+- **macOS Seatbelt `--net=off` Hardening (`src/sandbox/macos/seatbelt.rs`)**:
+  - Hardened Seatbelt profile under `--net=off` to block non-essential Unix domain sockets and `/private/var/run/mDNSResponder`.
+- **Aider Integration Test Git Guard Environment (`tests/integration/test_aider_preset.rs`)**:
+  - Synchronized environment variable overrides in Aider integration tests to ensure deterministic Git Guard policy enforcement.
+- **Platform Isolation Documentation (`README.md`)**:
+  - Clarified macOS Tier 2 Seatbelt profile enforcement and loopback proxy architecture.
+
 ## [0.5.11] - 2026-09-29
 
 ### Added

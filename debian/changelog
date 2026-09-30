@@ -1,3 +1,9 @@
+vetto (0.5.12-1) unstable; urgency=medium
+
+  * macOS network allowlist proxy and net-off hardening.
+
+ -- vetto contributors <noreply@github.com>  Wed, 30 Sep 2026 15:31:27 +0000
+
 vetto (0.5.11-1) unstable; urgency=medium
 
   * Release 0.5.11: SWE-bench high-throughput runtime adapter, GitHub Actions Marketplace universal action, and Aider CLI native preset & Git Guard Exit 125 hardening.
