@@ -2,9 +2,9 @@
 
 <p align="center">
   <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.13"><img src="https://img.shields.io/badge/version-0.5.13-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.13-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.13-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
+  <a href="https://github.com/shleder/vetto/releases/tag/v0.5.14"><img src="https://img.shields.io/badge/version-0.5.14-blue?style=flat-square" alt="Version"></a>
+  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.5.14-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
+  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.5.14-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
 </p>
 
@@ -185,7 +185,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.5.13
+        uses: shleder/vetto@v0.5.14
         with:
           command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
           agent: 'claude'
@@ -202,7 +202,7 @@ When `command` is omitted, `shleder/vetto` verifies and installs the standalone 
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.5.13
+        uses: shleder/vetto@v0.5.14
         with:
           version: 'latest'
 
@@ -245,7 +245,7 @@ Vetto enforces an immutable three-tier boundary model based on kernel capabiliti
 
 ## Multi-Agent Compatibility Roster
 
-Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 24 leading agent runtimes:
+Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 28 leading agent runtimes:
 
 | Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
 | :--- | :--- | :--- | :--- |
@@ -275,6 +275,59 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **Omnigent** | `omnigent` | `api.omnigent.ai`, OpenAI, Anthropic | `~/.omnigent`, `~/.config/omnigent` |
 | **CrewAI** | `crewai` | `app.crewai.com`, `telemetry.crewai.com`, OpenAI, Anthropic, Gemini, Groq | `~/.crewai`, `~/.config/crewai` |
 | **Microsoft AutoGen** | `autogen` | OpenAI, Anthropic, Gemini, Groq, Together, Mistral | `~/.autogen`, `~/.autogenstudio`, `~/.config/autogen` |
+| **Sourcegraph Amp** | `amp` | `ampcode.com`, `sourcegraph.com`, Anthropic, OpenAI | `~/.config/amp`, `~/.local/share/amp` |
+
+---
+
+## Native Framework SDKs
+
+Vetto provides unprivileged process containment libraries for multi-agent workflows:
+
+### Python SDK (`vetto-python`)
+
+Drop-in execution wrapper in `sdk/python/`:
+
+```python
+from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
+
+sandbox = VettoSandbox(
+    project_dir=".",
+    network="allowlist:api.anthropic.com,api.openai.com",
+    profile="default",
+    timeout_secs=60,
+)
+
+# Run tool command fail-closed (raises VettoSecurityError on Exit 125)
+result = sandbox.run(["pytest", "tests/"])
+```
+
+Includes `VettoToolNode` for LangGraph agent graph isolation:
+
+```python
+from vetto.langgraph import VettoToolNode
+
+tool_node = VettoToolNode(
+    tools=[search_tool, execute_code_tool],
+    network="off",
+    timeout_secs=30,
+)
+```
+
+### TypeScript SDK (`@vetto/sdk`)
+
+Drop-in execution wrapper in `sdk/typescript/`:
+
+```typescript
+import { VettoSandbox, VettoSecurityError } from '@vetto/sdk';
+
+const sandbox = new VettoSandbox({
+  projectDir: process.cwd(),
+  network: 'allowlist:api.anthropic.com',
+  timeoutSecs: 30,
+});
+
+const result = await sandbox.run(['npm', 'test']);
+```
 
 ---
 
