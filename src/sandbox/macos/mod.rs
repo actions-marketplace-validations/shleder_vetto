@@ -141,10 +141,26 @@ impl MacosSandbox {
         match (n, b[0]) {
             (1, b'R') => {}
             (1, b'E') => {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 256];
+                loop {
+                    let r = unsafe {
+                        libc::read(err_r.as_raw_fd(), chunk.as_mut_ptr().cast(), chunk.len())
+                    };
+                    if r <= 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..r as usize]);
+                }
                 let code = reap(pid);
-                return Err(anyhow::Error::new(VettoError::Sandbox(format!(
-                    "child exit {code} during setup"
-                ))));
+                let detail = String::from_utf8_lossy(&buf);
+                let trimmed = detail.trim();
+                let msg = if trimmed.is_empty() {
+                    format!("child exit {code} during setup")
+                } else {
+                    format!("child exit {code} during setup: {trimmed}")
+                };
+                return Err(anyhow::Error::new(VettoError::Sandbox(msg)));
             }
             _ => {
                 let code = reap(pid);

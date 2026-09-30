@@ -268,10 +268,10 @@ fn test_macos_tier_mapping_001() {
     let allowlist = NetMode::Allowlist(vec!["example.com".to_string()]);
     let allow_mapping = prod_tier_mapping(None, &allowlist);
     assert!(
-        allow_mapping
+        !allow_mapping
             .enforced
             .contains(&SecurityCapability::NetworkIsolation),
-        "allowlist net is enforced on macOS"
+        "allowlist net is a relay net and not a total network isolation claim"
     );
     assert!(allow_mapping.allows_pass_possible);
 }

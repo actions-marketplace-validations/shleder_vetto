@@ -237,13 +237,16 @@ pub fn prod_tier_mapping(tier: Option<Tier>, net: &NetMode) -> TierMapping {
         None => {
             #[cfg(target_os = "macos")]
             {
-                vec![
+                let mut caps = vec![
                     SecurityCapability::FilesystemIsolation,
-                    SecurityCapability::NetworkIsolation,
                     SecurityCapability::ProcessIsolation,
                     SecurityCapability::ProcessTreeContainment,
                     SecurityCapability::HostEvidence,
-                ]
+                ];
+                if net_off {
+                    caps.push(SecurityCapability::NetworkIsolation);
+                }
+                caps
             }
             #[cfg(target_os = "linux")]
             {
