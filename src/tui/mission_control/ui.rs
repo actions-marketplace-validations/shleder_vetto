@@ -2550,14 +2550,14 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(content.contains("POLICY PRESETS (29)"));
+        assert!(content.contains("POLICY PRESETS (30)"));
         assert!(content.contains("POLICY INSPECTOR"));
         assert!(content.contains("FILESYSTEM ACCESS BOUNDARIES"));
         assert!(content.contains("NETWORK EGRESS POLICY"));
         assert!(content.contains("balanced"));
 
-        // Now select the very last preset (index 28, "smolagents") in a 35-row viewport
-        // (17 visible table rows < 29 presets) and verify table viewport windowing scrolls
+        // Now select the very last preset (index 29, "smolagents") in a 35-row viewport
+        // (17 visible table rows < 30 presets) and verify table viewport windowing scrolls
         // "smolagents" into the left table
         state.selected_preset = state.policy_presets.len() - 1;
         terminal.draw(|f| draw(f, &state)).unwrap();

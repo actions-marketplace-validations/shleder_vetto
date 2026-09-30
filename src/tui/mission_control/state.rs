@@ -428,6 +428,13 @@ pub fn built_in_presets() -> Vec<PolicyPresetItem> {
             vec!["/", "$PROJECT", "~/.devin"],
         ),
         agent_preset_item(
+            "amp",
+            "Sourcegraph Amp Profile",
+            "Tailored profile for Sourcegraph Amp CLI with Amp, Anthropic, and OpenAI API allowlist",
+            vec!["$PROJECT", "/tmp", "~/.config/amp", "~/.local/share/amp"],
+            vec!["/", "$PROJECT", "~/.config/amp"],
+        ),
+        agent_preset_item(
             "smolagents",
             "Hugging Face Smolagents Profile",
             "Tailored profile for Smolagents with Hugging Face Hub and inference API allowlist",
@@ -1631,6 +1638,7 @@ fn format_agent_name(name: &str) -> String {
         "omnigent" => "Omnigent Agent".to_string(),
         "crewai" => "CrewAI Multi-Agent".to_string(),
         "autogen" => "Microsoft AutoGen".to_string(),
+        "amp" => "Sourcegraph Amp".to_string(),
         other => other.to_string(),
     }
 }
@@ -2011,8 +2019,8 @@ mod tests {
     #[test]
     fn test_built_in_presets_covers_all_supported_agents() {
         let presets = built_in_presets();
-        // 3 base presets + 26 canonical agent presets = 29
-        assert_eq!(presets.len(), 29);
+        // 3 base presets + 27 canonical agent presets = 30
+        assert_eq!(presets.len(), 30);
         for &agent_name in &SUPPORTED_AGENTS {
             let canon =
                 crate::policy::defaults::canonical_agent_name(agent_name).unwrap_or(agent_name);
