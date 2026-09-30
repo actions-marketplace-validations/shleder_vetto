@@ -800,7 +800,10 @@ fn test_autogen_profile_consistency() {
         "~/.autogen must be writable"
     );
     assert!(
-        pol.environment.pass_through.iter().any(|v| v == "AUTOGEN_*"),
+        pol.environment
+            .pass_through
+            .iter()
+            .any(|v| v == "AUTOGEN_*"),
         "AUTOGEN_* env vars must be allowed in pass_through"
     );
     assert!(
