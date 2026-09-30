@@ -15,6 +15,7 @@ fn test_all_agent_profiles_resolve_credentials_without_blocking() {
 
     let agents = vec![
         "codex", "claude", "aider", "opencode", "omp", "zcode", "kimi", "grok", "omnigent",
+        "crewai", "autogen",
     ];
     for agent in agents {
         let opts = PolicyLoadOptions {
@@ -101,6 +102,8 @@ fn test_all_agent_profiles_load_successfully() {
         "freebuff",
         "deepseek_harness",
         "omnigent",
+        "crewai",
+        "autogen",
         "custom",
     ];
 
@@ -743,5 +746,68 @@ fn test_omnigent_profile_consistency() {
     assert!(
         pol.network_allow.iter().any(|d| d == "api.omnigent.ai"),
         "api.omnigent.ai must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_crewai_profile_consistency() {
+    let temp = TempProject::new("crewai-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("crewai".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load crewai policy");
+    let crewai_home = home.join(".crewai");
+    assert!(
+        pol.allow_write.contains(&crewai_home),
+        "~/.crewai must be writable"
+    );
+    assert!(
+        pol.environment.pass_through.iter().any(|v| v == "CREWAI_*"),
+        "CREWAI_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow.iter().any(|d| d == "app.crewai.com"),
+        "app.crewai.com must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_autogen_profile_consistency() {
+    let temp = TempProject::new("autogen-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("autogen".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load autogen policy");
+    let autogen_home = home.join(".autogen");
+    assert!(
+        pol.allow_write.contains(&autogen_home),
+        "~/.autogen must be writable"
+    );
+    assert!(
+        pol.environment
+            .pass_through
+            .iter()
+            .any(|v| v == "AUTOGEN_*"),
+        "AUTOGEN_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow.iter().any(|d| d == "api.openai.com"),
+        "api.openai.com must be allowed in network_allow"
     );
 }

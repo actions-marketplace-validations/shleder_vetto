@@ -230,6 +230,24 @@ pub fn analyze_project(root: &Path) -> ProjectAnalysis {
             .recommended_network_domains
             .extend(agent_network_allowlist("grok"));
     }
+    if root.join(".crewai").exists()
+        || root.join("crewai.json").exists()
+        || root.join("crew.py").exists()
+    {
+        analysis.detected_agents.push("CrewAI");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("crewai"));
+    }
+    if root.join(".autogen").exists()
+        || root.join("autogen.json").exists()
+        || root.join(".autogenstudio").exists()
+    {
+        analysis.detected_agents.push("AutoGen");
+        analysis
+            .recommended_network_domains
+            .extend(agent_network_allowlist("autogen"));
+    }
     if root.join("AGENTS.md").exists() {
         analysis.detected_agents.push("AGENTS.md");
     }
@@ -688,6 +706,26 @@ mod tests {
 
         // Run with force should succeed
         assert!(run_init(path, true, false).is_ok());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn analyze_project_detects_crewai_and_autogen() {
+        let dir = temp_test_dir("crewai-autogen");
+        let path = dir.as_path();
+        fs::write(path.join("crew.py"), "#!/usr/bin/env python3\n").unwrap();
+        fs::write(path.join("autogen.json"), "{}").unwrap();
+
+        let analysis = analyze_project(path);
+        assert!(analysis.detected_agents.contains(&"CrewAI"));
+        assert!(analysis.detected_agents.contains(&"AutoGen"));
+        assert!(analysis
+            .recommended_network_domains
+            .contains(&"app.crewai.com".to_string()));
+        assert!(analysis
+            .recommended_network_domains
+            .contains(&"api.mistral.ai".to_string()));
 
         let _ = fs::remove_dir_all(&dir);
     }

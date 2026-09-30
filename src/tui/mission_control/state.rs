@@ -296,6 +296,26 @@ pub fn built_in_presets() -> Vec<PolicyPresetItem> {
             vec!["/", "$PROJECT", "~/.omnigent"],
         ),
         agent_preset_item(
+            "crewai",
+            "CrewAI Multi-Agent Profile",
+            "Tailored profile for CrewAI orchestrator with ~/.crewai state and multi-provider LLM API egress",
+            vec!["$PROJECT", "/tmp", "~/.crewai", "~/.config/crewai"],
+            vec!["/", "$PROJECT", "~/.crewai"],
+        ),
+        agent_preset_item(
+            "autogen",
+            "Microsoft AutoGen Profile",
+            "Tailored profile for Microsoft AutoGen / AutoGen Studio with ~/.autogen state and LLM API egress",
+            vec![
+                "$PROJECT",
+                "/tmp",
+                "~/.autogen",
+                "~/.autogenstudio",
+                "~/.config/autogen",
+            ],
+            vec!["/", "$PROJECT", "~/.autogen", "~/.autogenstudio"],
+        ),
+        agent_preset_item(
             "hermes",
             "Hermes Agent Profile (Nous Research)",
             "Tailored profile for Hermes Agent runtime with Nous Research and Together AI endpoints",
@@ -1609,6 +1629,8 @@ fn format_agent_name(name: &str) -> String {
         "freebuff" => "Freebuff Agent".to_string(),
         "deepseek_harness" => "DeepSeek Harness".to_string(),
         "omnigent" => "Omnigent Agent".to_string(),
+        "crewai" => "CrewAI Multi-Agent".to_string(),
+        "autogen" => "Microsoft AutoGen".to_string(),
         other => other.to_string(),
     }
 }
@@ -1989,8 +2011,8 @@ mod tests {
     #[test]
     fn test_built_in_presets_covers_all_supported_agents() {
         let presets = built_in_presets();
-        // 3 base presets + 24 canonical agent presets = 27
-        assert_eq!(presets.len(), 27);
+        // 3 base presets + 26 canonical agent presets = 29
+        assert_eq!(presets.len(), 29);
         for &agent_name in &SUPPORTED_AGENTS {
             let canon =
                 crate::policy::defaults::canonical_agent_name(agent_name).unwrap_or(agent_name);

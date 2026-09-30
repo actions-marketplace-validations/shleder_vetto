@@ -243,6 +243,34 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "openrouter.ai".into(),
             "api.together.xyz".into(),
         ],
+        "crewai" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "generativelanguage.googleapis.com".into(),
+            "api.groq.com".into(),
+            "api.cohere.com".into(),
+            "api.cohere.ai".into(),
+            "openrouter.ai".into(),
+            "app.crewai.com".into(),
+            "telemetry.crewai.com".into(),
+            "google.serper.dev".into(),
+            "api.exa.ai".into(),
+            "github.com".into(),
+            "api.github.com".into(),
+        ],
+        "autogen" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "generativelanguage.googleapis.com".into(),
+            "api.groq.com".into(),
+            "openrouter.ai".into(),
+            "api.mistral.ai".into(),
+            "api.together.xyz".into(),
+            "api.cohere.com".into(),
+            "api.cohere.ai".into(),
+            "github.com".into(),
+            "api.github.com".into(),
+        ],
         _ => Vec::new(),
     };
 
@@ -450,6 +478,12 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
         "freebuff" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
         "deepseek" | "deepseek_harness" => Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"]),
         "omnigent" => Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"]),
+        "crewai" => Some(&["$HOME/.crewai", "$HOME/.config/crewai"]),
+        "autogen" => Some(&[
+            "$HOME/.autogen",
+            "$HOME/.autogenstudio",
+            "$HOME/.config/autogen",
+        ]),
         _ => None,
     }
 }
@@ -485,6 +519,8 @@ pub const KNOWN_PRESETS: &[&str] = &[
     "deepseek",
     "deepseek_harness",
     "omnigent",
+    "crewai",
+    "autogen",
 ];
 
 #[cfg(test)]
@@ -934,6 +970,10 @@ mod tests {
                 "files.pythonhosted.org",
             ]
         );
+        assert!(agent_network_allowlist("crewai").contains(&"app.crewai.com".to_string()));
+        assert!(agent_network_allowlist("crew-ai").contains(&"app.crewai.com".to_string()));
+        assert!(agent_network_allowlist("autogen").contains(&"api.mistral.ai".to_string()));
+        assert!(agent_network_allowlist("autogenstudio").contains(&"api.mistral.ai".to_string()));
         assert!(agent_network_allowlist("custom").is_empty());
         assert!(agent_network_allowlist("unknown").is_empty());
     }
@@ -1003,6 +1043,20 @@ mod tests {
         assert_eq!(
             resolve_preset("omnigent"),
             Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"][..])
+        );
+        assert_eq!(
+            resolve_preset("crewai"),
+            Some(&["$HOME/.crewai", "$HOME/.config/crewai"][..])
+        );
+        assert_eq!(
+            resolve_preset("autogen"),
+            Some(
+                &[
+                    "$HOME/.autogen",
+                    "$HOME/.autogenstudio",
+                    "$HOME/.config/autogen"
+                ][..]
+            )
         );
     }
 

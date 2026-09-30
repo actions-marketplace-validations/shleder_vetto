@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 25] = [
+pub const SUPPORTED_AGENTS: [&str; 27] = [
     "claude",
     "codex",
     "opencode",
@@ -40,6 +40,8 @@ pub const SUPPORTED_AGENTS: [&str; 25] = [
     "freebuff",
     "deepseek_harness",
     "omnigent",
+    "crewai",
+    "autogen",
 ];
 
 struct AgentSpec {
@@ -168,6 +170,16 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "omnigent",
         binaries: &["omnigent", "omnigent-cli"],
         markers: &[".omnigent", "omnigent.toml", "omnigent.json"],
+    },
+    AgentSpec {
+        name: "crewai",
+        binaries: &["crewai"],
+        markers: &[".crewai", "crewai.json", "crew.py"],
+    },
+    AgentSpec {
+        name: "autogen",
+        binaries: &["autogen", "autogenstudio"],
+        markers: &[".autogen", "autogen.json", ".autogenstudio"],
     },
 ];
 
@@ -410,6 +422,13 @@ mod tests {
         let omnigent_bins = agent_candidate_binaries("omnigent");
         assert!(omnigent_bins.contains(&"omnigent"));
         assert!(omnigent_bins.contains(&"omnigent-cli"));
+
+        let crewai_bins = agent_candidate_binaries("crewai");
+        assert!(crewai_bins.contains(&"crewai"));
+
+        let autogen_bins = agent_candidate_binaries("autogen");
+        assert!(autogen_bins.contains(&"autogen"));
+        assert!(autogen_bins.contains(&"autogenstudio"));
 
         assert!(agent_candidate_binaries("unknown-agent").is_empty());
     }

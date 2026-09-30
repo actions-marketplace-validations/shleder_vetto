@@ -273,6 +273,8 @@ Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zer
 | **Freebuff** | `freebuff` | `api.deepseek.com`, OpenAI, Anthropic | `~/.freebuff`, `~/.config/freebuff` |
 | **DeepSeek Harness** | `deepseek_harness` | `api.deepseek.com`, OpenAI, Anthropic | `~/.deepseek`, `~/.config/deepseek` |
 | **Omnigent** | `omnigent` | `api.omnigent.ai`, OpenAI, Anthropic | `~/.omnigent`, `~/.config/omnigent` |
+| **CrewAI** | `crewai` | `app.crewai.com`, `telemetry.crewai.com`, OpenAI, Anthropic, Gemini, Groq | `~/.crewai`, `~/.config/crewai` |
+| **Microsoft AutoGen** | `autogen` | OpenAI, Anthropic, Gemini, Groq, Together, Mistral | `~/.autogen`, `~/.autogenstudio`, `~/.config/autogen` |
 
 ---
 

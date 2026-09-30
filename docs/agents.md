@@ -32,6 +32,8 @@ unproven rather than assumed.
 | Freebuff (#9 Leaderboard) | `freebuff` | Multi-model agent runtime | statusline | `freebuff` | L7 proxy SNI filtering | first-class preset |
 | DeepSeek Harness (#10 Leaderboard) | `deepseek-harness` | Batch benchmark runner | none or statusline | `deepseek_harness` | Fair-share cgroups v2 fleet containment | first-class preset |
 | Omnigent AI | `omnigent`, `omnigent-cli` | Agent runtime | statusline or full | `omnigent` | Model provider + target repo write boundary | first-class preset |
+| CrewAI Multi-Agent | `crewai` | Python runtime | statusline or full | `crewai` | Model providers + CrewAI Cloud + search APIs | first-class preset |
+| Microsoft AutoGen | `autogen`, `autogenstudio` | Python runtime | statusline or full | `autogen` | Model providers + AutoGen Studio local state | first-class preset |
 | Custom process | any executable | unknown | statusline or none | `custom` | Default remains `off` | process contract covered |
 
 ## High-Volume Token Leaderboard Presets
@@ -43,6 +45,8 @@ The production token leaderboard (September 2026) tracks massive usage across em
 - **Freebuff** (279B tokens) — L7 TLS SNI filtering and credential masking.
 - **DeepSeek Harness** (201B tokens) — Large-scale evaluation runner with cgroups memory/CPU quotas.
 - **Omnigent** — Autonomous agent framework with Landlock/seccomp process sandboxing.
+- **CrewAI** - Multi-agent orchestration framework with tool isolation and API egress control.
+- **Microsoft AutoGen** - Multi-agent conversation and Studio runtime with containerless sandbox.
 
 
 ## Compatibility rules
