@@ -10,8 +10,10 @@
 //! a TCP pass-through helper: it never performs TLS MITM or certificate
 //! substitution.
 
-use std::io;
+use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -114,6 +116,23 @@ impl BrokerPolicy {
         if port == 0 {
             bail!("port 0 is not a connectable broker target");
         }
+        match &self.mode {
+            NetMode::Off => bail!("network policy is off"),
+            NetMode::Allowlist(domains) => {
+                if !domains.iter().any(|domain| host_matches(&normalized, domain)) {
+                    bail!("host {normalized:?} is not in the broker allowlist");
+                }
+            }
+            NetMode::Strict(rules) => {
+                if !rules
+                    .iter()
+                    .any(|rule| rule.port == port && host_matches(&normalized, &rule.domain))
+                {
+                    bail!("host {normalized:?}:{port} is not in the strict broker policy");
+                }
+            }
+            NetMode::Ask => {}
+        }
         let mut addresses = (normalized.as_str(), port)
             .to_socket_addrs()
             .with_context(|| format!("resolve {normalized}:{port} in broker"))?
@@ -187,6 +206,412 @@ impl LocalBroker {
     pub const fn tls_mode() -> &'static str {
         "TLS pass-through only; no certificate interception or MITM"
     }
+
+    /// Start the broker accept loop in a background supervisor thread.
+    pub fn start(self) -> Result<LocalBrokerHandle> {
+        let port = self.local_addr()?.port();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = shutdown.clone();
+        let listener = self.listener;
+        let policy = self.policy;
+
+        let thread = std::thread::Builder::new()
+            .name("vetto-macos-proxy".into())
+            .spawn(move || {
+                while !shutdown_clone.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _addr)) => {
+                            if shutdown_clone.load(Ordering::SeqCst) {
+                                break;
+                            }
+                            let policy_clone = policy.clone();
+                            let _ = std::thread::Builder::new()
+                                .name("vetto-macos-proxy-worker".into())
+                                .spawn(move || {
+                                    handle_client(stream, &policy_clone);
+                                });
+                        }
+                        Err(_) => {
+                            if shutdown_clone.load(Ordering::SeqCst) {
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                    }
+                }
+            })
+            .context("spawn macos local broker thread")?;
+
+        Ok(LocalBrokerHandle {
+            shutdown,
+            port,
+            thread: Some(thread),
+        })
+    }
+}
+
+pub struct LocalBrokerHandle {
+    shutdown: Arc<AtomicBool>,
+    port: u16,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl LocalBrokerHandle {
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn stop(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+        let _ = TcpStream::connect(("127.0.0.1", self.port));
+    }
+
+    pub fn join(mut self) -> std::thread::Result<()> {
+        if let Some(thread) = self.thread.take() {
+            thread.join()
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Construct proxy environment variables pointing to the local broker.
+pub fn build_proxy_env(port: u16) -> Vec<(String, String)> {
+    let proxy_url = format!("http://127.0.0.1:{port}");
+    vec![
+        ("HTTP_PROXY".to_string(), proxy_url.clone()),
+        ("HTTPS_PROXY".to_string(), proxy_url.clone()),
+        ("ALL_PROXY".to_string(), proxy_url.clone()),
+        ("http_proxy".to_string(), proxy_url.clone()),
+        ("https_proxy".to_string(), proxy_url.clone()),
+        ("all_proxy".to_string(), proxy_url),
+        ("NO_PROXY".to_string(), String::new()),
+        ("no_proxy".to_string(), String::new()),
+    ]
+}
+
+fn handle_client(mut client: TcpStream, policy: &BrokerPolicy) {
+    let _ = client.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = client.set_nodelay(true);
+
+    let mut buf = Vec::with_capacity(1024);
+    let mut chunk = [0u8; 1024];
+
+    let n = match client.read(&mut chunk) {
+        Ok(0) | Err(_) => return,
+        Ok(n) => n,
+    };
+    buf.extend_from_slice(&chunk[..n]);
+
+    if buf[0] == 0x16 {
+        handle_tls_client(client, buf, policy);
+    } else {
+        handle_http_client(client, buf, policy);
+    }
+}
+
+fn handle_tls_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPolicy) {
+    const MAX_TLS_HELLO: usize = 16 * 1024;
+    let mut sni = extract_client_hello_sni(&buf);
+    while sni.is_none() && buf.len() < MAX_TLS_HELLO {
+        if buf.len() >= 5 {
+            let record_len = u16::from_be_bytes([buf[3], buf[4]]) as usize;
+            if buf.len() >= 5 + record_len {
+                break;
+            }
+        }
+        let mut chunk = [0u8; 1024];
+        match client.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                sni = extract_client_hello_sni(&buf);
+            }
+        }
+    }
+
+    let Some(host) = sni else {
+        return;
+    };
+
+    let pinned = match policy.resolve(&host, 443) {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    let mut outbound = match pinned[0].connect(Some(Duration::from_secs(10))) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    if outbound.write_all(&buf).is_err() {
+        return;
+    }
+
+    tunnel(client, outbound);
+}
+
+fn handle_http_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPolicy) {
+    const MAX_HTTP_HEAD: usize = 32 * 1024;
+    while !buf.windows(4).any(|w| w == b"\r\n\r\n") && buf.len() < MAX_HTTP_HEAD {
+        let mut chunk = [0u8; 1024];
+        match client.read(&mut chunk) {
+            Ok(0) | Err(_) => return,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+        }
+    }
+
+    let header_end = match buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        Some(pos) => pos + 4,
+        None => return,
+    };
+
+    let head_str = match std::str::from_utf8(&buf[..header_end]) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    let mut lines = head_str.lines();
+    let request_line = match lines.next() {
+        Some(l) => l,
+        None => return,
+    };
+
+    let mut parts = request_line.split_whitespace();
+    let method = match parts.next() {
+        Some(m) => m.to_ascii_uppercase(),
+        None => return,
+    };
+
+    let target = match parts.next() {
+        Some(t) => t,
+        None => return,
+    };
+
+    if method == "CONNECT" {
+        let (host, port) = if let Some((h, p)) = target.rsplit_once(':') {
+            let port: u16 = match p.parse() {
+                Ok(p) => p,
+                Err(_) => {
+                    let _ = client.write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+                    return;
+                }
+            };
+            (h, port)
+        } else {
+            (target, 443)
+        };
+
+        let pinned = match policy.resolve(host, port) {
+            Ok(p) => p,
+            Err(_) => {
+                let _ = client.write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nAccess denied by Vetto policy\r\n",
+                );
+                return;
+            }
+        };
+
+        let mut outbound = match pinned[0].connect(Some(Duration::from_secs(10))) {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = client.write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+                return;
+            }
+        };
+
+        if client
+            .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            .is_err()
+        {
+            return;
+        }
+
+        if buf.len() > header_end {
+            if outbound.write_all(&buf[header_end..]).is_err() {
+                return;
+            }
+        }
+
+        tunnel(client, outbound);
+    } else {
+        let (host, port, path) = if let Some(stripped) = target.strip_prefix("http://") {
+            let (authority, path) = match stripped.split_once('/') {
+                Some((a, p)) => (a, format!("/{p}")),
+                None => (stripped, "/".to_string()),
+            };
+            let (h, p) = if let Some((h, p)) = authority.rsplit_once(':') {
+                (h, p.parse::<u16>().unwrap_or(80))
+            } else {
+                (authority, 80)
+            };
+            (h, p, path)
+        } else {
+            let mut host_header = None;
+            for line in lines {
+                if let Some((k, v)) = line.split_once(':') {
+                    if k.trim().eq_ignore_ascii_case("host") {
+                        host_header = Some(v.trim());
+                        break;
+                    }
+                }
+            }
+            let authority = match host_header {
+                Some(a) => a,
+                None => {
+                    let _ = client.write_all(
+                        b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\nMissing Host header\r\n",
+                    );
+                    return;
+                }
+            };
+            let (h, p) = if let Some((h, p)) = authority.rsplit_once(':') {
+                (h, p.parse::<u16>().unwrap_or(80))
+            } else {
+                (authority, 80)
+            };
+            (h, p, target.to_string())
+        };
+
+        let pinned = match policy.resolve(host, port) {
+            Ok(p) => p,
+            Err(_) => {
+                let _ = client.write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nAccess denied by Vetto policy\r\n",
+                );
+                return;
+            }
+        };
+
+        let mut outbound = match pinned[0].connect(Some(Duration::from_secs(10))) {
+            Ok(s) => s,
+            Err(_) => {
+                let _ = client.write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
+                return;
+            }
+        };
+
+        let mut rewritten_head = format!("{method} {path} HTTP/1.1\r\n");
+        if let Some(pos) = head_str.find("\r\n") {
+            rewritten_head.push_str(&head_str[pos + 2..]);
+        }
+
+        if outbound.write_all(rewritten_head.as_bytes()).is_err() {
+            return;
+        }
+
+        if buf.len() > header_end {
+            if outbound.write_all(&buf[header_end..]).is_err() {
+                return;
+            }
+        }
+
+        tunnel(client, outbound);
+    }
+}
+
+fn tunnel(mut client: TcpStream, mut outbound: TcpStream) {
+    let _ = client.set_nodelay(true);
+    let _ = outbound.set_nodelay(true);
+    let _ = client.set_read_timeout(None);
+    let _ = outbound.set_read_timeout(None);
+
+    let mut client_read = match client.try_clone() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let mut client_write = client;
+    let mut outbound_read = match outbound.try_clone() {
+        Ok(o) => o,
+        Err(_) => return,
+    };
+    let mut outbound_write = outbound;
+
+    let t1 = std::thread::spawn(move || {
+        let _ = std::io::copy(&mut client_read, &mut outbound_write);
+        let _ = outbound_write.shutdown(std::net::Shutdown::Write);
+    });
+    let _ = std::io::copy(&mut outbound_read, &mut client_write);
+    let _ = client_write.shutdown(std::net::Shutdown::Write);
+    let _ = t1.join();
+}
+
+pub fn extract_client_hello_sni(buf: &[u8]) -> Option<String> {
+    if buf.len() < 5 || buf[0] != 0x16 {
+        return None;
+    }
+    let record_len = u16::from_be_bytes([buf[3], buf[4]]) as usize;
+    if buf.len() < 5 + record_len {
+        return None;
+    }
+    if buf[5] != 0x01 {
+        return None;
+    }
+    let handshake_len = u32::from_be_bytes([0, buf[6], buf[7], buf[8]]) as usize;
+    if record_len < 4 + handshake_len {
+        return None;
+    }
+
+    let mut pos = 9 + 2 + 32;
+    if pos >= buf.len() {
+        return None;
+    }
+    let session_id_len = buf[pos] as usize;
+    pos += 1 + session_id_len;
+
+    if pos + 2 > buf.len() {
+        return None;
+    }
+    let cipher_suites_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]) as usize;
+    pos += 2 + cipher_suites_len;
+
+    if pos >= buf.len() {
+        return None;
+    }
+    let comp_methods_len = buf[pos] as usize;
+    pos += 1 + comp_methods_len;
+
+    if pos + 2 > buf.len() {
+        return None;
+    }
+    let extensions_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]) as usize;
+    pos += 2;
+
+    let ext_end = pos + extensions_len;
+    if ext_end > buf.len() {
+        return None;
+    }
+
+    while pos + 4 <= ext_end {
+        let ext_type = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+        let ext_len = u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]) as usize;
+        pos += 4;
+
+        if ext_type == 0x0000 {
+            if pos + ext_len > ext_end || ext_len < 2 {
+                return None;
+            }
+            let list_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]) as usize;
+            let mut sni_pos = pos + 2;
+            let list_end = pos + 2 + list_len;
+            if list_end > pos + ext_len {
+                return None;
+            }
+
+            while sni_pos + 3 <= list_end {
+                let name_type = buf[sni_pos];
+                let name_len = u16::from_be_bytes([buf[sni_pos + 1], buf[sni_pos + 2]]) as usize;
+                sni_pos += 3;
+                if name_type == 0 && sni_pos + name_len <= list_end {
+                    let host = std::str::from_utf8(&buf[sni_pos..sni_pos + name_len]).ok()?;
+                    return Some(host.to_string());
+                }
+                sni_pos += name_len;
+            }
+        }
+        pos += ext_len;
+    }
+    None
 }
 
 pub fn validate_public_addr(addr: IpAddr) -> Result<()> {
@@ -380,6 +805,82 @@ mod tests {
             LocalBroker::tls_mode(),
             "TLS pass-through only; no certificate interception or MITM"
         );
+    }
+
+    #[test]
+    fn build_proxy_env_contains_expected_keys() {
+        let vars = build_proxy_env(54321);
+        let map: std::collections::HashMap<_, _> = vars.into_iter().collect();
+        assert_eq!(map.get("HTTP_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("HTTPS_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("ALL_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("http_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("https_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("all_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(map.get("NO_PROXY"), Some(&String::new()));
+        assert_eq!(map.get("no_proxy"), Some(&String::new()));
+    }
+
+    #[test]
+    fn local_broker_connect_disallowed_domain_forbidden() {
+        let policy = BrokerPolicy::new(
+            NetMode::Allowlist(vec!["allowed.com".into()]),
+            "127.0.0.1:0".parse().unwrap(),
+        )
+        .unwrap();
+        let broker = LocalBroker::bind(policy).unwrap();
+        let port = broker.local_addr().unwrap().port();
+        let handle = broker.start().unwrap();
+
+        let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        client
+            .write_all(b"CONNECT forbidden.com:443 HTTP/1.1\r\nHost: forbidden.com:443\r\n\r\n")
+            .unwrap();
+
+        let mut response = String::new();
+        let _ = client.read_to_string(&mut response);
+        assert!(response.contains("403 Forbidden"), "response: {response}");
+
+        handle.stop();
+    }
+
+    #[test]
+    fn extract_client_hello_sni_parses_valid_sni() {
+        let host = b"example.com";
+        let mut ext = Vec::new();
+        ext.extend_from_slice(&0x0000u16.to_be_bytes());
+        let list_len = (host.len() + 3) as u16;
+        let ext_len = list_len + 2;
+        ext.extend_from_slice(&ext_len.to_be_bytes());
+        ext.extend_from_slice(&list_len.to_be_bytes());
+        ext.push(0x00);
+        ext.extend_from_slice(&(host.len() as u16).to_be_bytes());
+        ext.extend_from_slice(host);
+
+        let mut handshake = Vec::new();
+        handshake.push(0x01);
+        let body_len = 2 + 32 + 1 + 2 + 1 + 2 + ext.len();
+        handshake.extend_from_slice(&(body_len as u32).to_be_bytes()[1..4]);
+        handshake.extend_from_slice(&0x0303u16.to_be_bytes());
+        handshake.extend_from_slice(&[0u8; 32]);
+        handshake.push(0x00);
+        handshake.extend_from_slice(&0x0000u16.to_be_bytes());
+        handshake.push(0x00);
+        handshake.extend_from_slice(&(ext.len() as u16).to_be_bytes());
+        handshake.extend_from_slice(&ext);
+
+        let mut record = Vec::new();
+        record.push(0x16);
+        record.extend_from_slice(&0x0301u16.to_be_bytes());
+        record.extend_from_slice(&(handshake.len() as u16).to_be_bytes());
+        record.extend_from_slice(&handshake);
+
+        assert_eq!(
+            extract_client_hello_sni(&record),
+            Some("example.com".to_string())
+        );
+        assert_eq!(extract_client_hello_sni(&[0x15, 0x03, 0x01]), None);
+        assert_eq!(extract_client_hello_sni(&[]), None);
     }
 
     #[test]

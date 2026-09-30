@@ -1408,9 +1408,10 @@ impl SandboxBackend for MacosBackend {
         }
         #[cfg(target_os = "macos")]
         {
-            // Only `--net=off` is isolatable without a relay backend; any
-            // other mode fails preparation closed (no spawn possible).
-            if policy.net_mode != "off" {
+            // `--net=off` and `--net=allowlist` are supported on macOS;
+            // any other mode (strict, ask) fails preparation closed (no spawn possible).
+            let is_supported_net = policy.net_mode == "off" || policy.net_mode.starts_with("allowlist");
+            if !is_supported_net {
                 let mut states: BTreeMap<SecurityCapability, EnforcementState> =
                     SecurityCapability::all()
                         .into_iter()

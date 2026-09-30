@@ -143,7 +143,7 @@ pub fn prod_tier_mapping(tier: Option<Tier>, net: &NetMode) -> TierMapping {
         // emulated.
         if crate::sandbox::macos::MacosSandbox::seatbelt_available() {
             enforced.push(SecurityCapability::FilesystemIsolation);
-            if net_off {
+            if net_off || matches!(net, NetMode::Allowlist(_)) {
                 enforced.push(SecurityCapability::NetworkIsolation);
             }
             enforced.push(SecurityCapability::ProcessIsolation);
@@ -557,11 +557,11 @@ impl UnpreparedProductionExecution {
             anyhow::bail!("no production command provided");
         }
         #[cfg(target_os = "macos")]
-        if self.net.uses_relay() {
+        if self.net.uses_relay() && !matches!(self.net, NetMode::Allowlist(_)) {
             anyhow::bail!(
                 "production backend preparation failed (fail-closed, no agent execution): \
                  --net={} requires the Linux network-namespace relay and is unavailable on macOS; \
-                 refusing silently-weaker enforcement (fail-closed); run with `--net=off` on macOS",
+                 refusing silently-weaker enforcement (fail-closed); run with `--net=off` or `--net=allowlist` on macOS",
                 self.net.label()
             );
         }
