@@ -1298,6 +1298,15 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".omnigent"));
                         let _ = std::fs::create_dir_all(home.join(".config/omnigent"));
                     }
+                    Some("crewai") => {
+                        let _ = std::fs::create_dir_all(home.join(".crewai"));
+                        let _ = std::fs::create_dir_all(home.join(".config/crewai"));
+                    }
+                    Some("autogen") => {
+                        let _ = std::fs::create_dir_all(home.join(".autogen"));
+                        let _ = std::fs::create_dir_all(home.join(".autogenstudio"));
+                        let _ = std::fs::create_dir_all(home.join(".config/autogen"));
+                    }
                     Some("aider") => {
                         let _ = std::fs::create_dir_all(home.join(".aider"));
                         let _ = std::fs::create_dir_all(home.join(".config/aider"));
@@ -2059,6 +2068,8 @@ fn agent_root(home: &Path, agent: &str) -> Result<PathBuf> {
         "freebuff" => PathBuf::from(".freebuff"),
         "deepseek_harness" => PathBuf::from(".deepseek"),
         "omnigent" => PathBuf::from(".omnigent"),
+        "crewai" => PathBuf::from(".crewai"),
+        "autogen" => PathBuf::from(".autogen"),
         "custom" => PathBuf::from(".config/vetto/agents/custom"),
         _ => bail!(
             "unknown agent '{}'; known agents: {}",
