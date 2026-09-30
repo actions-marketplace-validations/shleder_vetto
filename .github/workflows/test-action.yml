@@ -51,6 +51,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare test branch for git guard
+        run: git checkout -B test-action-runner
+
       - name: Test Execute Mode with SARIF Report
         id: exec_test
         uses: ./
