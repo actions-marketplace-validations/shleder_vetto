@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 #[cfg(target_os = "macos")]
-use vetto::config::{NetMode, NetRule};
+use vetto::config::NetMode;
 #[cfg(target_os = "macos")]
 use vetto::policy::{DenyEntry, Policy};
 #[cfg(target_os = "macos")]

@@ -2081,7 +2081,12 @@ mod production_unit_tests {
             .mandatory
             .contains(&SecurityCapability::FilesystemIsolation));
         let full_relay = prod_tier_mapping(Some(Tier::Full), &relay);
+        #[cfg(not(target_os = "macos"))]
         assert!(!full_relay
+            .enforced
+            .contains(&SecurityCapability::NetworkIsolation));
+        #[cfg(target_os = "macos")]
+        assert!(full_relay
             .enforced
             .contains(&SecurityCapability::NetworkIsolation));
         assert!(
