@@ -431,10 +431,8 @@ fn handle_http_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPo
             return;
         }
 
-        if buf.len() > header_end {
-            if outbound.write_all(&buf[header_end..]).is_err() {
-                return;
-            }
+        if buf.len() > header_end && outbound.write_all(&buf[header_end..]).is_err() {
+            return;
         }
 
         tunnel(client, outbound);
@@ -504,10 +502,8 @@ fn handle_http_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPo
             return;
         }
 
-        if buf.len() > header_end {
-            if outbound.write_all(&buf[header_end..]).is_err() {
-                return;
-            }
+        if buf.len() > header_end && outbound.write_all(&buf[header_end..]).is_err() {
+            return;
         }
 
         tunnel(client, outbound);
