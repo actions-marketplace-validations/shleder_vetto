@@ -79,7 +79,9 @@ impl MacosSandbox {
             NetMode::Allowlist(_) => {
                 let policy = net_proxy::BrokerPolicy::new(
                     self.net.clone(),
-                    "127.0.0.1:0".parse().expect("valid loopback socket address"),
+                    "127.0.0.1:0"
+                        .parse()
+                        .expect("valid loopback socket address"),
                 )?;
                 let broker = net_proxy::LocalBroker::bind(policy)?;
                 let port = broker.local_addr()?.port();
@@ -112,7 +114,9 @@ impl MacosSandbox {
             bail!("fork: {}", std::io::Error::last_os_error());
         }
         if pid == 0 {
-            child(policy_ref, net_ref, proxy_port, agent_c, env_c, err_w_raw, opts_ref);
+            child(
+                policy_ref, net_ref, proxy_port, agent_c, env_c, err_w_raw, opts_ref,
+            );
         }
         drop(err_w);
 

@@ -806,7 +806,9 @@ fn test_macos_prod_allowlist_spawn_001() {
     let result = spawned.wait_collect();
     assert_eq!(result.exit_code, Some(0));
     assert!(
-        result.report.is_enforced(SecurityCapability::NetworkIsolation),
+        result
+            .report
+            .is_enforced(SecurityCapability::NetworkIsolation),
         "network isolation must be enforced under allowlist: {}",
         result.render_deterministic()
     );

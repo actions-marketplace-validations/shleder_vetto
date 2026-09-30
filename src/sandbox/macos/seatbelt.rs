@@ -67,7 +67,9 @@ pub fn generate_sbpl_template_and_params(
             sb.push_str("(allow network-outbound (remote unix-socket))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
-            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
@@ -75,7 +77,9 @@ pub fn generate_sbpl_template_and_params(
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
-            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
         }
         NetMode::Allowlist(_) => {
@@ -83,7 +87,9 @@ pub fn generate_sbpl_template_and_params(
             sb.push_str("(allow network-outbound (remote unix-socket))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
-            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
@@ -91,13 +97,20 @@ pub fn generate_sbpl_template_and_params(
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
             sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
-            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
             sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
             if let Some(port) = proxy_port {
                 sb.push_str("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_IPV4\")))\n");
-                sb.push_str("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))\n");
+                sb.push_str(
+                    "(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))\n",
+                );
                 params.push(("LOCAL_PROXY_IPV4".to_string(), format!("127.0.0.1:{port}")));
-                params.push(("LOCAL_PROXY_LOCALHOST".to_string(), format!("localhost:{port}")));
+                params.push((
+                    "LOCAL_PROXY_LOCALHOST".to_string(),
+                    format!("localhost:{port}"),
+                ));
             }
         }
         NetMode::Strict(_) | NetMode::Ask => {
@@ -380,8 +393,11 @@ mod tests {
         let net = NetMode::Allowlist(vec!["example.com".to_string()]);
         let (template, params) = generate_sbpl_template_and_params(&policy, &net, Some(54321));
 
-        assert!(template.contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_IPV4\")))"));
-        assert!(template.contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))"));
+        assert!(
+            template.contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_IPV4\")))")
+        );
+        assert!(template
+            .contains("(allow network-outbound (remote tcp (param \"LOCAL_PROXY_LOCALHOST\")))"));
         assert!(template.contains("(path-literal \"/private/var/run/mDNSResponder\")"));
 
         let param_map: std::collections::HashMap<_, _> = params.into_iter().collect();

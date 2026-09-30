@@ -119,7 +119,10 @@ impl BrokerPolicy {
         match &self.mode {
             NetMode::Off => bail!("network policy is off"),
             NetMode::Allowlist(domains) => {
-                if !domains.iter().any(|domain| host_matches(&normalized, domain)) {
+                if !domains
+                    .iter()
+                    .any(|domain| host_matches(&normalized, domain))
+                {
                     bail!("host {normalized:?} is not in the broker allowlist");
                 }
             }
@@ -393,7 +396,8 @@ fn handle_http_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPo
             let port: u16 = match p.parse() {
                 Ok(p) => p,
                 Err(_) => {
-                    let _ = client.write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+                    let _ =
+                        client.write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
                     return;
                 }
             };
@@ -811,12 +815,30 @@ mod tests {
     fn build_proxy_env_contains_expected_keys() {
         let vars = build_proxy_env(54321);
         let map: std::collections::HashMap<_, _> = vars.into_iter().collect();
-        assert_eq!(map.get("HTTP_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
-        assert_eq!(map.get("HTTPS_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
-        assert_eq!(map.get("ALL_PROXY"), Some(&"http://127.0.0.1:54321".to_string()));
-        assert_eq!(map.get("http_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
-        assert_eq!(map.get("https_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
-        assert_eq!(map.get("all_proxy"), Some(&"http://127.0.0.1:54321".to_string()));
+        assert_eq!(
+            map.get("HTTP_PROXY"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
+        assert_eq!(
+            map.get("HTTPS_PROXY"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
+        assert_eq!(
+            map.get("ALL_PROXY"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
+        assert_eq!(
+            map.get("http_proxy"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
+        assert_eq!(
+            map.get("https_proxy"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
+        assert_eq!(
+            map.get("all_proxy"),
+            Some(&"http://127.0.0.1:54321".to_string())
+        );
         assert_eq!(map.get("NO_PROXY"), Some(&String::new()));
         assert_eq!(map.get("no_proxy"), Some(&String::new()));
     }
