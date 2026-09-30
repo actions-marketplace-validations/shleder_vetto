@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 #[cfg(target_os = "macos")]
-use vetto::config::NetMode;
+use vetto::config::{NetMode, NetRule};
 #[cfg(target_os = "macos")]
 use vetto::policy::{DenyEntry, Policy};
 #[cfg(target_os = "macos")]
@@ -252,7 +252,7 @@ fn test_macos_tier_mapping_001() {
     assert!(!mapping
         .mandatory
         .contains(&SecurityCapability::ResourceLimits));
-    let strict = NetMode::Strict(vec![crate::config::NetRule {
+    let strict = NetMode::Strict(vec![vetto::config::NetRule {
         domain: "example.com".to_string(),
         port: 443,
     }]);
@@ -725,7 +725,7 @@ fn test_macos_prod_prepare_fail_no_spawn_001() {
     let entered_before = PROD_BACKEND_ENTERED.load(std::sync::atomic::Ordering::SeqCst);
     let spawned_before = PROD_SPAWN_COUNT.load(std::sync::atomic::Ordering::SeqCst);
     let root = scratch("prepare-fail");
-    let net = NetMode::Strict(vec![crate::config::NetRule {
+    let net = NetMode::Strict(vec![vetto::config::NetRule {
         domain: "example.com".to_string(),
         port: 443,
     }]);

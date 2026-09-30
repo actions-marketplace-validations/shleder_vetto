@@ -514,7 +514,7 @@ fn handle_http_client(mut client: TcpStream, mut buf: Vec<u8>, policy: &BrokerPo
     }
 }
 
-fn tunnel(mut client: TcpStream, mut outbound: TcpStream) {
+fn tunnel(client: TcpStream, outbound: TcpStream) {
     let _ = client.set_nodelay(true);
     let _ = outbound.set_nodelay(true);
     let _ = client.set_read_timeout(None);
