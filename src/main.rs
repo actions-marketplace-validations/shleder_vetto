@@ -202,11 +202,11 @@ fn run() -> Result<()> {
     let _ = vetto::telemetry::record_funnel_milestone("install");
 
     // Check if invoked via vetto-bench executable alias
-    let is_vetto_bench = std::env::args_os().next().map_or(false, |a| {
+    let is_vetto_bench = std::env::args_os().next().is_some_and(|a| {
         std::path::Path::new(&a)
             .file_stem()
             .and_then(|s| s.to_str())
-            .map_or(false, |stem| stem.eq_ignore_ascii_case("vetto-bench"))
+            .is_some_and(|stem| stem.eq_ignore_ascii_case("vetto-bench"))
     });
 
     if is_vetto_bench {
