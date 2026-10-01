@@ -70,6 +70,10 @@ harness = false
 name = "e2e_spawn"
 harness = false
 
+[[bench]]
+name = "swebench_runtime"
+harness = false
+
 [profile.release]
 lto = true
 strip = true

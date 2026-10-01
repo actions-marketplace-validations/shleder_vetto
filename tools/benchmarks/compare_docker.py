@@ -182,9 +182,10 @@ def main() -> None:
     parser.add_argument("--iterations", "-n", type=int, default=10, help="Cold-start iterations")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
     parser.add_argument("--output", "-o", type=str, default=None, help="Save report to file")
+    parser.add_argument("--vetto-bin", type=str, default=None, help="Path to vetto binary")
     args = parser.parse_args()
 
-    vetto_bin = resolve_vetto_bin()
+    vetto_bin = args.vetto_bin or resolve_vetto_bin()
     docker_available = check_docker_available()
 
     # Workload: standard unit-test arithmetic and json parsing simulation
@@ -281,11 +282,11 @@ def main() -> None:
     if args.output:
         out_p = Path(args.output)
         out_p.parent.mkdir(parents=True, exist_ok=True)
-        if args.json or out_p.suffix == ".json":
+        if out_p.suffix == ".json":
             out_p.write_text(json.dumps(report_data, indent=2))
         else:
             lines = [
-                "# Vetto vs Docker Benchmark Report\n",
+                "\n### ⚡ Vetto vs Docker Benchmark Report\n",
                 f"- **Date**: {report_data['timestamp']}",
                 f"- **Docker Local Status**: {'Live' if docker_available else 'Reference Baseline'}\n",
                 "| Metric | Vetto | Docker | Unit | Advantage |",
@@ -294,7 +295,8 @@ def main() -> None:
             for m in metrics:
                 ratio = f"{m.speedup_factor}x" if m.speedup_factor != float("inf") else "Infinite (Daemon-less)"
                 lines.append(f"| {m.name} | {m.vetto_value} | {m.docker_value} | {m.unit} | {ratio} |")
-            out_p.write_text("\n".join(lines) + "\n")
+            with open(out_p, "a", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":

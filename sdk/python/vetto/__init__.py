@@ -7,6 +7,7 @@ semantics and sub-4ms cold-start latency.
 
 from __future__ import annotations
 
+from vetto.bench import VettoContainer, VettoExecResult, VettoTaskRunner
 from vetto.langgraph import VettoExecutionTool, VettoToolNode
 from vetto.policy import PolicyBuilder
 from vetto.sandbox import (
@@ -30,4 +31,7 @@ __all__ = [
     "VettoToolNode",
     "VettoExecutionTool",
     "PolicyBuilder",
+    "VettoTaskRunner",
+    "VettoContainer",
+    "VettoExecResult",
 ]

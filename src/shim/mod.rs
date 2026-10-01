@@ -39,14 +39,19 @@ pub fn detect_argv0_shim() -> Option<String> {
     let path = PathBuf::from(arg0);
     let stem = path.file_stem()?.to_string_lossy().to_string();
 
-    if stem.eq_ignore_ascii_case("vetto")
-        || stem.eq_ignore_ascii_case("vetto-shim")
-        || stem.eq_ignore_ascii_case("__vetto")
-    {
+    if is_internal_binary_stem(&stem) {
         None
     } else {
         Some(stem)
     }
+}
+
+/// Returns true if the binary stem belongs to Vetto itself rather than an intercepted toolchain binary.
+pub fn is_internal_binary_stem(stem: &str) -> bool {
+    stem.eq_ignore_ascii_case("vetto")
+        || stem.eq_ignore_ascii_case("vetto-bench")
+        || stem.eq_ignore_ascii_case("vetto-shim")
+        || stem.eq_ignore_ascii_case("__vetto")
 }
 
 /// Helper to detect if a file is a Vetto-generated shim script.

@@ -233,3 +233,81 @@ fn test_resolve_or_materialize_policy() {
     assert!(content.contains("[metadata]"));
     assert!(content.contains("name = \"swebench\""));
 }
+
+#[test]
+fn test_run_subcommand_benchmark_flag() {
+    let cli = Cli::try_parse_from(["vetto", "run", "--benchmark", "--", "pytest", "tests/"])
+        .expect("parse run --benchmark flag");
+
+    let Some(Command::Run {
+        benchmark,
+        command,
+        args,
+    }) = cli.command
+    else {
+        panic!("expected Command::Run");
+    };
+
+    assert!(benchmark);
+    assert_eq!(command, Some("pytest".to_string()));
+    assert_eq!(args, vec!["tests/".to_string()]);
+}
+
+#[test]
+fn test_run_subcommand_benchmark_flag_without_dashdash() {
+    let cli = Cli::try_parse_from(["vetto", "run", "--benchmark", "pytest", "tests/"])
+        .expect("parse run --benchmark flag without dashdash");
+
+    let Some(Command::Run {
+        benchmark,
+        command,
+        args,
+    }) = cli.command
+    else {
+        panic!("expected Command::Run");
+    };
+
+    assert!(benchmark);
+    assert_eq!(command, Some("pytest".to_string()));
+    assert_eq!(args, vec!["tests/".to_string()]);
+}
+
+#[test]
+fn test_vetto_bench_not_treated_as_external_shim() {
+    // Binary stems matching "vetto-bench" must be recognized as internal Vetto binaries,
+    // ensuring detect_argv0_shim ignores them and never intercepts them as external shims.
+    assert!(vetto::shim::is_internal_binary_stem("vetto-bench"));
+    assert!(vetto::shim::is_internal_binary_stem("VETTO-BENCH"));
+    assert!(vetto::shim::is_internal_binary_stem("vetto"));
+    assert!(vetto::shim::is_internal_binary_stem("vetto-shim"));
+    assert!(vetto::shim::is_internal_binary_stem("__vetto"));
+
+    // Real external tools must NOT be classified as internal stems
+    assert!(!vetto::shim::is_internal_binary_stem("pytest"));
+    assert!(!vetto::shim::is_internal_binary_stem("python3"));
+    assert!(!vetto::shim::is_internal_binary_stem("git"));
+    assert!(!vetto::shim::is_internal_binary_stem("node"));
+}
+
+#[test]
+fn test_vetto_bench_argv0_rewrite_to_bench_subcommand() {
+    // When invoked via vetto-bench alias, arguments are translated into the `bench` subcommand.
+    let mut rewritten_args = vec!["vetto".to_string(), "bench".to_string()];
+    rewritten_args.extend(vec![
+        "--workspace".to_string(),
+        "/tmp/bench".to_string(),
+        "--json".to_string(),
+        "--".to_string(),
+        "pytest".to_string(),
+        "tests/".to_string(),
+    ]);
+
+    let cli = Cli::try_parse_from(&rewritten_args).expect("parse rewritten vetto-bench args");
+    let Some(Command::Bench(bench_args)) = cli.command else {
+        panic!("expected Command::Bench from rewritten vetto-bench args");
+    };
+
+    assert_eq!(bench_args.workspace, Some(PathBuf::from("/tmp/bench")));
+    assert!(bench_args.json);
+    assert_eq!(bench_args.command, vec!["pytest", "tests/"]);
+}

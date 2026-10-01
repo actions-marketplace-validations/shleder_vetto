@@ -21,10 +21,11 @@
     "url": "https://github.com/shleder/vetto/issues"
   },
   "bin": {
-    "vetto": "bin/vetto.js"
+    "vetto": "bin/vetto.js",
+    "vetto-bench": "bin/vetto-bench.js"
   },
   "scripts": {
-    "test": "node --check bin/vetto.js"
+    "test": "node --check bin/vetto.js && node --check bin/vetto-bench.js"
   },
   "files": [
     "bin",
