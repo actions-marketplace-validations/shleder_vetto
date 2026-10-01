@@ -298,6 +298,25 @@ jobs:
           name: perf-summary
           path: ${{ runner.temp }}/vetto-perf-latest.json
 
+      - name: Run SWE-bench criterion micro-benchmark
+        run: cargo bench --bench swebench_runtime --all-features
+
+      - name: Run automated Docker vs Vetto comparison benchmark
+        run: |
+          python3 tools/benchmarks/compare_docker.py \
+            --vetto-bin target/release/vetto \
+            --iterations 10 \
+            --output "$GITHUB_STEP_SUMMARY" \
+            --json > "${{ runner.temp }}/docker-vs-vetto-benchmark.json"
+
+      - name: Upload Docker comparison benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-vs-vetto-benchmark
+          path: ${{ runner.temp }}/docker-vs-vetto-benchmark.json
+          if-no-files-found: ignore
+
       - name: Upload Criterion benchmark artifacts
         if: always()
         uses: actions/upload-artifact@v4
