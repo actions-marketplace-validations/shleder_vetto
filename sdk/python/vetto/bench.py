@@ -106,7 +106,9 @@ class VettoTaskRunner:
         self.memory_mb = memory_limit_mb if memory_limit_mb is not None else memory_mb
         self.profile = profile
         if isinstance(net, bool):
-            self.net = "on" if net else "off"
+            self.net = "open" if net else "off"
+        elif str(net).lower() in ("on", "true", "open"):
+            self.net = "open"
         else:
             self.net = str(net)
         self.vetto_bin = self._find_vetto_binary(vetto_bin)

@@ -40,6 +40,15 @@ class TestVettoBenchAdapter(unittest.TestCase):
             self.assertEqual(runner.net, "off")
             self.assertEqual(runner.profile, "custom_profile")
 
+    def test_runner_initialization_net_enabled(self) -> None:
+        with patch.object(VettoTaskRunner, "_find_vetto_binary", return_value=self.dummy_bin):
+            runner_bool = VettoTaskRunner(net=True)
+            self.assertEqual(runner_bool.net, "open")
+            runner_str = VettoTaskRunner(net="on")
+            self.assertEqual(runner_str.net, "open")
+            runner_allowlist = VettoTaskRunner(net="allowlist:api.openai.com")
+            self.assertEqual(runner_allowlist.net, "allowlist:api.openai.com")
+
     def test_run_command_success(self) -> None:
         mock_output = {
             "exit_code": 0,

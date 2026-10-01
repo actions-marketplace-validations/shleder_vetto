@@ -365,7 +365,7 @@ fn run() -> Result<()> {
                     timeout: cfg.session_timeout.map(|d| d.as_secs()).unwrap_or(180),
                     memory_mb: 4096,
                     net: args.net.clone(),
-                    json: false,
+                    json: args.json,
                     instance_id: None,
                     profile: "swebench".to_string(),
                     env: vec![],
