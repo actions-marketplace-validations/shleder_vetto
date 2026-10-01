@@ -84,6 +84,8 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "wizard",
         "undo",
         "ephemeral",
+        "eval",
+        "bench",
         "diff",
         "pack",
         "unpack",
@@ -198,6 +200,28 @@ fn run() -> Result<()> {
     // Activation funnel milestone (issue #27): first-ever run. Once-only via
     // marker file; silent unless telemetry is explicitly opted in.
     let _ = vetto::telemetry::record_funnel_milestone("install");
+
+    // Check if invoked via vetto-bench executable alias
+    let is_vetto_bench = std::env::args_os().next().map_or(false, |a| {
+        std::path::Path::new(&a)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map_or(false, |stem| stem.eq_ignore_ascii_case("vetto-bench"))
+    });
+
+    if is_vetto_bench {
+        let mut rewritten_args = vec!["vetto".to_string(), "bench".to_string()];
+        rewritten_args.extend(std::env::args().skip(1));
+        let cli = match cli::Cli::try_parse_from(&rewritten_args) {
+            Ok(c) => c,
+            Err(e) => e.exit(),
+        };
+        logger::init_flags(cli.quiet, cli.verbose);
+        if let Some(cli::Command::Bench(ref bench_args)) = cli.command {
+            return cli::bench::execute_bench(bench_args, &cli);
+        }
+    }
+
     let raw_args: Vec<String> = std::env::args().collect();
     let has_version = raw_args.iter().any(|a| a == "--version" || a == "-V");
     let has_json = raw_args.iter().any(|a| a == "--json");
@@ -280,6 +304,7 @@ fn run() -> Result<()> {
         Some(cli::Command::Run {
             command,
             args: run_args,
+            benchmark,
         }) => {
             let mut cfg = RunConfig::from_cli(&args)?;
             if let Some(cmd) = command {
@@ -334,7 +359,7 @@ fn run() -> Result<()> {
             } else {
                 resolve_target_agent(&mut cfg, &args, run_args, true)?;
             }
-            if args.benchmark {
+            if *benchmark || args.benchmark {
                 let bench_args = cli::bench::BenchArgs {
                     workspace: None,
                     timeout: cfg.session_timeout.map(|d| d.as_secs()).unwrap_or(180),

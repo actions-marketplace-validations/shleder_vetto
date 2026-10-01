@@ -425,6 +425,10 @@ pub enum Command {
     /// Run an agent command under the Vetto sandbox supervisor
     #[command(alias = "exec")]
     Run {
+        /// Run in high-throughput SWE-bench benchmark mode (isolated CoW tmpfs, cgroups limits, no DB)
+        #[arg(long)]
+        benchmark: bool,
+
         /// Target agent binary or command
         #[arg(value_name = "COMMAND")]
         command: Option<String>,
