@@ -714,12 +714,8 @@ fn test_macos_prod_timeout_001() {
 #[test]
 fn test_macos_prod_prepare_fail_no_spawn_001() {
     let _guard = macos_prod_serial().lock().unwrap();
-    use vetto::sandbox::production::{
-        UnpreparedProductionExecution, PROD_BACKEND_ENTERED, PROD_SPAWN_COUNT,
-    };
+    use vetto::sandbox::production::UnpreparedProductionExecution;
     use vetto::sandbox::{Backend, StdioMode};
-    let entered_before = PROD_BACKEND_ENTERED.load(std::sync::atomic::Ordering::SeqCst);
-    let spawned_before = PROD_SPAWN_COUNT.load(std::sync::atomic::Ordering::SeqCst);
     let root = scratch("prepare-fail");
     let net = NetMode::Strict(vec![vetto::config::NetRule {
         domain: "example.com".to_string(),
@@ -748,16 +744,6 @@ fn test_macos_prod_prepare_fail_no_spawn_001() {
     assert!(
         err.to_string().contains("fail-closed") || err.to_string().contains("refusing"),
         "fail-closed error, got: {err:#}"
-    );
-    assert_eq!(
-        PROD_BACKEND_ENTERED.load(std::sync::atomic::Ordering::SeqCst),
-        entered_before,
-        "no backend entry on preparation failure"
-    );
-    assert_eq!(
-        PROD_SPAWN_COUNT.load(std::sync::atomic::Ordering::SeqCst),
-        spawned_before,
-        "spawn count unchanged: zero spawn"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

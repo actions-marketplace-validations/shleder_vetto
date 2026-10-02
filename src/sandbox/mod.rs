@@ -24,7 +24,6 @@ pub mod windows;
 #[cfg(unix)]
 pub use handle::create_cloexec_pipe;
 pub use handle::{SandboxHandle, SpawnOptions, StdioMode};
-pub use production::SupervisorEngine;
 
 #[cfg(target_os = "linux")]
 pub use linux::audit_reader::{
