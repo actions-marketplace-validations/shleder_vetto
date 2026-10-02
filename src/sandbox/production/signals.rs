@@ -63,6 +63,10 @@ pub struct ScopedSignalForwarder {
     pub target: SignalTarget,
     #[cfg(unix)]
     active: Arc<AtomicBool>,
+    #[cfg(unix)]
+    prev_sigint: libc::sighandler_t,
+    #[cfg(unix)]
+    prev_sigterm: libc::sighandler_t,
 }
 
 impl ScopedSignalForwarder {
@@ -73,13 +77,24 @@ impl ScopedSignalForwarder {
         policy: EscalationPolicy,
     ) -> Result<Self, ProductionError> {
         let raw_target = target.as_raw_target();
+        if raw_target == 0 {
+            return Err(ProductionError::SignalError("invalid signal target 0".into()));
+        }
+
+        if ACTIVE_FORWARDER_PID
+            .compare_exchange(0, raw_target, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(ProductionError::SignalError(
+                "Another ScopedSignalForwarder is already active in this process; concurrent forwarders are forbidden".into(),
+            ));
+        }
+
         context
             .signals
             .target_pid
             .store(raw_target, Ordering::SeqCst);
         context.signals.sigint_count.store(0, Ordering::SeqCst);
-
-        ACTIVE_FORWARDER_PID.store(raw_target, Ordering::SeqCst);
         ACTIVE_FORWARDER_COUNT.store(0, Ordering::SeqCst);
 
         let active = Arc::new(AtomicBool::new(true));
@@ -111,18 +126,25 @@ impl ScopedSignalForwarder {
                 }
                 std::thread::sleep(policy.poll_interval);
             })
-            .map_err(|e| ProductionError::SignalError(e.to_string()))?;
+            .map_err(|e| {
+                ACTIVE_FORWARDER_PID.store(0, Ordering::SeqCst);
+                ProductionError::SignalError(e.to_string())
+            })?;
 
         let handler = forwarder_sig_handler as *const () as libc::sighandler_t;
-        unsafe {
-            libc::signal(libc::SIGINT, handler);
-            libc::signal(libc::SIGTERM, handler);
-        }
+        let (prev_sigint, prev_sigterm) = unsafe {
+            (
+                libc::signal(libc::SIGINT, handler),
+                libc::signal(libc::SIGTERM, handler),
+            )
+        };
 
         Ok(Self {
             context,
             target,
             active,
+            prev_sigint,
+            prev_sigterm,
         })
     }
 
@@ -144,8 +166,16 @@ impl Drop for ScopedSignalForwarder {
             self.active.store(false, Ordering::SeqCst);
             ACTIVE_FORWARDER_PID.store(0, Ordering::SeqCst);
             unsafe {
-                libc::signal(libc::SIGINT, libc::SIG_DFL);
-                libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                if self.prev_sigint != libc::SIG_ERR {
+                    libc::signal(libc::SIGINT, self.prev_sigint);
+                } else {
+                    libc::signal(libc::SIGINT, libc::SIG_DFL);
+                }
+                if self.prev_sigterm != libc::SIG_ERR {
+                    libc::signal(libc::SIGTERM, self.prev_sigterm);
+                } else {
+                    libc::signal(libc::SIGTERM, libc::SIG_DFL);
+                }
             }
         }
     }

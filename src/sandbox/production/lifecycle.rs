@@ -645,11 +645,20 @@ pub struct SpawnedProductionExecution {
     pub timeout: Option<Duration>,
     pub capability: Box<dyn SandboxBackend>,
     pub fsm: ExecutionStateMachine,
+    /// Optional stdio stream collector.
+    /// When attached (via `with_collector`), streams are drained and joined on finish().
+    /// When None, stdio drainage is managed externally (e.g. by supervise::pump
+    /// or caller-owned AsyncPipeReader).
     pub collector: Option<StreamCollector>,
     pub signals: Option<ScopedSignalForwarder>,
 }
 
 impl SpawnedProductionExecution {
+    /// Attach an optional stdio StreamCollector to be drained and joined on finish().
+    pub fn with_collector(mut self, collector: StreamCollector) -> Self {
+        self.collector = Some(collector);
+        self
+    }
     pub fn contract(&self) -> &SecurityContract {
         &self.contract
     }

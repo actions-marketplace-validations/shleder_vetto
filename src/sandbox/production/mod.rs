@@ -17,6 +17,7 @@ use crate::verify_ng::sandbox_backend::{
     BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, SandboxBackend,
     SecurityCapability,
 };
+use crate::sandbox::StdioMode;
 
 pub mod context;
 pub mod drain;
@@ -27,7 +28,9 @@ pub mod signals;
 pub use context::{
     ProductionSessionContext, SessionEvidenceState, SessionExecutionMetrics, SessionSignalState,
 };
-pub use drain::{piped_stdio_fds, AsyncPipeReader, DrainConfig, PipePair, StreamCollector};
+#[cfg(unix)]
+pub use drain::piped_stdio_fds;
+pub use drain::{AsyncPipeReader, DrainConfig, PipePair, StreamCollector};
 pub use error::ProductionError;
 pub use lifecycle::{
     build_production_env, freeze_production_contract, prepare_production_contract, wait_for_exit,

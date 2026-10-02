@@ -92,6 +92,11 @@ impl PipePair {
     }
 }
 
+#[cfg(not(unix))]
+pub fn piped_stdio_fds() -> anyhow::Result<()> {
+    anyhow::bail!("piped_stdio_fds is Unix-only")
+}
+
 /// Create two cloexec pipes for boundary-owned captured stdio.
 /// Returns `((stdout_r, stdout_w), (stderr_r, stderr_w))`.
 #[cfg(unix)]
@@ -301,14 +306,20 @@ impl StreamCollector {
         evidence: Arc<SessionEvidenceState>,
     ) -> Result<Self, ProductionError> {
         unsafe {
-            let out_fd = libc::dup(pipes.stdout_read.as_raw_fd());
+            let out_fd = libc::fcntl(pipes.stdout_read.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0);
             if out_fd < 0 {
-                return Err(ProductionError::DrainFailure("dup stdout failed".into()));
+                return Err(ProductionError::DrainFailure(format!(
+                    "fcntl F_DUPFD_CLOEXEC stdout failed: {}",
+                    std::io::Error::last_os_error()
+                )));
             }
-            let err_fd = libc::dup(pipes.stderr_read.as_raw_fd());
+            let err_fd = libc::fcntl(pipes.stderr_read.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0);
             if err_fd < 0 {
                 libc::close(out_fd);
-                return Err(ProductionError::DrainFailure("dup stderr failed".into()));
+                return Err(ProductionError::DrainFailure(format!(
+                    "fcntl F_DUPFD_CLOEXEC stderr failed: {}",
+                    std::io::Error::last_os_error()
+                )));
             }
             Ok(Self {
                 stdout_reader: AsyncPipeReader::spawn_with_config(

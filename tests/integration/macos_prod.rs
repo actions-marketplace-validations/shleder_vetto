@@ -347,7 +347,7 @@ fn test_macos_matrix_001() {
 
 /// TEST-MACOS-NO-DIRECT-BYPASS-001 (structural, all platforms): every
 /// production route goes through the single typestate boundary; the legacy
-/// mechanics spawn exists only inside `production.rs`; the verify-ng
+/// mechanics spawn exists only inside `production/lifecycle.rs`; the verify-ng
 /// harness spawn stays plan-controlled (`pre_exec`).
 #[test]
 fn test_macos_no_direct_bypass_001() {
@@ -372,10 +372,10 @@ fn test_macos_no_direct_bypass_001() {
             );
         }
     }
-    let production = include_str!("../../src/sandbox/production.rs");
+    let production = include_str!("../../src/sandbox/production/lifecycle.rs");
     assert!(
-        production.contains("self.mechanics.spawn"),
-        "the single production spawn boundary must live in production.rs"
+        production.contains("self.mechanics") && production.contains(".spawn(policy, opts)"),
+        "the single production spawn boundary must live in production/lifecycle.rs"
     );
     // Documented harness exception: verify-ng `run_one` spawns directly but
     // ONLY under the backend child-side plan installed via `pre_exec`, so
