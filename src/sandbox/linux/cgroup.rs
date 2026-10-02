@@ -95,6 +95,7 @@ impl Drop for CgroupHandle {
 }
 
 pub use crate::policy::types::{parse_cpu_max, parse_memory_bytes};
+use crate::policy::units::parse_cgroup_memory;
 
 /// Read available cgroup v2 controllers from the cgroup root if mounted.
 pub fn available_controllers() -> Vec<String> {
@@ -210,14 +211,14 @@ pub fn setup_cgroup(
 
     // Validate quota specifications early: fail-closed if invalid
     if let Some(mem) = &effective_cgroup.memory_max {
-        if parse_memory_bytes(mem).is_none() && is_required {
+        if parse_cgroup_memory(mem).is_err() && is_required {
             return Err(VettoError::Sandbox(format!(
                 "invalid memory_max spec '{mem}' (fail-closed exit 125)"
             )));
         }
     }
     if let Some(swap) = &effective_cgroup.swap_max {
-        if parse_memory_bytes(swap).is_none() && is_required {
+        if parse_cgroup_memory(swap).is_err() && is_required {
             return Err(VettoError::Sandbox(format!(
                 "invalid swap_max spec '{swap}' (fail-closed exit 125)"
             )));
@@ -260,14 +261,18 @@ pub fn setup_cgroup(
 
     // Write limits
     if let Some(mem) = &effective_cgroup.memory_max {
-        let bytes = parse_memory_bytes(mem).ok_or_else(|| {
-            if is_required {
-                let _ = fs::remove_dir(&cgroup_dir);
+        let bytes = match parse_cgroup_memory(mem) {
+            Ok(None) => "max".to_string(),
+            Ok(Some(b)) => b.to_string(),
+            Err(_) => {
+                if is_required {
+                    let _ = fs::remove_dir(&cgroup_dir);
+                }
+                return Err(VettoError::Sandbox(format!(
+                    "invalid memory_max spec '{mem}' (fail-closed exit 125)"
+                )));
             }
-            VettoError::Sandbox(format!(
-                "invalid memory_max spec '{mem}' (fail-closed exit 125)"
-            ))
-        })?;
+        };
         if let Err(e) = fs::write(cgroup_dir.join("memory.max"), &bytes) {
             if is_required {
                 let _ = fs::remove_dir(&cgroup_dir);
@@ -278,14 +283,18 @@ pub fn setup_cgroup(
         }
     }
     if let Some(swap) = &effective_cgroup.swap_max {
-        let bytes = parse_memory_bytes(swap).ok_or_else(|| {
-            if is_required {
-                let _ = fs::remove_dir(&cgroup_dir);
+        let bytes = match parse_cgroup_memory(swap) {
+            Ok(None) => "max".to_string(),
+            Ok(Some(b)) => b.to_string(),
+            Err(_) => {
+                if is_required {
+                    let _ = fs::remove_dir(&cgroup_dir);
+                }
+                return Err(VettoError::Sandbox(format!(
+                    "invalid swap_max spec '{swap}' (fail-closed exit 125)"
+                )));
             }
-            VettoError::Sandbox(format!(
-                "invalid swap_max spec '{swap}' (fail-closed exit 125)"
-            ))
-        })?;
+        };
         if let Err(e) = fs::write(cgroup_dir.join("memory.swap.max"), &bytes) {
             if is_required {
                 let _ = fs::remove_dir(&cgroup_dir);
@@ -336,6 +345,12 @@ mod tests {
 
     #[test]
     fn parse_memory_units() {
+        assert_eq!(parse_cgroup_memory("2g").unwrap(), Some(2 * 1024 * 1024 * 1024));
+        assert_eq!(parse_cgroup_memory("512M").unwrap(), Some(512 * 1024 * 1024));
+        assert_eq!(parse_cgroup_memory("0").unwrap(), Some(0));
+        assert_eq!(parse_cgroup_memory("max").unwrap(), None);
+        assert_eq!(parse_cgroup_memory("1024").unwrap(), Some(1024));
+
         assert_eq!(parse_memory_bytes("2g"), Some("2147483648".into()));
         assert_eq!(parse_memory_bytes("512M"), Some("536870912".into()));
         assert_eq!(parse_memory_bytes("0"), Some("0".into()));
