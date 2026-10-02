@@ -46,10 +46,6 @@ const FILE_NOTIFY_CHANGE_SIZE: Dword = 0x0000_0008;
 const FILE_NOTIFY_CHANGE_LAST_WRITE: Dword = 0x0000_0010;
 const FILE_NOTIFY_CHANGE_CREATION: Dword = 0x0000_0040;
 const FILE_NOTIFY_CHANGE_SECURITY: Dword = 0x0000_0100;
-const SYNCHRONIZE: Dword = 0x0010_0000;
-const PROCESS_QUERY_LIMITED_INFORMATION: Dword = 0x1000;
-const WAIT_OBJECT_0: Dword = 0;
-const WAIT_TIMEOUT: Dword = 0x102;
 
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 
@@ -158,9 +154,6 @@ extern "system" {
         overlapped: *mut c_void,
         completion_routine: *mut c_void,
     ) -> Bool;
-    fn CloseHandle(handle: Handle) -> Bool;
-    fn OpenProcess(desired_access: Dword, inherit_handle: Bool, process_id: Dword) -> Handle;
-    fn WaitForSingleObject(handle: Handle, milliseconds: Dword) -> Dword;
     fn GetLastError() -> Dword;
 }
 
@@ -458,31 +451,6 @@ fn parse_directory_events(root: &Path, buffer: &[u8]) -> Vec<DirectoryEvent> {
     }
     events
 }
-
-/// Poll a process handle for exit without claiming complete process tracing.
-pub fn process_exited(process_id: u32, timeout: Duration) -> Result<bool> {
-    let process = unsafe {
-        OpenProcess(
-            SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-            0,
-            process_id,
-        )
-    };
-    if process.is_null() || process == INVALID_HANDLE_VALUE {
-        bail!("OpenProcess for polling failed with {}", unsafe {
-            GetLastError()
-        });
-    }
-    let milliseconds = timeout.as_millis().min(Dword::MAX as u128) as Dword;
-    let result = unsafe { WaitForSingleObject(process, milliseconds) };
-    unsafe {
-        let _ = CloseHandle(process);
-    }
-    match result {
-        WAIT_OBJECT_0 => Ok(true),
-        WAIT_TIMEOUT => Ok(false),
-        other => bail!("WaitForSingleObject failed with status 0x{other:08x}"),
-    }
 }
 
 #[cfg(test)]
