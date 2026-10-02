@@ -451,7 +451,6 @@ fn parse_directory_events(root: &Path, buffer: &[u8]) -> Vec<DirectoryEvent> {
     }
     events
 }
-}
 
 #[cfg(test)]
 mod tests {
