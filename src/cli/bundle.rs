@@ -101,17 +101,7 @@ pub fn default_target_dir(session_id: &str) -> PathBuf {
 }
 
 /// Formats byte count into human-readable representation.
-pub fn format_bytes(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{bytes} B")
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else if bytes < 1024 * 1024 * 1024 {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    } else {
-        format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-    }
-}
+pub use crate::policy::types::format_bytes;
 
 /// Resolves the target session snapshot metadata.
 fn resolve_snapshot(session_id: Option<&str>) -> Result<SnapshotMetadata> {
@@ -526,25 +516,7 @@ mod tests {
         assert!(err_str.contains("not found"));
     }
 
-    struct Lcg(u64);
-
-    impl Lcg {
-        fn next(&mut self) -> u64 {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            self.0
-        }
-
-        fn below(&mut self, bound: u64) -> u64 {
-            if bound == 0 {
-                0
-            } else {
-                self.next() % bound
-            }
-        }
-    }
+    use crate::exit_codes::Lcg;
 
     fn pick_piece(rng: &mut Lcg) -> &'static str {
         match rng.below(12) {

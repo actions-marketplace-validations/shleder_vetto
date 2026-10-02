@@ -231,42 +231,8 @@ fn parse_value(key: &LimitKey, value: &str, pair: &str) -> Result<u64> {
 /// case-insensitive suffix. Suffix math is checked for overflow so a
 /// nonsensical value cannot wrap into a small (weaker) ceiling.
 fn parse_byte_value(value: &str, pair: &str) -> Result<u64> {
-    if let Ok(raw) = value.parse::<u64>() {
-        return Ok(raw);
-    }
-
-    let lower = value.to_ascii_lowercase();
-    // 3-char binary suffixes must be tested before the 1-char decimal ones,
-    // otherwise "kib" would parse as "k" + garbage "ib".
-    let (number, multiplier) = if let Some(number) = lower.strip_suffix("kib") {
-        (number, 1024u64)
-    } else if let Some(number) = lower.strip_suffix("mib") {
-        (number, 1024u64 * 1024)
-    } else if let Some(number) = lower.strip_suffix("gib") {
-        (number, 1024u64 * 1024 * 1024)
-    } else if let Some(number) = lower.strip_suffix("gb") {
-        (number, 1000u64 * 1000 * 1000)
-    } else if let Some(number) = lower.strip_suffix("mb") {
-        (number, 1000u64 * 1000)
-    } else if let Some(number) = lower.strip_suffix("kb") {
-        (number, 1000u64)
-    } else if let Some(number) = lower.strip_suffix('k') {
-        (number, 1000u64)
-    } else if let Some(number) = lower.strip_suffix('m') {
-        (number, 1000u64 * 1000)
-    } else if let Some(number) = lower.strip_suffix('g') {
-        (number, 1000u64 * 1000 * 1000)
-    } else if let Some(number) = lower.strip_suffix('b') {
-        (number, 1u64)
-    } else {
-        bail!("invalid --limits value '{value}' in pair '{pair}': {BYTE_SUFFIX_DOC}")
-    };
-
-    let base: u64 = number.trim().parse().map_err(|_| {
+    crate::policy::types::parse_byte_size(value).ok_or_else(|| {
         anyhow::anyhow!("invalid --limits value '{value}' in pair '{pair}': {BYTE_SUFFIX_DOC}")
-    })?;
-    base.checked_mul(multiplier).ok_or_else(|| {
-        anyhow::anyhow!("--limits value '{value}' in pair '{pair}' overflows u64 bytes")
     })
 }
 

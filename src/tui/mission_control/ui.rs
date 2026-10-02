@@ -2316,7 +2316,7 @@ fn table_viewport_window(
     (offset, visible)
 }
 
-use crate::cli::bundle::format_bytes;
+use crate::policy::types::format_bytes;
 
 #[cfg(test)]
 mod tests {

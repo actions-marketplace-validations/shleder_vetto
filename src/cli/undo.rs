@@ -29,7 +29,7 @@ pub struct UndoArgs {
     pub target: Option<String>,
 }
 
-use super::bundle::format_bytes;
+use crate::policy::types::format_bytes;
 
 /// Execute the `vetto undo` command.
 pub fn run_undo(args: &UndoArgs) -> Result<()> {

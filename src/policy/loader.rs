@@ -421,36 +421,7 @@ impl RawLimits {
     }
 }
 
-pub fn parse_bandwidth_str(value: &str) -> Option<u64> {
-    let lower = value.trim().to_ascii_lowercase();
-    if let Ok(raw) = lower.parse::<u64>() {
-        return Some(raw);
-    }
-    let (number, mult) = if let Some(n) = lower.strip_suffix("gib") {
-        (n, 1024u64 * 1024 * 1024)
-    } else if let Some(n) = lower.strip_suffix("mib") {
-        (n, 1024u64 * 1024)
-    } else if let Some(n) = lower.strip_suffix("kib") {
-        (n, 1024u64)
-    } else if let Some(n) = lower.strip_suffix("gb") {
-        (n, 1000u64 * 1000 * 1000)
-    } else if let Some(n) = lower.strip_suffix("mb") {
-        (n, 1000u64 * 1000)
-    } else if let Some(n) = lower.strip_suffix("kb") {
-        (n, 1000u64)
-    } else if let Some(n) = lower.strip_suffix('g') {
-        (n, 1000u64 * 1000 * 1000)
-    } else if let Some(n) = lower.strip_suffix('m') {
-        (n, 1000u64 * 1000)
-    } else if let Some(n) = lower.strip_suffix('k') {
-        (n, 1000u64)
-    } else {
-        let n = lower.strip_suffix('b')?;
-        (n, 1u64)
-    };
-    let base: u64 = number.trim().parse().ok()?;
-    base.checked_mul(mult)
-}
+pub use crate::policy::types::parse_byte_size as parse_bandwidth_str;
 
 /// String or array form for convenient TOML definitions.
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
