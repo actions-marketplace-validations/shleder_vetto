@@ -1790,66 +1790,13 @@ fn format_cgroup_cpu(raw: &str) -> String {
     }
 }
 
-/// Pure BFS traversal over `(pid, ppid)` edges returning `root_pid` followed by all descendants.
-pub(crate) fn collect_descendant_pids(root_pid: u32, ppid_pairs: &[(u32, u32)]) -> Vec<u32> {
-    let mut children_by_ppid: HashMap<u32, Vec<u32>> = HashMap::new();
-    for &(pid, ppid) in ppid_pairs {
-        if pid != root_pid {
-            children_by_ppid.entry(ppid).or_default().push(pid);
-        }
-    }
-    for list in children_by_ppid.values_mut() {
-        list.sort_unstable();
-        list.dedup();
-    }
-
-    let mut result = vec![root_pid];
-    let mut visited: HashSet<u32> = HashSet::new();
-    visited.insert(root_pid);
-    let mut queue: VecDeque<u32> = VecDeque::new();
-    queue.push_back(root_pid);
-
-    while let Some(current) = queue.pop_front() {
-        if let Some(children) = children_by_ppid.get(&current) {
-            for &child in children {
-                if visited.insert(child) {
-                    result.push(child);
-                    queue.push_back(child);
-                }
-            }
-        }
-    }
-
-    result
-}
+pub(crate) use crate::proctree::collect_descendant_pids;
 
 fn find_session_pids(root_pid: u32, cgroup_scope: &str) -> Vec<u32> {
     #[cfg(target_os = "linux")]
     {
-        let mut ppid_pairs = Vec::new();
-        if let Ok(entries) = std::fs::read_dir("/proc") {
-            for entry in entries.flatten() {
-                let Ok(file_name) = entry.file_name().into_string() else {
-                    continue;
-                };
-                let Ok(pid) = file_name.parse::<u32>() else {
-                    continue;
-                };
-                if let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) {
-                    if let Some(after_comm) = stat.rfind(')') {
-                        let rest = stat[after_comm + 1..].trim();
-                        let parts: Vec<&str> = rest.split_whitespace().collect();
-                        if parts.len() >= 2 {
-                            if let Ok(ppid) = parts[1].parse::<u32>() {
-                                ppid_pairs.push((pid, ppid));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut pids = collect_descendant_pids(root_pid, &ppid_pairs);
+        let ppid_pairs = crate::proctree::scan_proc_ppid_pairs().unwrap_or_default();
+        let mut pids = crate::proctree::collect_descendant_pids(root_pid, &ppid_pairs);
 
         // Also include PIDs registered in a dedicated vetto cgroup scope if present
         if cgroup_scope.contains("vetto") {
