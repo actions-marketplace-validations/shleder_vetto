@@ -16,9 +16,11 @@ pub use fix::collect_macos_fixes;
 pub use fix::collect_windows_fixes;
 pub use fix::{print_fixes, DoctorFix};
 
+pub mod cli;
 pub mod preflight;
 pub mod probe;
 
+pub use cli::run_doctor;
 pub use preflight::{
     execute_preflight_diagnostics, run_preflight, PreflightReport, PreflightVerdict,
 };

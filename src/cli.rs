@@ -936,57 +936,7 @@ pub enum ReportCommand {
     },
 }
 
-#[derive(Subcommand, Debug)]
-pub enum RescueCommand {
-    /// Discover sessions. Codex defaults to verified index-first (limit 50);
-    /// other adapters use their bounded filesystem discovery.
-    Scan {
-        /// For Codex, use a verified provider index and return at most COUNT
-        /// sessions. This never falls back to a filesystem walk.
-        #[arg(long, value_name = "COUNT", conflicts_with = "all")]
-        limit: Option<usize>,
-        /// Explicitly use the bounded recursive filesystem walk. For Codex,
-        /// this opts out of the default index-first scan.
-        #[arg(long, conflicts_with = "limit")]
-        all: bool,
-    },
-    /// Diagnose one exact session key without changing agent state.
-    Diagnose {
-        #[arg(value_name = "SESSION")]
-        session: String,
-    },
-    /// Create a verified, exclusive new copy outside the agent state root.
-    Snapshot {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        #[arg(long, value_name = "PATH")]
-        output: PathBuf,
-    },
-    /// Create a recovery fork as a verified new copy outside agent state.
-    Fork {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        #[arg(long, value_name = "PATH")]
-        output: PathBuf,
-    },
-    /// Perform transactional state repair on a session with backup receipt.
-    Repair {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        /// Directory in which pre-repair backups are stored (defaults to ~/.vetto/rescue_backups).
-        #[arg(long, value_name = "PATH")]
-        backup_dir: Option<PathBuf>,
-    },
-    /// Rollback a previous state repair using a repair receipt.
-    Rollback {
-        /// Path to the repair receipt JSON file.
-        #[arg(long, value_name = "RECEIPT_PATH")]
-        receipt: PathBuf,
-        /// Explicit target path override (if target was moved or renamed).
-        #[arg(long, value_name = "TARGET_PATH")]
-        target: Option<PathBuf>,
-    },
-}
+pub use crate::rescue::RescueCommand;
 
 /// Render completions to stdout without starting a sandbox session.
 pub fn print_completions(shell: Shell) -> anyhow::Result<()> {
@@ -1001,6 +951,324 @@ pub fn print_man() -> anyhow::Result<()> {
     let man = clap_mangen::Man::new(command);
     man.render(&mut std::io::stdout())?;
     Ok(())
+}
+
+impl Cli {
+    pub fn to_run_config(&self) -> anyhow::Result<crate::config::RunConfig> {
+        let global = crate::config::load_global_config().unwrap_or_default();
+        self.to_run_config_with_global(&global)
+    }
+
+    pub fn to_run_config_with_global(
+        &self,
+        global: &crate::config::GlobalConfig,
+    ) -> anyhow::Result<crate::config::RunConfig> {
+        let cli = self;
+        let agent_preset = if cli.multi {
+            None
+        } else {
+            match cli.agents.as_slice() {
+                [] => crate::config::detect_agent_preset(&cli.agent),
+                [agent] if !agent.contains('=') && !agent.trim().is_empty() => {
+                    Some(
+                        crate::policy::defaults::canonical_agent_name(agent)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| agent.clone()),
+                    )
+                }
+                [_] => anyhow::bail!(
+                    "single-agent --agent expects a preset name; NAME=PROGRAM is only valid with --multi"
+                ),
+                _ => anyhow::bail!("single-agent mode accepts at most one --agent preset"),
+            }
+        };
+
+        let explicit_net = cli.net.is_some();
+        let net = match cli.net.as_deref().or(global.net.as_deref()) {
+            Some(raw) => crate::config::parse_net_mode(raw)?,
+            None => {
+                if let Some(ref agent) = agent_preset {
+                    let domains = crate::policy::presets::agent_network_allowlist(agent);
+                    if !domains.is_empty() {
+                        crate::config::NetMode::Allowlist(domains)
+                    } else {
+                        crate::config::NetMode::Off
+                    }
+                } else if crate::config::is_toolchain_command(&cli.agent) {
+                    crate::config::NetMode::Allowlist(
+                        crate::policy::presets::CANONICAL_PACKAGE_REGISTRY_DOMAINS
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                    )
+                } else {
+                    crate::config::NetMode::Off
+                }
+            }
+        };
+
+        let git_ssh = cli.git_ssh || global.git_ssh.unwrap_or(false);
+        if git_ssh && !net.uses_relay() {
+            anyhow::bail!("--git-ssh requires --net=allowlist:... or --net=strict:...");
+        }
+
+        let fail_on_block = cli.fail_on_block.or(global.fail_on_block);
+        if fail_on_block == Some(0) {
+            return Err(anyhow::Error::new(crate::error::VettoError::Policy(
+                "--fail-on-block threshold must be greater than zero".into(),
+            )));
+        }
+
+        let report_auto_cleanup = !cli.no_report_auto_cleanup;
+        let report_retention = cli
+            .report_retention
+            .or(global.report_retention)
+            .or(Some(50));
+        let report_max_age_secs = cli.report_max_age_secs.or(global.report_max_age_secs);
+
+        let preset_str = cli.preset.as_deref().or(global.preset.as_deref());
+        let preset = match preset_str {
+            Some(p) => Some(crate::policy::presets::Preset::parse(p)?),
+            None => None,
+        };
+
+        let profile = if cli.profile != "default" {
+            cli.profile.clone()
+        } else if let Some(ref gp) = global.profile {
+            gp.clone()
+        } else {
+            "default".to_string()
+        };
+
+        let explicit_tui = cli.tui.is_some() || global.tui.is_some();
+        let raw_tui = if let Some(ref ct) = cli.tui {
+            ct.as_str()
+        } else if let Some(ref gt) = global.tui {
+            gt.as_str()
+        } else {
+            "statusline"
+        };
+        let mut tui = crate::config::parse_tui_mode(raw_tui)?;
+        if cli.ci && tui == crate::config::TuiMode::Statusline {
+            tui = crate::config::TuiMode::None;
+        }
+
+        if !explicit_tui
+            && tui == crate::config::TuiMode::Statusline
+            && crate::config::should_default_to_no_tui(None, &cli.agent)
+        {
+            tui = crate::config::TuiMode::None;
+        }
+
+        let timeout_str = cli.timeout.as_deref().or(global.timeout.as_deref());
+
+        let limits_spec = match (cli.limits.as_deref(), global.limits.as_deref()) {
+            (Some(cli_l), Some(glob_l)) => Some(format!("{glob_l},{cli_l}")),
+            (Some(cli_l), None) => Some(cli_l.to_string()),
+            (None, Some(glob_l)) => Some(glob_l.to_string()),
+            (None, None) => None,
+        };
+        if let Some(spec) = &limits_spec {
+            crate::config::validate_limits_spec(spec)?;
+        }
+
+        let report_spec = cli.report.as_deref().or(global.report.as_deref());
+        let mut report_formats = Vec::new();
+        if let Some(fmts) = report_spec {
+            for f in fmts.split(',') {
+                report_formats.push(match f.trim().to_ascii_lowercase().as_str() {
+                    "html" => crate::config::ReportFormat::Html,
+                    "md" | "markdown" => crate::config::ReportFormat::Markdown,
+                    "json" => crate::config::ReportFormat::Json,
+                    "sarif" => crate::config::ReportFormat::Sarif,
+                    other => {
+                        anyhow::bail!(
+                            "unknown report format '{other}' (expected html, md, json, sarif)"
+                        )
+                    }
+                });
+            }
+        }
+
+        let observe_seccomp = cli.observe_seccomp || global.observe_seccomp.unwrap_or(false);
+        let verify_preflight = cli.verify || global.verify.unwrap_or(false);
+        let shadow = cli.shadow || global.shadow.unwrap_or(false);
+        let report_dir = cli
+            .report_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| global.report_dir.as_ref().map(PathBuf::from));
+        let jsonl_path = cli
+            .jsonl
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| global.jsonl.as_ref().map(PathBuf::from));
+
+        let mut auto_timeout_requested = false;
+        let session_timeout = match timeout_str {
+            Some("auto") => {
+                auto_timeout_requested = true;
+                let proj = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let agent_name = agent_preset
+                    .as_deref()
+                    .unwrap_or_else(|| cli.agent.first().map(|s| s.as_str()).unwrap_or("default"));
+                crate::history::compute_auto_timeout(&proj, agent_name)
+            }
+            Some(raw) => Some(crate::config::parse_session_timeout(raw)?),
+            None => {
+                if cli.adaptive_timeout {
+                    let proj = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                    let reports = report_dir.clone().unwrap_or_else(|| {
+                        crate::audit::history::default_history_path()
+                            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                            .unwrap_or_else(|| PathBuf::from("."))
+                    });
+                    crate::watchdog::timeout::recommend_timeout(&proj, &reports)
+                } else {
+                    None
+                }
+            }
+        };
+
+        let mask_secrets = if cli.no_mask_secrets {
+            false
+        } else if cli.mask_secrets {
+            true
+        } else {
+            global.mask_secrets.unwrap_or(true)
+        };
+
+        let ephemeral = cli.ephemeral;
+        let snapshot = cli.snapshot || ephemeral;
+
+        let mut net_quota = std::collections::HashMap::new();
+        for item in &cli.net_quota {
+            let Some((domain, size_str)) = item.split_once('=') else {
+                anyhow::bail!(
+                    "invalid --net-quota format '{item}': expected DOMAIN=SIZE (e.g. api.openai.com=100mb)"
+                );
+            };
+            let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+            if domain.is_empty() {
+                anyhow::bail!("invalid --net-quota '{item}': domain cannot be empty");
+            }
+            let bytes = crate::policy::loader::parse_quota_bytes(size_str.trim())?;
+            net_quota.insert(domain, bytes);
+        }
+
+        let http_proxy = std::env::var("HTTP_PROXY")
+            .or_else(|_| std::env::var("http_proxy"))
+            .or_else(|_| std::env::var("ALL_PROXY"))
+            .or_else(|_| std::env::var("all_proxy"))
+            .ok();
+        let https_proxy = std::env::var("HTTPS_PROXY")
+            .or_else(|_| std::env::var("https_proxy"))
+            .or_else(|_| std::env::var("ALL_PROXY"))
+            .or_else(|_| std::env::var("all_proxy"))
+            .ok();
+        let no_proxy = std::env::var("NO_PROXY")
+            .or_else(|_| std::env::var("no_proxy"))
+            .ok();
+        let block_doh = if cli.no_block_doh {
+            false
+        } else if cli.block_doh {
+            true
+        } else {
+            matches!(
+                net,
+                crate::config::NetMode::Allowlist(_) | crate::config::NetMode::Strict(_)
+            )
+        };
+
+        let benchmark = cli.benchmark;
+        let tui = if benchmark {
+            crate::config::TuiMode::None
+        } else {
+            tui
+        };
+        let ci = if benchmark { true } else { cli.ci };
+        let ephemeral = if benchmark { true } else { ephemeral };
+        let mask_secrets = if benchmark { true } else { mask_secrets };
+        let auto_deny_secrets = if benchmark {
+            true
+        } else {
+            cli.auto_deny_secrets
+        };
+        let snapshot = if benchmark { false } else { snapshot };
+        let report_formats = if benchmark {
+            Vec::new()
+        } else {
+            report_formats
+        };
+        let tmpfs_tmp = if benchmark { true } else { cli.tmpfs_tmp };
+
+        Ok(crate::config::RunConfig {
+            profile,
+            preset,
+            policy_path: cli.policy.as_ref().map(PathBuf::from),
+            net,
+            explicit_net,
+            tui,
+            backend: cli.backend.clone(),
+            oslog: cli.oslog,
+            lpac: cli.lpac,
+            observe_seccomp,
+            jsonl_path,
+            report_formats,
+            report_dir,
+            report_auto_cleanup,
+            report_retention,
+            report_max_age_secs,
+            fail_on_block,
+            git_ssh,
+            notify: cli.notify,
+            otel_endpoint: cli.otel_endpoint.clone(),
+            otel: cli.otel,
+            session_timeout,
+            auto_timeout_requested,
+            system_log: cli.system_log,
+            limits_spec,
+            verify_preflight,
+            shadow,
+            dry_run: cli.dry_run,
+            ci,
+            agent_preset,
+            deny_glob: cli.deny_glob.clone(),
+            git_guard: cli.git_guard,
+            auto_branch: cli.auto_branch,
+            snapshot,
+            ephemeral,
+            ephemeral_auto_accept: false,
+            ephemeral_force_discard: false,
+            auto_deny_secrets,
+            read_only_caches: cli.read_only_caches,
+            anonymous_telemetry: cli.anonymous_telemetry
+                || global.anonymous_telemetry.unwrap_or(false),
+            tmpfs_tmp,
+            mask_secrets,
+            net_quota,
+            block_doh,
+            windows_sandbox: cli.windows_sandbox,
+            benchmark,
+            agent: cli.agent.clone(),
+            http_proxy,
+            https_proxy,
+            no_proxy,
+        })
+    }
+}
+
+impl crate::config::RunConfig {
+    pub fn from_cli(cli: &Cli) -> anyhow::Result<Self> {
+        cli.to_run_config()
+    }
+
+    pub fn from_cli_with_global(
+        cli: &Cli,
+        global: &crate::config::GlobalConfig,
+    ) -> anyhow::Result<Self> {
+        cli.to_run_config_with_global(global)
+    }
 }
 
 #[cfg(test)]

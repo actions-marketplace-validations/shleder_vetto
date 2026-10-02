@@ -4,6 +4,7 @@
 //! with a strict size limit, and provides rollback functionality to restore files.
 
 use anyhow::{bail, Context, Result};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -449,6 +450,107 @@ pub fn parse_tar_header(header: &[u8; 512]) -> Result<(String, u64)> {
     let size = u64::from_str_radix(&size_str, 8).unwrap_or(0);
 
     Ok((name, size))
+}
+
+/// Read entries and contents from a snapshot tar archive.
+pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
+    read_tar_entries(file)
+}
+
+/// Read tar entries from an arbitrary byte reader.
+pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
+    let mut entries = BTreeMap::new();
+    loop {
+        let mut header = [0u8; 512];
+        let n = reader.read(&mut header)?;
+        if n < 512 || header.iter().all(|&b| b == 0) {
+            break;
+        }
+
+        let (name, size) = parse_tar_header(&header)?;
+        if name.is_empty() {
+            break;
+        }
+
+        let mut data = vec![0u8; size as usize];
+        reader.read_exact(&mut data)?;
+
+        let padding = (512 - (size % 512)) % 512;
+        if padding > 0 {
+            let mut pad_buf = vec![0u8; padding as usize];
+            reader.read_exact(&mut pad_buf)?;
+        }
+
+        let clean_path = Path::new(&name);
+        if !clean_path.is_absolute()
+            && !clean_path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            let normalized = name.replace('\\', "/");
+            entries.insert(normalized, data);
+        }
+    }
+    Ok(entries)
+}
+
+/// Scan current project directory, ignoring transient / toolchain folders.
+pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+    let mut files = BTreeMap::new();
+    let mut queue = vec![root.to_path_buf()];
+
+    while let Some(dir) = queue.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            if path.is_dir() {
+                if !crate::policy::secretscan::is_ignored_directory(&name) {
+                    queue.push(path);
+                }
+            } else if path.is_file() {
+                if let Ok(rel) = path.strip_prefix(root) {
+                    let rel_str = rel.to_string_lossy().replace('\\', "/");
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        files.insert(rel_str, bytes);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+/// Returns a tuple `(modified_count, added_count, deleted_count)` comparing snapshot archive against disk.
+pub fn preview_snapshot_changes(
+    archive_path: &Path,
+    project_dir: &Path,
+) -> Result<(usize, usize, usize)> {
+    let snapshot_files = read_tar_archive(archive_path)?;
+    let mut disk_files = scan_disk_files(project_dir)?;
+    if let Ok(rel_archive) = archive_path.strip_prefix(project_dir) {
+        let rel_str = rel_archive.to_string_lossy().replace('\\', "/");
+        disk_files.remove(&rel_str);
+    }
+    let snapshot_keys: BTreeSet<&String> = snapshot_files.keys().collect();
+    let disk_keys: BTreeSet<&String> = disk_files.keys().collect();
+
+    let added = disk_keys.difference(&snapshot_keys).count();
+    let deleted = snapshot_keys.difference(&disk_keys).count();
+    let mut modified = 0usize;
+    for path in disk_keys.intersection(&snapshot_keys) {
+        if snapshot_files[*path] != disk_files[*path] {
+            modified += 1;
+        }
+    }
+    Ok((modified, added, deleted))
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::config::NetMode;
 use crate::error::VettoError;
-use crate::policy::{Policy, ResourceLimits};
+use crate::policy::{analyze_deny_overlap, Policy, ResourceLimits};
 use crate::sandbox::handle::{KillStrategy, SandboxHandle, SpawnOptions};
 use crate::sandbox::Spawned;
 
@@ -44,13 +44,8 @@ pub mod appcontainer;
 pub mod etw;
 pub mod eventlog;
 pub mod firewall;
-pub mod integrity;
 pub mod job_object;
-pub mod minifilter;
-pub mod restricted_token;
 pub mod windows_sandbox;
-
-pub use crate::doctor::probe::{analyze_deny_overlap, DenyOverlapReport};
 
 type Handle = *mut c_void;
 type Hmodule = *mut c_void;

@@ -4,13 +4,13 @@
 //! all filesystem changes (added, modified, deleted) and integrates security telemetry
 //! (blocked file reads, blocked network egress, contacted domains).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::rescue::snapshot::{self, SnapshotMetadata};
@@ -35,24 +35,7 @@ pub struct DiffArgs {
     pub path: Option<String>,
 }
 
-/// Security telemetry collected from session logs and reports.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SecurityTelemetry {
-    pub blocked_file_count: u64,
-    pub blocked_file_paths: Vec<String>,
-    pub blocked_network_count: u64,
-    pub blocked_network_destinations: Vec<String>,
-    pub allowed_egress: Vec<String>,
-}
-
-/// Kind of file modification observed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChangeType {
-    Added,
-    Modified,
-    Deleted,
-}
+pub use crate::rescue::types::{ChangeType, SecurityTelemetry};
 
 /// Details of a single file change between snapshot and working tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -608,81 +591,7 @@ pub fn compare_snapshot_against_disk(
     })
 }
 
-/// Read entries and contents from a snapshot tar archive.
-pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
-    let file = File::open(path)
-        .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
-    read_tar_entries(file)
-}
-
-/// Read tar entries from an arbitrary byte reader.
-pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
-    let mut entries = BTreeMap::new();
-    loop {
-        let mut header = [0u8; 512];
-        let n = reader.read(&mut header)?;
-        if n < 512 || header.iter().all(|&b| b == 0) {
-            break;
-        }
-
-        let (name, size) = snapshot::parse_tar_header(&header)?;
-        if name.is_empty() {
-            break;
-        }
-
-        let mut data = vec![0u8; size as usize];
-        reader.read_exact(&mut data)?;
-
-        let padding = (512 - (size % 512)) % 512;
-        if padding > 0 {
-            let mut pad_buf = vec![0u8; padding as usize];
-            reader.read_exact(&mut pad_buf)?;
-        }
-
-        let clean_path = Path::new(&name);
-        if !clean_path.is_absolute()
-            && !clean_path
-                .components()
-                .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
-            let normalized = name.replace('\\', "/");
-            entries.insert(normalized, data);
-        }
-    }
-    Ok(entries)
-}
-
-/// Scan current project directory, ignoring transient / toolchain folders.
-pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
-    let mut files = BTreeMap::new();
-    let mut queue = vec![root.to_path_buf()];
-
-    while let Some(dir) = queue.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-
-            if path.is_dir() {
-                if !crate::policy::secretscan::is_ignored_directory(&name) {
-                    queue.push(path);
-                }
-            } else if path.is_file() {
-                if let Ok(rel) = path.strip_prefix(root) {
-                    let rel_str = rel.to_string_lossy().replace('\\', "/");
-                    if let Ok(bytes) = std::fs::read(&path) {
-                        files.insert(rel_str, bytes);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(files)
-}
+pub use crate::rescue::snapshot::{read_tar_archive, read_tar_entries, scan_disk_files};
 
 /// Read and aggregate security telemetry for session from logs, reports, and history.
 pub fn load_security_telemetry(session_id: &str, project_dir: &Path) -> SecurityTelemetry {

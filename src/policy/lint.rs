@@ -10,9 +10,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::config::NetMode;
-use crate::sandbox::Backend;
-
 use super::loader::{load_with_options, PolicyLoadOptions};
 use super::types::{Policy, Tier};
 
@@ -43,10 +40,12 @@ pub struct Finding {
 /// Load the effective policy (like a supervised session, network off), run
 /// every rule and print findings. Exits 1 if any High severity finding is
 /// reported, or if `strict` is true and any finding is reported.
-pub fn run_cli(strict: bool, profile: &str, policy_path: Option<&Path>) -> Result<()> {
-    let backend = Backend::detect(NetMode::Off, false).ok();
-    let tier = backend.as_ref().and_then(|b| b.tier());
-
+pub fn run_cli(
+    strict: bool,
+    profile: &str,
+    policy_path: Option<&Path>,
+    tier: Option<Tier>,
+) -> Result<()> {
     let project = std::env::current_dir().context("getcwd")?;
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))

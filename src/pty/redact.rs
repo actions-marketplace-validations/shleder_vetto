@@ -138,252 +138,109 @@ pub struct StreamingRedactor {
     style: RedactionStyle,
 }
 
+struct PatternDef {
+    prefix: &'static [u8],
+    min_run_len: usize,
+    is_pem: bool,
+    is_bearer: bool,
+    is_kv: bool,
+}
+
+impl PatternDef {
+    const fn token(prefix: &'static [u8], min_run_len: usize) -> Self {
+        Self {
+            prefix,
+            min_run_len,
+            is_pem: false,
+            is_bearer: false,
+            is_kv: false,
+        }
+    }
+
+    const fn bearer(prefix: &'static [u8]) -> Self {
+        Self {
+            prefix,
+            min_run_len: 8,
+            is_pem: false,
+            is_bearer: true,
+            is_kv: false,
+        }
+    }
+
+    const fn kv(prefix: &'static [u8]) -> Self {
+        Self {
+            prefix,
+            min_run_len: 8,
+            is_pem: false,
+            is_bearer: false,
+            is_kv: true,
+        }
+    }
+
+    const fn pem(prefix: &'static [u8]) -> Self {
+        Self {
+            prefix,
+            min_run_len: 0,
+            is_pem: true,
+            is_bearer: false,
+            is_kv: false,
+        }
+    }
+}
+
+const PATTERNS: &[PatternDef] = &[
+    PatternDef::token(b"sk-proj-", 20),
+    PatternDef::token(b"sk-ant-", 20),
+    PatternDef::token(b"sk-", 20),
+    PatternDef::token(b"AIza", 20),
+    PatternDef::token(b"npm_", 20),
+    PatternDef::token(b"pypi-", 20),
+    PatternDef::token(b"ghp_", 20),
+    PatternDef::token(b"gho_", 20),
+    PatternDef::token(b"ghu_", 20),
+    PatternDef::token(b"ghs_", 20),
+    PatternDef::token(b"ghr_", 20),
+    PatternDef::token(b"AKIA", 16),
+    PatternDef::token(b"ASIA", 16),
+    PatternDef::token(b"xoxb-", 20),
+    PatternDef::token(b"xoxp-", 20),
+    PatternDef::token(b"xoxa-", 20),
+    PatternDef::token(b"xoxs-", 20),
+    PatternDef::token(b"glpat-", 20),
+    PatternDef::token(b"hf_", 20),
+    PatternDef::bearer(b"Bearer "),
+    PatternDef::bearer(b"bearer "),
+    PatternDef::kv(b"_KEY="),
+    PatternDef::kv(b"_SECRET="),
+    PatternDef::kv(b"_TOKEN="),
+    PatternDef::kv(b"_PASSWORD="),
+    PatternDef::kv(b"_key="),
+    PatternDef::kv(b"_secret="),
+    PatternDef::kv(b"_token="),
+    PatternDef::kv(b"_password="),
+    PatternDef::pem(b"-----BEGIN PRIVATE KEY-----"),
+    PatternDef::pem(b"-----BEGIN RSA PRIVATE KEY-----"),
+    PatternDef::pem(b"-----BEGIN EC PRIVATE KEY-----"),
+    PatternDef::pem(b"-----BEGIN OPENSSH PRIVATE KEY-----"),
+    PatternDef::pem(b"-----BEGIN CERTIFICATE-----"),
+];
+
 impl StreamingRedactor {
     pub fn new() -> Self {
         Self::with_style(RedactionStyle::PadMask)
     }
 
     pub fn with_style(style: RedactionStyle) -> Self {
-        let patterns = vec![
-            PatternInfo {
-                prefix: b"sk-proj-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"sk-ant-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"sk-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"AIza".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"npm_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"pypi-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"ghp_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"gho_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"ghu_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"ghs_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"ghr_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"AKIA".to_vec(),
-                min_run_len: 16,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"ASIA".to_vec(),
-                min_run_len: 16,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"xoxb-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"xoxp-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"xoxa-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"xoxs-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"glpat-".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"hf_".to_vec(),
-                min_run_len: 20,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"Bearer ".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: true,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"bearer ".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: true,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"_KEY=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_SECRET=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_TOKEN=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_PASSWORD=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_key=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_secret=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_token=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"_password=".to_vec(),
-                min_run_len: 8,
-                is_pem: false,
-                is_bearer: false,
-                is_kv: true,
-            },
-            PatternInfo {
-                prefix: b"-----BEGIN PRIVATE KEY-----".to_vec(),
-                min_run_len: 0,
-                is_pem: true,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"-----BEGIN RSA PRIVATE KEY-----".to_vec(),
-                min_run_len: 0,
-                is_pem: true,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"-----BEGIN EC PRIVATE KEY-----".to_vec(),
-                min_run_len: 0,
-                is_pem: true,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"-----BEGIN OPENSSH PRIVATE KEY-----".to_vec(),
-                min_run_len: 0,
-                is_pem: true,
-                is_bearer: false,
-                is_kv: false,
-            },
-            PatternInfo {
-                prefix: b"-----BEGIN CERTIFICATE-----".to_vec(),
-                min_run_len: 0,
-                is_pem: true,
-                is_bearer: false,
-                is_kv: false,
-            },
-        ];
+        let patterns = PATTERNS
+            .iter()
+            .map(|p| PatternInfo {
+                prefix: p.prefix.to_vec(),
+                min_run_len: p.min_run_len,
+                is_pem: p.is_pem,
+                is_bearer: p.is_bearer,
+                is_kv: p.is_kv,
+            })
+            .collect();
         Self {
             automaton: AhoCorasick::new(patterns),
             carry_over: Vec::with_capacity(256),

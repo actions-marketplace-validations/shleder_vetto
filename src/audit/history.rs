@@ -996,19 +996,6 @@ fn build_detail_from_history_record(rec: &AuditRecord) -> SessionAuditDetail {
 }
 
 /// Dispatches the `vetto audit` CLI subcommand with session inspection or listing.
-/// Options for [`run_audit_command`] — struct form avoids too-many-args lint.
-#[derive(Debug, Clone, Copy)]
-pub struct AuditCommandOptions<'a> {
-    pub session_id: Option<&'a str>,
-    pub latest: bool,
-    pub since: Option<&'a str>,
-    pub agent: Option<&'a str>,
-    pub limit: Option<usize>,
-    pub query: Option<&'a str>,
-    pub json_output: bool,
-    pub recap_only: bool,
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn run_audit_command(
     session_id: Option<&str>,

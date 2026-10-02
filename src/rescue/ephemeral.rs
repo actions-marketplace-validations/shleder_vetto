@@ -33,27 +33,11 @@ fn print_change_preview(session_id: &str, project_dir: &Path) {
     let Some(archive) = find_snapshot_archive(session_id) else {
         return;
     };
-    let telemetry = crate::cli::diff::SecurityTelemetry::default();
-    let Ok(review) = crate::cli::diff::compare_snapshot_against_disk(
-        &archive,
-        project_dir,
-        None,
-        &telemetry,
-        session_id,
-    ) else {
+    let Ok((modified, added, deleted)) =
+        super::snapshot::preview_snapshot_changes(&archive, project_dir)
+    else {
         return;
     };
-
-    let mut added = 0usize;
-    let mut modified = 0usize;
-    let mut deleted = 0usize;
-    for file in &review.files {
-        match file.change_type {
-            crate::cli::diff::ChangeType::Added => added += 1,
-            crate::cli::diff::ChangeType::Modified => modified += 1,
-            crate::cli::diff::ChangeType::Deleted => deleted += 1,
-        }
-    }
 
     if added == 0 && modified == 0 && deleted == 0 {
         eprintln!("[VETTO EPHEMERAL] No filesystem changes detected.");
