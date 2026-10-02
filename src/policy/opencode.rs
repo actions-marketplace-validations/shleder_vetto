@@ -342,6 +342,35 @@ mod tests {
     }
 
     #[test]
+    fn test_strip_jsonc_comments_edge_cases() {
+        let jsonc = r#"{
+            "url": "http:\/\/example.com\/\/path\/*not_a_comment*\/",
+            "backslashes": "C:\\\\Windows\\\\System32",
+            "empty_comment": /**/ "val",
+            "starred": /***/ "val",
+            "trailing_in_array": [
+                1, /* comment between comma and bracket */
+            ],
+            "trailing_in_object": {
+                "a": 1, // comment after comma
+            }
+        }"#;
+
+        let stripped = strip_jsonc_comments(jsonc);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&stripped).expect("must parse edge cases as valid JSON");
+        assert_eq!(
+            parsed["url"],
+            "http:\\/\\/example.com\\/\\/path\\/*not_a_comment*\\/"
+        );
+        assert_eq!(parsed["backslashes"], "C:\\\\Windows\\\\System32");
+        assert_eq!(parsed["empty_comment"], "val");
+        assert_eq!(parsed["starred"], "val");
+        assert_eq!(parsed["trailing_in_array"], serde_json::json!([1]));
+        assert_eq!(parsed["trailing_in_object"]["a"], 1);
+    }
+
+    #[test]
     fn test_extract_host_from_url() {
         assert_eq!(
             extract_host_from_url("https://aihubmix.com/v1"),
