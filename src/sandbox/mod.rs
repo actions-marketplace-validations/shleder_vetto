@@ -21,6 +21,8 @@ pub use macos::net_proxy as macos_net_proxy;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
+#[cfg(unix)]
+pub use handle::create_cloexec_pipe;
 pub use handle::{SandboxHandle, SpawnOptions, StdioMode};
 pub use production::SupervisorEngine;
 

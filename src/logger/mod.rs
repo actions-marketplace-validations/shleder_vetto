@@ -4,7 +4,7 @@
 
 pub mod jsonl;
 pub mod oslog;
-pub mod sanitizer;
+pub use crate::sanitizer;
 pub mod system_log;
 
 pub use oslog::OsLogSink;

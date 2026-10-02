@@ -184,42 +184,6 @@ pub fn filter_env(
     out
 }
 
-/// Filter `(name, value)` pairs using caller-provided redacted wildcard patterns alongside
-/// hard-denied names (INV-27).
-pub fn filter_env_with_patterns(
-    vars: impl Iterator<Item = (String, String)>,
-    strict_path: bool,
-    redacted_patterns: &[String],
-) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (name, value) in vars {
-        if name.is_empty() || name.contains('=') || name.contains('\0') {
-            continue;
-        }
-        if value.contains('\0') {
-            continue;
-        }
-        if is_redacted(&name, redacted_patterns) {
-            continue;
-        }
-        if strict_path && name.eq_ignore_ascii_case("PATH") {
-            out.push((name, sanitize_path(&value)));
-        } else {
-            out.push((name, value));
-        }
-    }
-    out
-}
-
-/// Sanitizes the environment by filtering out variables matching redacted wildcard patterns
-/// (such as `*_KEY`, `*_TOKEN`, `*_SECRET`, `AWS_*`, `GITHUB_*`). Fulfills INV-27.
-pub fn sanitize_environment(
-    vars: impl Iterator<Item = (String, String)>,
-    redacted_patterns: &[String],
-) -> Vec<(String, String)> {
-    filter_env_with_patterns(vars, true, redacted_patterns)
-}
-
 #[cfg(test)]
 mod envfilter_tests {
     use super::*;
@@ -259,20 +223,6 @@ mod envfilter_tests {
         assert!(is_hard_denied("GITHUB_ACTIONS"));
         assert!(!is_hard_denied("USER"));
         assert!(!is_hard_denied("EDITOR"));
-    }
-
-    #[test]
-    fn sanitize_environment_scrubs_wildcards() {
-        let vars = vec![
-            ("CUSTOM_KEY".to_string(), "secret123".to_string()),
-            ("APP_TOKEN".to_string(), "tok456".to_string()),
-            ("USER".to_string(), "alice".to_string()),
-            ("PATH".to_string(), "/bin:/usr/bin".to_string()),
-            ("MY_CUSTOM_SECRET".to_string(), "val".to_string()),
-        ];
-        let cleaned = sanitize_environment(vars.into_iter(), &[]);
-        let names: Vec<String> = cleaned.into_iter().map(|(k, _)| k).collect();
-        assert_eq!(names, vec!["USER".to_string(), "PATH".to_string()]);
     }
 
     #[test]

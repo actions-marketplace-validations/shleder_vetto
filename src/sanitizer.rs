@@ -155,86 +155,80 @@ const SECRET_KEYS: [&str; 7] = [
     "authorization",
 ];
 
+fn match_secret_key_value(s: &str, lower: &str, bytes: &[u8], i: usize) -> Option<(usize, String)> {
+    let key = SECRET_KEYS.iter().find(|&&k| lower[i..].starts_with(k))?;
+    let mut k = i + key.len();
+    while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
+        k += 1;
+    }
+    let sep = *bytes.get(k)?;
+    if sep != b'=' && sep != b':' {
+        return None;
+    }
+    let mut v = k + 1;
+    while v < bytes.len() && (bytes[v] == b' ' || bytes[v] == b'\t') {
+        v += 1;
+    }
+    if *key == "authorization" && lower[v..].starts_with("bearer ") {
+        let token_start = v + "bearer ".len();
+        let mut token_end = token_start;
+        while token_end < bytes.len()
+            && !bytes[token_end].is_ascii_whitespace()
+            && !matches!(
+                bytes[token_end],
+                b'"' | b'\'' | b',' | b'{' | b'}' | b'[' | b']'
+            )
+        {
+            token_end += 1;
+        }
+        if token_end.saturating_sub(token_start) >= 8 {
+            return Some((token_end, format!("{}[REDACTED]", &s[i..token_start])));
+        }
+    }
+    let quote = bytes.get(v).copied();
+    let (value_end, total_end) = if quote == Some(b'"') || quote == Some(b'\'') {
+        let mut e = v + 1;
+        while e < bytes.len() && bytes[e] != quote.unwrap() {
+            e += 1;
+        }
+        (e, (e + 1).min(bytes.len()))
+    } else {
+        let mut e = v;
+        while e < bytes.len()
+            && bytes[e] != b' '
+            && bytes[e] != b'\t'
+            && bytes[e] != b'"'
+            && bytes[e] != b'\''
+            && bytes[e] != b','
+            && bytes[e] != b'}'
+        {
+            e += 1;
+        }
+        (e, e)
+    };
+    if value_end.saturating_sub(v) >= 4 {
+        Some((total_end, format!("{}[REDACTED]", &s[i..k + 1])))
+    } else {
+        None
+    }
+}
+
 fn redact_key_values(s: &str) -> String {
     let lower = s.to_ascii_lowercase();
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len());
     let mut i = 0usize;
     while i < bytes.len() {
-        let mut matched = false;
         if i == 0 || !is_word_byte(bytes[i - 1]) {
-            for key in SECRET_KEYS {
-                if lower[i..].starts_with(key) {
-                    let after = i + key.len();
-                    let mut k = after;
-                    while k < bytes.len() && (bytes[k] == b' ' || bytes[k] == b'\t') {
-                        k += 1;
-                    }
-                    let sep = bytes.get(k).copied();
-                    if k < bytes.len() && (sep == Some(b'=') || sep == Some(b':')) {
-                        let mut v = k + 1;
-                        while v < bytes.len() && (bytes[v] == b' ' || bytes[v] == b'\t') {
-                            v += 1;
-                        }
-                        if key == "authorization" && lower[v..].starts_with("bearer ") {
-                            let token_start = v + "bearer ".len();
-                            let mut token_end = token_start;
-                            while token_end < bytes.len()
-                                && !bytes[token_end].is_ascii_whitespace()
-                                && !matches!(
-                                    bytes[token_end],
-                                    b'"' | b'\'' | b',' | b'{' | b'}' | b'[' | b']'
-                                )
-                            {
-                                token_end += 1;
-                            }
-                            if token_end.saturating_sub(token_start) >= 8 {
-                                out.push_str(&s[i..token_start]);
-                                out.push_str("[REDACTED]");
-                                i = token_end;
-                                matched = true;
-                                break;
-                            }
-                        }
-                        let quote = bytes.get(v).copied();
-                        let (value_end, total_end) = if quote == Some(b'"') || quote == Some(b'\'')
-                        {
-                            let mut e = v + 1;
-                            while e < bytes.len() && bytes[e] != quote.unwrap() {
-                                e += 1;
-                            }
-                            let te = (e + 1).min(bytes.len());
-                            (e, te)
-                        } else {
-                            let mut e = v;
-                            while e < bytes.len()
-                                && bytes[e] != b' '
-                                && bytes[e] != b'\t'
-                                && bytes[e] != b'"'
-                                && bytes[e] != b'\''
-                                && bytes[e] != b','
-                                && bytes[e] != b'}'
-                            {
-                                e += 1;
-                            }
-                            (e, e)
-                        };
-                        if value_end - v >= 4 {
-                            out.push_str(&s[i..k + 1]);
-                            out.push_str("[REDACTED]");
-                            i = total_end;
-                            matched = true;
-                        }
-                    }
-                    break;
-                }
+            if let Some((next_i, redacted)) = match_secret_key_value(s, &lower, bytes, i) {
+                out.push_str(&redacted);
+                i = next_i;
+                continue;
             }
         }
-        if !matched {
-            let step = utf8_step(&s[i..]);
-            out.push_str(&s[i..i + step]);
-            i += step;
-        }
+        let step = utf8_step(&s[i..]);
+        out.push_str(&s[i..i + step]);
+        i += step;
     }
     out
 }

@@ -16,7 +16,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 
 use super::types::{Event, FileAccess};
-use crate::logger::sanitizer;
+use crate::sanitizer;
 
 /// Filter predicate for events.
 #[derive(Debug, Clone, PartialEq, Eq)]

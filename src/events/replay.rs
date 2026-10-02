@@ -15,7 +15,7 @@ use anyhow::{Context, Result};
 
 use super::tail::resolve_session_path;
 use super::types::{Event, FileAccess};
-use crate::logger::sanitizer;
+use crate::sanitizer;
 
 pub fn run_replay(session_arg: &Path, speed: Option<f64>, json_output: bool) -> Result<()> {
     let path = resolve_session_path(session_arg)?;

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::unix::io::{AsRawFd, OwnedFd};
 
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -186,21 +186,6 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
     };
     let _ = std::fs::write(&temp_path, content);
     Ok(temp_path)
-}
-
-#[cfg(unix)]
-fn make_cloexec_pipe() -> Result<(OwnedFd, OwnedFd)> {
-    let mut fds = [0 as libc::c_int; 2];
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        bail!("pipe creation failed: {}", std::io::Error::last_os_error());
-    }
-    for fd in fds {
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if flags >= 0 {
-            let _ = unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) };
-        }
-    }
-    unsafe { Ok((OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1]))) }
 }
 
 fn resolve_binary_in_path(cmd: &str) -> Result<String> {
@@ -422,8 +407,8 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
 
     #[cfg(unix)]
     let stdio = if bench_args.json {
-        let (r1, w1) = make_cloexec_pipe()?;
-        let (r2, w2) = make_cloexec_pipe()?;
+        let (r1, w1) = sandbox::create_cloexec_pipe()?;
+        let (r2, w2) = sandbox::create_cloexec_pipe()?;
         let captured = StdioMode::Captured {
             stdout_w: w1.as_raw_fd(),
             stderr_w: w2.as_raw_fd(),

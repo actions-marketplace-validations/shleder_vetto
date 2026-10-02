@@ -10,7 +10,7 @@ use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::os::fd::IntoRawFd;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -1442,8 +1442,8 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
             sandbox::StdioMode::Pty { slave_fd }
         }
         TuiMode::Full => {
-            let (r1, w1) = pipe2()?;
-            let (r2, w2) = pipe2()?;
+            let (r1, w1) = sandbox::create_cloexec_pipe()?;
+            let (r2, w2) = sandbox::create_cloexec_pipe()?;
             let stdio = sandbox::StdioMode::Captured {
                 stdout_w: w1.as_raw_fd(),
                 stderr_w: w2.as_raw_fd(),
@@ -1460,8 +1460,8 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
                 &cfg.agent,
             );
             if !is_interactive && cfg.mask_secrets {
-                let (r1, w1) = pipe2()?;
-                let (r2, w2) = pipe2()?;
+                let (r1, w1) = sandbox::create_cloexec_pipe()?;
+                let (r2, w2) = sandbox::create_cloexec_pipe()?;
                 let stdio = sandbox::StdioMode::Captured {
                     stdout_w: w1.as_raw_fd(),
                     stderr_w: w2.as_raw_fd(),
@@ -2300,43 +2300,6 @@ fn explicit_policy_deny_count(path: &Path) -> Option<usize> {
         toml::Value::String(_) => 1,
         _ => 0,
     })
-}
-
-#[cfg(unix)]
-fn pipe2() -> Result<(OwnedFd, OwnedFd)> {
-    let mut fds = [0 as libc::c_int; 2];
-    // SAFETY: valid out-array.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        bail!("pipe: {}", std::io::Error::last_os_error());
-    }
-    for fd in fds {
-        // SAFETY: fd came from the successful pipe call.
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if flags < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_GETFD): {error}");
-        }
-        // SAFETY: fd came from the successful pipe call; preserve existing
-        // descriptor flags while adding close-on-exec.
-        if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_SETFD, FD_CLOEXEC): {error}");
-        }
-    }
-    // SAFETY: fresh descriptors from a successful pipe and CLOEXEC setup.
-    Ok((unsafe { OwnedFd::from_raw_fd(fds[0]) }, unsafe {
-        OwnedFd::from_raw_fd(fds[1])
-    }))
 }
 
 fn resolve_in_path(cmd: &str) -> Result<String> {

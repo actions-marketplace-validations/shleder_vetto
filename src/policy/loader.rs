@@ -319,28 +319,8 @@ pub fn expand_net_preset(name: &str) -> Result<Vec<String>> {
 }
 
 pub fn parse_quota_bytes(s: &str) -> Result<u64> {
-    let s = s.trim().to_ascii_lowercase();
-    if s.is_empty() {
-        bail!("empty quota string");
-    }
-    let (num_part, multiplier) = if let Some(val) = s.strip_suffix("tb") {
-        (val, 1024 * 1024 * 1024 * 1024u64)
-    } else if let Some(val) = s.strip_suffix("gb") {
-        (val, 1024 * 1024 * 1024u64)
-    } else if let Some(val) = s.strip_suffix("mb") {
-        (val, 1024 * 1024u64)
-    } else if let Some(val) = s.strip_suffix("kb") {
-        (val, 1024u64)
-    } else if let Some(val) = s.strip_suffix('b') {
-        (val, 1u64)
-    } else {
-        (s.as_str(), 1u64)
-    };
-    let count: u64 = num_part
-        .trim()
-        .parse()
-        .map_err(|_| anyhow::anyhow!("invalid quota value '{s}'"))?;
-    Ok(count * multiplier)
+    crate::policy::types::parse_bytes_value(s)
+        .ok_or_else(|| anyhow::anyhow!("invalid quota value '{s}'"))
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
