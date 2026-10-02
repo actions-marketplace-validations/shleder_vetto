@@ -423,6 +423,7 @@ pub fn is_toolchain_command(command: &[String]) -> bool {
 mod tests {
     use super::*;
     use crate::cli::Cli;
+    use crate::policy::presets::{agent_network_allowlist, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
     use clap::Parser;
 
     #[test]
