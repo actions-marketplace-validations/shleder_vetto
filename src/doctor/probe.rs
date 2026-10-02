@@ -27,7 +27,7 @@ use std::io::Read;
 use std::os::fd::AsRawFd;
 
 #[cfg(unix)]
-use anyhow::{bail, Result};
+use anyhow::Result;
 
 #[cfg(unix)]
 use crate::config::NetMode;
