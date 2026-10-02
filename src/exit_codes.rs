@@ -10,6 +10,9 @@ pub const EXIT_SUCCESS: i32 = 0;
 /// Generic agent error or general operational error.
 pub const EXIT_AGENT_ERROR: i32 = 1;
 
+/// Invalid CLI usage or empty agent command.
+pub const EXIT_INVALID_USAGE: i32 = 2;
+
 /// Session timeout: the supervisor killed the child process after the deadline (mirrors GNU timeout).
 pub const EXIT_TIMEOUT: i32 = 124;
 
