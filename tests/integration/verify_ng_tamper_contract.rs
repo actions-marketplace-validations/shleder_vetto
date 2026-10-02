@@ -22,9 +22,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use vetto::config::NetMode;
-use vetto::policy_ir::contract::DebugPortConfig;
 use vetto::policy::{DenyEntry, Policy, Tier};
 use vetto::policy_ir::compiler::{EffectivePolicyInput, PolicyCompiler};
+use vetto::policy_ir::contract::DebugPortConfig;
 use vetto::policy_ir::contract::{NetworkMode, SecurityContract};
 use vetto::sandbox::production::{
     ProductionError, UnpreparedProductionExecution, PROD_SCENARIO_ID,
@@ -222,7 +222,6 @@ fn test_tamper_matrix_all_field_classes_rejected_no_spawn() {
         "missing_production",
     ];
 
-
     for case in cases {
         let marker = ws.join(format!("child-marker-{}", case));
         let script = format!("printf executed > {}\nexit 0\n", marker.display());
@@ -388,7 +387,6 @@ fn test_tamper_matrix_resealed_fails_closed_no_spawn() {
         "tier_requirement",
         "backend_requirement",
     ];
-
 
     for case in cases {
         let marker = ws.join(format!("resealed-marker-{}", case));

@@ -31,11 +31,13 @@ fn normalize_path(raw_path: &str) -> String {
     }
 
     // Strip leading root slashes / Windows drive letters to make path relative to %SRCROOT%
-    let mut s = cleaned.as_str();
+    let s = cleaned.as_str();
     #[cfg(windows)]
-    if s.len() >= 2 && s.as_bytes()[1] == b':' {
-        s = &s[2..];
-    }
+    let s = if s.len() >= 2 && s.as_bytes()[1] == b':' {
+        &s[2..]
+    } else {
+        s
+    };
     let s = s.trim_start_matches(|c| c == '/' || c == '\\');
     let normalized = s.replace('\\', "/");
 

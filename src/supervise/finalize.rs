@@ -191,7 +191,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
     let _ = crate::telemetry::record_funnel_milestone("first_session");
 
     // 5. Filesystem diff calculation
-    let diff = if ctx.cfg.diff || ctx.session.diff_enabled {
+    let diff = if ctx.session.diff_enabled {
         report::diff_project::ProjectDiff::compute(&ctx.session.initial_manifest, &ctx.session.project)
     } else {
         report::diff_project::ProjectDiff::default()

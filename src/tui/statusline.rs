@@ -98,7 +98,9 @@ impl NonblockingStdout {
             revents: 0,
         };
         let r = unsafe { libc::poll(&mut pfd, 1, 0) };
-        r > 0 && (pfd.revents & libc::POLLOUT != 0) && (pfd.revents & (libc::POLLERR | libc::POLLNVAL)) == 0
+        r > 0
+            && (pfd.revents & libc::POLLOUT != 0)
+            && (pfd.revents & (libc::POLLERR | libc::POLLNVAL)) == 0
     }
 
     /// Drain as many bytes as possible to stdout without blocking.
@@ -111,20 +113,15 @@ impl NonblockingStdout {
             if first.is_empty() {
                 break;
             }
-            let n = unsafe {
-                libc::write(
-                    self.raw_fd,
-                    first.as_ptr().cast(),
-                    first.len().min(8192),
-                )
-            };
+            let n =
+                unsafe { libc::write(self.raw_fd, first.as_ptr().cast(), first.len().min(8192)) };
             if n > 0 {
                 self.buffer.drain(..n as usize);
             } else if n < 0 {
                 let err = io::Error::last_os_error();
                 match err.raw_os_error() {
                     Some(libc::EINTR) => continue,
-                    Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK) => break,
+                    Some(e) if e == libc::EAGAIN || e == libc::EWOULDBLOCK => break,
                     Some(libc::EPIPE) => {
                         self.buffer.clear();
                         break;
@@ -174,11 +171,7 @@ impl NonblockingStdout {
                     break;
                 }
                 let n = unsafe {
-                    libc::write(
-                        self.raw_fd,
-                        first.as_ptr().cast(),
-                        first.len().min(8192),
-                    )
+                    libc::write(self.raw_fd, first.as_ptr().cast(), first.len().min(8192))
                 };
                 if n > 0 {
                     self.buffer.drain(..n as usize);
@@ -186,7 +179,7 @@ impl NonblockingStdout {
                     let err = io::Error::last_os_error();
                     match err.raw_os_error() {
                         Some(libc::EINTR) => continue,
-                        Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK) => continue,
+                        Some(e) if e == libc::EAGAIN || e == libc::EWOULDBLOCK => continue,
                         Some(libc::EPIPE) => {
                             self.buffer.clear();
                             break;

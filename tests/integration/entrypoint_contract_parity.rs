@@ -33,9 +33,7 @@ use vetto::config::NetMode;
 use vetto::policy::Policy;
 use vetto::policy_ir::compiler::{EffectivePolicyInput, PolicyCompiler};
 use vetto::policy_ir::contract::SecurityContract;
-use vetto::sandbox::production::{
-    UnpreparedProductionExecution, PROD_SCENARIO_ID,
-};
+use vetto::sandbox::production::{UnpreparedProductionExecution, PROD_SCENARIO_ID};
 use vetto::sandbox::{Backend, StdioMode};
 
 fn test_temp_dir(prefix: &str) -> PathBuf {

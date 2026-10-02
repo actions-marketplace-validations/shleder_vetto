@@ -282,6 +282,7 @@ pub fn manage_session_lifecycle(
                     ))
                 })?;
 
+                let tier_label = session.tier_label();
                 let spawned_ref = session.spawned.as_mut().ok_or_else(|| {
                     SuperviseError::Fatal(anyhow::anyhow!("spawned session execution is missing"))
                 })?;
@@ -290,7 +291,7 @@ pub fn manage_session_lifecycle(
                     &session.bus,
                     pty_master,
                     &mut spawned_ref.handle,
-                    session.tier_label(),
+                    tier_label,
                     &cfg.net.label(),
                     &session.policy.name,
                     timeout,

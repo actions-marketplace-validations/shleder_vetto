@@ -664,7 +664,9 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         TuiMode::Statusline => {
             let (rows, cols) = crossterm::terminal::size().unwrap_or((24, 80));
             let p = crate::pty::Pty::open(rows.saturating_sub(1).max(1), cols)
-                .map_err(SuperviseError::StdioAllocationFailed)?;
+                .map_err(|e| {
+                    SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+                })?;
             let crate::pty::Pty { master, slave } = p;
             let slave_fd = slave.as_raw_fd();
             pty_master = Some(master);
@@ -678,9 +680,13 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             );
             if !is_interactive && cfg.mask_secrets {
                 let (r1, w1) = sandbox::create_cloexec_pipe()
-                    .map_err(SuperviseError::StdioAllocationFailed)?;
+                    .map_err(|e| {
+                        SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+                    })?;
                 let (r2, w2) = sandbox::create_cloexec_pipe()
-                    .map_err(SuperviseError::StdioAllocationFailed)?;
+                    .map_err(|e| {
+                        SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+                    })?;
                 let stdio = StdioMode::Captured {
                     stdout_w: w1.as_raw_fd(),
                     stderr_w: w2.as_raw_fd(),
@@ -1030,7 +1036,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         diff_enabled,
         verify_outcome,
         bus,
-        stats,
+        stats: std::sync::Arc::new(stats),
         otel_session: Some(otel_session),
         default_log_path,
         #[cfg(unix)]
