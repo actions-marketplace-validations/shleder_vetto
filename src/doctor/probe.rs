@@ -11,11 +11,13 @@
 //! paths, `NETCHECK:<port>` for the loopback probe, `WRITECHECK:<path>` for
 //! the write-outside probe.
 
+pub use crate::policy::types::{analyze_deny_overlap, DenyOverlapReport};
+
+#[cfg(unix)]
 use std::path::Path;
 
+#[cfg(unix)]
 use crate::policy::Policy;
-
-pub use crate::policy::types::{analyze_deny_overlap, DenyOverlapReport};
 
 #[cfg(unix)]
 use std::collections::HashMap;
