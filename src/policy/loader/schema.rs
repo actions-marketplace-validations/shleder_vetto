@@ -34,6 +34,8 @@ pub struct RawLayer {
     #[serde(default)]
     pub limits: Option<RawLimits>,
     #[serde(default)]
+    pub cgroup: Option<RawCgroup>,
+    #[serde(default)]
     pub platform: Option<RawPlatform>,
     #[serde(default)]
     pub observability: Option<RawObservability>,

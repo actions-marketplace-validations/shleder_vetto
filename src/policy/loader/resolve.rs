@@ -529,7 +529,7 @@ pub enum EnumerationError {
 }
 
 pub fn is_enumeration_excluded(path: &Path, deny_set: &BTreeSet<PathBuf>) -> bool {
-    deny_set.contains(path) || super::glob_resolve::is_secret_shaped(path)
+    deny_set.contains(path) || glob_resolve::is_secret_shaped(path)
 }
 
 pub fn enumerate_tree(

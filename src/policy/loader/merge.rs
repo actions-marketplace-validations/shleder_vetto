@@ -372,6 +372,19 @@ impl MergedPolicy {
             }
         }
 
+        if let Some(cg) = &layer.cgroup {
+            let incoming = CgroupConfig {
+                memory_max: cg.memory_max.as_ref().map(|m| m.to_string_repr()),
+                pids_max: cg.pids_max.as_ref().map(|p| p.to_string_repr()),
+                swap_max: cg.swap_max.as_ref().map(|s| s.to_string_repr()),
+                cpu_max: cg.cpu_max.as_ref().map(|c| c.to_string_repr()),
+            };
+            match &mut self.cgroup {
+                Some(existing) => existing.merge_strictest(&incoming),
+                None => self.cgroup = Some(incoming),
+            }
+        }
+
         Ok(())
     }
 

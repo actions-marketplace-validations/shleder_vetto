@@ -232,7 +232,7 @@ fn parse_value(key: &LimitKey, value: &str, pair: &str) -> Result<u64> {
 /// nonsensical value cannot wrap into a small (weaker) ceiling.
 fn parse_byte_value(value: &str, pair: &str) -> Result<u64> {
     crate::policy::units::parse_bytes(value).map_err(|e| {
-        anyhow::anyhow!("invalid --limits value '{value}' in pair '{pair}': {e}")
+        anyhow::anyhow!("invalid --limits value '{value}' in pair '{pair}': {e} ({BYTE_SUFFIX_DOC})")
     })
 }
 
@@ -349,7 +349,7 @@ mod tests {
     fn aliases_pids_and_mem_and_memory() {
         let limits = parse_spec("pids=64,mem=512m").expect("aliases");
         assert_eq!(limits.processes, Some(64));
-        assert_eq!(limits.address_space_bytes, Some(512_000_000));
+        assert_eq!(limits.address_space_bytes, Some(512 * 1024 * 1024));
 
         let limits = parse_spec("memory=2gib").expect("memory alias");
         assert_eq!(limits.address_space_bytes, Some(2 * 1024 * 1024 * 1024));
