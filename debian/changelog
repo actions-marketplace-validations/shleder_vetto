@@ -1,3 +1,9 @@
+vetto (0.5.15-1) unstable; urgency=medium
+
+  * High-throughput SWE-bench runtime adapter and Aider CLI profile.
+
+ -- vetto contributors <noreply@github.com>  Fri, 02 Oct 2026 08:41:09 +0000
+
 vetto (0.5.14-1) unstable; urgency=medium
 
   * Production toolchain transparency, rootless CI/CD, native Python & TypeScript SDKs, and Sourcegraph Amp preset.

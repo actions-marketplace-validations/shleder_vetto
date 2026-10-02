@@ -29,7 +29,7 @@ jobs:
         run: pip install --upgrade aider-chat
 
       - name: Execute Aider in Vetto Sandbox
-        uses: shleder/vetto@v0.5.14
+        uses: shleder/vetto@v0.5.15
         with:
           command: 'aider --yes-always --no-git --message "Review code changes for potential regressions and security flaws"'
           agent: 'aider'
