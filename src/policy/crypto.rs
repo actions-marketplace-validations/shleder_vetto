@@ -317,25 +317,7 @@ mod tests {
         assert_eq!(Some(pubkey), parsed_pub);
     }
 
-    struct Lcg(u64);
-
-    impl Lcg {
-        fn next(&mut self) -> u64 {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            self.0
-        }
-
-        fn below(&mut self, bound: u64) -> u64 {
-            if bound == 0 {
-                0
-            } else {
-                self.next() % bound
-            }
-        }
-    }
+    use crate::exit_codes::Lcg;
 
     fn pick_hex_piece(rng: &mut Lcg) -> &'static str {
         match rng.below(10) {

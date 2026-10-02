@@ -138,6 +138,52 @@ pub fn parse_bytes_value(input: &str) -> Option<u64> {
     Some((num * multiplier) as u64)
 }
 
+/// Parse byte amount supporting decimal suffixes (k/m/g/kb/mb/gb) and binary suffixes (kib/mib/gib).
+/// Returns None on unparseable input or u64 multiplication overflow.
+pub fn parse_byte_size(value: &str) -> Option<u64> {
+    let lower = value.trim().to_ascii_lowercase();
+    if let Ok(raw) = lower.parse::<u64>() {
+        return Some(raw);
+    }
+    let (number, mult) = if let Some(n) = lower.strip_suffix("kib") {
+        (n, 1024u64)
+    } else if let Some(n) = lower.strip_suffix("mib") {
+        (n, 1024u64 * 1024)
+    } else if let Some(n) = lower.strip_suffix("gib") {
+        (n, 1024u64 * 1024 * 1024)
+    } else if let Some(n) = lower.strip_suffix("gb") {
+        (n, 1000u64 * 1000 * 1000)
+    } else if let Some(n) = lower.strip_suffix("mb") {
+        (n, 1000u64 * 1000)
+    } else if let Some(n) = lower.strip_suffix("kb") {
+        (n, 1000u64)
+    } else if let Some(n) = lower.strip_suffix('k') {
+        (n, 1000u64)
+    } else if let Some(n) = lower.strip_suffix('m') {
+        (n, 1000u64 * 1000)
+    } else if let Some(n) = lower.strip_suffix('g') {
+        (n, 1000u64 * 1000 * 1000)
+    } else {
+        let n = lower.strip_suffix('b')?;
+        (n, 1u64)
+    };
+    let base: u64 = number.trim().parse().ok()?;
+    base.checked_mul(mult)
+}
+
+/// Format byte count into human-readable string representation (B, KB, MB, GB).
+pub fn format_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
 /// Parse CPU limit string into an effective core ratio (e.g. 0.5 for 50%, 1.0 for 100%, 2.0 for 200%).
 /// Returns None if "max", empty, or unparseable.
 pub fn parse_cpu_ratio(input: &str) -> Option<f64> {
@@ -976,5 +1022,22 @@ mod cgroup_tests {
         };
         cfg_max.merge_strictest(&cfg);
         assert_eq!(cfg_max.cpu_max.as_deref(), Some("50000 100000"));
+    }
+
+    #[test]
+    fn test_parse_byte_size_and_format_bytes() {
+        assert_eq!(parse_byte_size("1024"), Some(1024));
+        assert_eq!(parse_byte_size("2k"), Some(2000));
+        assert_eq!(parse_byte_size("4kib"), Some(4096));
+        assert_eq!(parse_byte_size("10mb"), Some(10_000_000));
+        assert_eq!(parse_byte_size("10mib"), Some(10 * 1024 * 1024));
+        assert_eq!(parse_byte_size("1g"), Some(1_000_000_000));
+        assert_eq!(parse_byte_size("2gib"), Some(2 * 1024 * 1024 * 1024));
+        assert_eq!(parse_byte_size("invalid"), None);
+
+        assert_eq!(format_bytes(500), "500 B");
+        assert_eq!(format_bytes(2048), "2.0 KB");
+        assert_eq!(format_bytes(1024 * 1024 * 5), "5.0 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024 * 3), "3.0 GB");
     }
 }
