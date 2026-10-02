@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::config::NetMode;
+use super::types::NetMode;
 use crate::sandbox::Backend;
 
 use super::loader::{load_with_options, PolicyLoadOptions};

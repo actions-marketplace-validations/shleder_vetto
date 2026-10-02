@@ -53,6 +53,48 @@ impl SeccompProfile {
     }
 }
 
+/// Network policy mode.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NetMode {
+    /// Default. Enforced on every tier (netns on FULL, seccomp-BPF on FS-ONLY).
+    Off,
+    /// CONNECT-level domain allowlist via the unix-fd bridge relay.
+    Allowlist(Vec<String>),
+    /// CONNECT-level domain and exact-port allowlist via the unix-fd bridge
+    /// relay. DNS is resolved and validated by the broker before connect.
+    Strict(Vec<NetRule>),
+    /// Interactive domain confirmation mode with per-session caching.
+    Ask,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetRule {
+    pub domain: String,
+    pub port: u16,
+}
+
+impl NetMode {
+    pub fn label(&self) -> String {
+        match self {
+            NetMode::Off => "off".into(),
+            NetMode::Allowlist(domains) => format!("allowlist:{}", domains.join(",")),
+            NetMode::Strict(rules) => format!(
+                "strict:{}",
+                rules
+                    .iter()
+                    .map(|rule| format!("{}:{}", rule.domain, rule.port))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            NetMode::Ask => "ask".into(),
+        }
+    }
+
+    pub fn uses_relay(&self) -> bool {
+        matches!(self, Self::Allowlist(_) | Self::Strict(_) | Self::Ask)
+    }
+}
+
 /// Optional cgroup v2 resource limits configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CgroupConfig {
