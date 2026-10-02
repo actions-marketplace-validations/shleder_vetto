@@ -131,6 +131,51 @@ pub fn parse_cpu_ratio(input: &str) -> Option<f64> {
     None
 }
 
+/// Parse human-readable memory limit into bytes or string representation.
+pub fn parse_memory_bytes(input: &str) -> Option<String> {
+    let s = input.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("max") {
+        return Some("max".to_string());
+    }
+    let (num_part, unit_part) = match s.find(|c: char| !c.is_ascii_digit() && c != '.') {
+        Some(idx) => (&s[..idx], s[idx..].trim().to_uppercase()),
+        None => (s, String::new()),
+    };
+    let num: f64 = num_part.parse().ok()?;
+    let multiplier: f64 = match unit_part.as_str() {
+        "" | "B" => 1.0,
+        "K" | "KB" | "KIB" => 1024.0,
+        "M" | "MB" | "MIB" => 1024.0 * 1024.0,
+        "G" | "GB" | "GIB" => 1024.0 * 1024.0 * 1024.0,
+        "T" | "TB" | "TIB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        _ => return None,
+    };
+    let bytes = (num * multiplier) as u64;
+    Some(bytes.to_string())
+}
+
+/// Parse CPU limit (e.g. "50%", "100%", "200%", or raw quota/period "50000 100000").
+pub fn parse_cpu_max(input: &str) -> Option<String> {
+    let s = input.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("max") {
+        return Some("max 100000".to_string());
+    }
+    if s.ends_with('%') {
+        let pct_str = s.trim_end_matches('%').trim();
+        let pct: f64 = pct_str.parse().ok()?;
+        let period = 100_000u64;
+        let quota = ((pct / 100.0) * period as f64) as u64;
+        return Some(format!("{quota} {period}"));
+    }
+    if s.contains(' ') {
+        return Some(s.to_string());
+    }
+    if let Ok(quota) = s.parse::<u64>() {
+        return Some(format!("{quota} 100000"));
+    }
+    None
+}
+
 /// Strictest merge for memory / swap string options.
 pub fn strictest_memory_str(left: &Option<String>, right: &Option<String>) -> Option<String> {
     match (left, right) {
@@ -586,9 +631,32 @@ impl Policy {
     }
 }
 
+/// Strip trailing dots, square brackets around IPv6 addresses, and trailing ports.
+pub fn strip_domain_port(s: &str) -> &str {
+    let s = s.trim().trim_end_matches('.');
+    if let Some(rest) = s.strip_prefix('[') {
+        if let Some(end_bracket) = rest.find(']') {
+            &rest[..end_bracket]
+        } else {
+            s
+        }
+    } else if let Some((host_part, port_part)) = s.rsplit_once(':') {
+        if !port_part.is_empty()
+            && port_part.chars().all(|c| c.is_ascii_digit())
+            && !host_part.contains(':')
+        {
+            host_part
+        } else {
+            s
+        }
+    } else {
+        s
+    }
+}
+
 /// Collapse `.`, `..`, and redundant separators without touching the
 /// filesystem (mirrors the loader's containment normalization).
-fn lexical_normalize(path: &Path) -> PathBuf {
+pub fn lexical_normalize(path: &Path) -> PathBuf {
     use std::path::Component;
     let has_root = path.has_root();
     let mut normalized = PathBuf::new();

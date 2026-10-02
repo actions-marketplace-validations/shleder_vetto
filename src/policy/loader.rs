@@ -2125,24 +2125,7 @@ fn normalize_for_containment(path: &Path, base: &Path) -> Option<PathBuf> {
     }
 }
 
-fn lexical_normalize(path: &Path) -> PathBuf {
-    let has_root = path.has_root();
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !normalized.pop() && !has_root {
-                    normalized.push(component.as_os_str());
-                }
-            }
-            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
-                normalized.push(component.as_os_str());
-            }
-        }
-    }
-    normalized
-}
+use super::types::lexical_normalize;
 
 fn paths_overlap(left: &Path, right: &Path) -> bool {
     left.starts_with(right) || right.starts_with(left)

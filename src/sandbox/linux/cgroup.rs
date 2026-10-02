@@ -56,50 +56,7 @@ impl Drop for CgroupHandle {
     }
 }
 
-/// Parse human-readable memory limit into bytes or string representation.
-pub fn parse_memory_bytes(input: &str) -> Option<String> {
-    let s = input.trim();
-    if s.is_empty() || s.eq_ignore_ascii_case("max") {
-        return Some("max".to_string());
-    }
-    let (num_part, unit_part) = match s.find(|c: char| !c.is_ascii_digit() && c != '.') {
-        Some(idx) => (&s[..idx], s[idx..].trim().to_uppercase()),
-        None => (s, String::new()),
-    };
-    let num: f64 = num_part.parse().ok()?;
-    let multiplier: f64 = match unit_part.as_str() {
-        "" | "B" => 1.0,
-        "K" | "KB" | "KIB" => 1024.0,
-        "M" | "MB" | "MIB" => 1024.0 * 1024.0,
-        "G" | "GB" | "GIB" => 1024.0 * 1024.0 * 1024.0,
-        "T" | "TB" | "TIB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
-        _ => return None,
-    };
-    let bytes = (num * multiplier) as u64;
-    Some(bytes.to_string())
-}
-
-/// Parse CPU limit (e.g. "50%", "100%", "200%", or raw quota/period "50000 100000").
-pub fn parse_cpu_max(input: &str) -> Option<String> {
-    let s = input.trim();
-    if s.is_empty() || s.eq_ignore_ascii_case("max") {
-        return Some("max 100000".to_string());
-    }
-    if s.ends_with('%') {
-        let pct_str = s.trim_end_matches('%').trim();
-        let pct: f64 = pct_str.parse().ok()?;
-        let period = 100_000u64;
-        let quota = ((pct / 100.0) * period as f64) as u64;
-        return Some(format!("{quota} {period}"));
-    }
-    if s.contains(' ') {
-        return Some(s.to_string());
-    }
-    if let Ok(quota) = s.parse::<u64>() {
-        return Some(format!("{quota} 100000"));
-    }
-    None
-}
+pub use crate::policy::types::{parse_cpu_max, parse_memory_bytes};
 
 /// Read available cgroup v2 controllers from the cgroup root if mounted.
 pub fn available_controllers() -> Vec<String> {

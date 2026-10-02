@@ -621,27 +621,7 @@ pub fn validate_public_addr(addr: IpAddr) -> Result<()> {
     Ok(())
 }
 
-fn strip_domain_port(s: &str) -> &str {
-    let s = s.trim().trim_end_matches('.');
-    if let Some(rest) = s.strip_prefix('[') {
-        if let Some(end_bracket) = rest.find(']') {
-            &rest[..end_bracket]
-        } else {
-            s
-        }
-    } else if let Some((host_part, port_part)) = s.rsplit_once(':') {
-        if !port_part.is_empty()
-            && port_part.chars().all(|c| c.is_ascii_digit())
-            && !host_part.contains(':')
-        {
-            host_part
-        } else {
-            s
-        }
-    } else {
-        s
-    }
-}
+use crate::policy::types::strip_domain_port;
 
 fn normalize_host(host: &str) -> Result<String> {
     let host = strip_domain_port(host);
