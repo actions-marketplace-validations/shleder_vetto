@@ -353,10 +353,6 @@ fn test_macos_matrix_001() {
 fn test_macos_no_direct_bypass_001() {
     for (file, src) in [
         ("src/main.rs", include_str!("../../src/main.rs")),
-        (
-            "src/multi/runtime.rs",
-            include_str!("../../src/multi/runtime.rs"),
-        ),
         ("src/mcp/wrap.rs", include_str!("../../src/mcp/wrap.rs")),
     ] {
         for required in [

@@ -7,7 +7,7 @@
 //! mechanism is:
 //!
 //! 1. Before the fork, vetto registers itself as a child sub-reaper
-//!    (`PR_SET_CHILD_SUBREAPER`, see `crate::multi::isolation`). When the
+//!    (`PR_SET_CHILD_SUBREAPER`, see [`set_subreaper`]). When the
 //!    agent child terminates, surviving descendants are reparented to vetto
 //!    instead of init.
 //! 2. After the group kill, [`sweep_reparented`] scans `/proc` for live

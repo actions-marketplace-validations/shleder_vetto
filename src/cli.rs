@@ -36,7 +36,6 @@ Examples:
   vetto enable codex
   claude
   vetto doctor
-  vetto tour
   vetto status
   vetto allow ./target
   vetto deny ~/.aws/credentials
@@ -412,14 +411,11 @@ pub enum Command {
         /// Overwrite existing policy if present
         #[arg(long, short = 'f')]
         force: bool,
-        /// Interactive first-run setup wizard
-        #[arg(long)]
-        wizard: bool,
     },
     /// List built-in policy profiles
     #[command(hide = true)]
     Profiles,
-    /// Manage transparent developer shims, shell hooks, and Git hook wrappers
+    /// Manage transparent developer shims and shell hooks
     #[command(hide = true)]
     Hook {
         #[command(subcommand)]
@@ -1134,14 +1130,14 @@ mod tests {
     #[test]
     fn hook_subcommand_parses_install_and_status() {
         let install_cli =
-            Cli::try_parse_from(["vetto", "hook", "install", "--scope", "local", "--git"])
+            Cli::try_parse_from(["vetto", "hook", "install", "--scope", "local", "--force"])
                 .expect("hook install parsing");
         assert!(matches!(
             install_cli.command,
             Some(Command::Hook {
                 command: HookCommand::Install {
                     scope: HookScope::Local,
-                    git: true,
+                    force: true,
                     ..
                 }
             })
@@ -1330,11 +1326,11 @@ mod tests {
     }
 
     #[test]
-    fn init_wizard_subcommand_parses() {
-        let cli = Cli::try_parse_from(["vetto", "init", "--wizard"]).expect("init wizard parsing");
+    fn init_subcommand_parses() {
+        let cli = Cli::try_parse_from(["vetto", "init", "--force"]).expect("init parsing");
         assert!(matches!(
             cli.command,
-            Some(Command::Init { wizard: true, .. })
+            Some(Command::Init { force: true })
         ));
     }
 

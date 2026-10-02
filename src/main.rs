@@ -395,7 +395,7 @@ fn run() -> Result<()> {
         Some(cli::Command::Bench(bench_args)) => cli::bench::execute_bench(bench_args, &args),
         Some(cli::Command::Diff(args)) => cli::diff::run_diff(args),
         Some(cli::Command::Watchdog(args)) => watchdog::run_cli(args),
-        Some(cli::Command::Init { force, wizard }) => init(*force, *wizard),
+        Some(cli::Command::Init { force }) => init(*force),
         Some(cli::Command::Profiles) => profiles(),
         Some(cli::Command::Hook { command }) => cli::hook::run_cli(command),
         Some(cli::Command::Mcp { command }) => match command {
@@ -2264,8 +2264,8 @@ fn stage_update_if_available(user_config: &vetto::version::UserConfig) {
 // init / profiles
 // ---------------------------------------------------------------------------
 
-fn init(force: bool, wizard: bool) -> Result<()> {
-    vetto::init::run_init(Path::new("."), force, wizard)
+fn init(force: bool) -> Result<()> {
+    vetto::init::run_init(Path::new("."), force)
 }
 
 fn profiles() -> Result<()> {
