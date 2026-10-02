@@ -45,7 +45,7 @@ use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::os::fd::IntoRawFd;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, OwnedFd};
 
 #[cfg(unix)]
 const OUTPUT_CAP: usize = 512 * 1024;
@@ -543,8 +543,8 @@ fn spawn_one(
         worker_scope,
     } = prepared;
     let backend = backend.ok_or_else(|| anyhow::anyhow!("sandbox backend was consumed"))?;
-    let (stdout_r, stdout_w) = pipe2()?;
-    let (stderr_r, stderr_w) = pipe2()?;
+    let (stdout_r, stdout_w) = crate::sandbox::create_cloexec_pipe()?;
+    let (stderr_r, stderr_w) = crate::sandbox::create_cloexec_pipe()?;
     // Stage 3C authoritative boundary, one execution per agent: the SAME
     // object owns frozen policy/identity/nonce, the prepared Stage 3B
     // backend, and the real child spawn (Full namespaces + mounts + relay
@@ -853,42 +853,6 @@ fn spawn_pipe_reader(fd: OwnedFd, output: Arc<Mutex<OutputBuffers>>, stdout: boo
             }
         })
         .expect("spawn multi output reader");
-}
-
-#[cfg(unix)]
-fn pipe2() -> Result<(OwnedFd, OwnedFd)> {
-    let mut fds = [0 as libc::c_int; 2];
-    // SAFETY: valid out-array for the libc pipe call.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        bail!("pipe: {}", std::io::Error::last_os_error());
-    }
-    for fd in fds {
-        // SAFETY: fd came from the successful pipe call.
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if flags < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_GETFD): {error}");
-        }
-        // SAFETY: fd came from the successful pipe call.
-        if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_SETFD): {error}");
-        }
-    }
-    // SAFETY: fresh descriptors from a successful pipe and CLOEXEC setup.
-    Ok((unsafe { OwnedFd::from_raw_fd(fds[0]) }, unsafe {
-        OwnedFd::from_raw_fd(fds[1])
-    }))
 }
 
 #[cfg(target_os = "linux")]

@@ -35,6 +35,7 @@ pub mod remote;
 pub mod report;
 pub mod rescue;
 pub mod sandbox;
+pub mod sanitizer;
 pub mod shim;
 pub mod telemetry;
 pub mod tour;

@@ -24,7 +24,7 @@ use std::collections::HashMap;
 #[cfg(unix)]
 use std::io::Read;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::os::fd::AsRawFd;
 
 #[cfg(unix)]
 use anyhow::{bail, Result};
@@ -107,8 +107,8 @@ pub fn run_probe_script(
     ];
     agent_cmd.extend(script_args);
 
-    let (out_r, out_w) = pipe2()?;
-    let (err_r, err_w) = pipe2()?;
+    let (out_r, out_w) = sandbox::create_cloexec_pipe()?;
+    let (err_r, err_w) = sandbox::create_cloexec_pipe()?;
     let stdio = sandbox::StdioMode::Captured {
         stdout_w: out_w.as_raw_fd(),
         stderr_w: err_w.as_raw_fd(),
@@ -143,41 +143,4 @@ pub fn run_probe_script(
         stdout: output,
         stderr: eout,
     })
-}
-
-#[cfg(unix)]
-fn pipe2() -> Result<(OwnedFd, OwnedFd)> {
-    let mut fds = [0 as libc::c_int; 2];
-    // SAFETY: valid out-array.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        bail!("pipe: {}", std::io::Error::last_os_error());
-    }
-    for fd in fds {
-        // SAFETY: fd came from the successful pipe call.
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if flags < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_GETFD): {error}");
-        }
-        // SAFETY: fd came from the successful pipe call; preserve existing
-        // descriptor flags while adding close-on-exec.
-        if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
-            let error = std::io::Error::last_os_error();
-            // SAFETY: both descriptors came from the successful pipe call.
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_SETFD, FD_CLOEXEC): {error}");
-        }
-    }
-    // SAFETY: fresh descriptors from a successful pipe and CLOEXEC setup.
-    Ok((unsafe { OwnedFd::from_raw_fd(fds[0]) }, unsafe {
-        OwnedFd::from_raw_fd(fds[1])
-    }))
 }

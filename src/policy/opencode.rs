@@ -12,15 +12,12 @@ use std::path::{Path, PathBuf};
 /// Comments inside string literals (e.g. `"http://localhost"`) are preserved.
 pub fn strip_jsonc_comments(input: &str) -> String {
     // Phase 1: Strip comments outside string literals
-    let chars: Vec<char> = input.chars().collect();
-    let len = chars.len();
-    let mut without_comments = String::with_capacity(len);
-    let mut i = 0;
+    let mut without_comments = String::with_capacity(input.len());
     let mut in_string = false;
     let mut escape = false;
+    let mut chars = input.chars().peekable();
 
-    while i < len {
-        let c = chars[i];
+    while let Some(c) = chars.next() {
         if in_string {
             without_comments.push(c);
             if escape {
@@ -30,51 +27,39 @@ pub fn strip_jsonc_comments(input: &str) -> String {
             } else if c == '"' {
                 in_string = false;
             }
-            i += 1;
         } else if c == '"' {
             in_string = true;
             without_comments.push(c);
-            i += 1;
-        } else if c == '/' && i + 1 < len && chars[i + 1] == '/' {
-            // Single-line comment: skip until newline or EOF
-            i += 2;
-            while i < len && chars[i] != '\n' {
-                i += 1;
-            }
-            if i < len && chars[i] == '\n' {
-                without_comments.push('\n');
-                i += 1;
-            }
-        } else if c == '/' && i + 1 < len && chars[i + 1] == '*' {
-            // Multi-line comment: skip until "*/" or EOF
-            i += 2;
-            while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
-                if chars[i] == '\n' {
+        } else if c == '/' && chars.peek() == Some(&'/') {
+            chars.next();
+            for c2 in chars.by_ref() {
+                if c2 == '\n' {
                     without_comments.push('\n');
+                    break;
                 }
-                i += 1;
             }
-            if i + 1 < len {
-                i += 2; // skip */
-            } else {
-                i = len;
+        } else if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            while let Some(c2) = chars.next() {
+                if c2 == '\n' {
+                    without_comments.push('\n');
+                } else if c2 == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    break;
+                }
             }
         } else {
             without_comments.push(c);
-            i += 1;
         }
     }
 
     // Phase 2: Strip trailing commas before '}' or ']' outside string literals
-    let chars2: Vec<char> = without_comments.chars().collect();
-    let len2 = chars2.len();
-    let mut result = String::with_capacity(len2);
-    let mut i2 = 0;
+    let mut result = String::with_capacity(without_comments.len());
     let mut in_str2 = false;
     let mut esc2 = false;
+    let mut chars2 = without_comments.chars().peekable();
 
-    while i2 < len2 {
-        let c = chars2[i2];
+    while let Some(c) = chars2.next() {
         if in_str2 {
             result.push(c);
             if esc2 {
@@ -84,27 +69,26 @@ pub fn strip_jsonc_comments(input: &str) -> String {
             } else if c == '"' {
                 in_str2 = false;
             }
-            i2 += 1;
         } else if c == '"' {
             in_str2 = true;
             result.push(c);
-            i2 += 1;
         } else if c == ',' {
-            // Look ahead for next non-whitespace char
-            let mut j = i2 + 1;
-            while j < len2 && chars2[j].is_whitespace() {
-                j += 1;
+            let mut ws = String::new();
+            while let Some(&next_c) = chars2.peek() {
+                if next_c.is_whitespace() {
+                    ws.push(chars2.next().unwrap());
+                } else {
+                    break;
+                }
             }
-            if j < len2 && (chars2[j] == '}' || chars2[j] == ']') {
-                // Drop trailing comma
-                i2 += 1;
+            if matches!(chars2.peek(), Some(&'}') | Some(&']')) {
+                result.push_str(&ws);
             } else {
-                result.push(c);
-                i2 += 1;
+                result.push(',');
+                result.push_str(&ws);
             }
         } else {
             result.push(c);
-            i2 += 1;
         }
     }
 

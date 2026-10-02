@@ -44,7 +44,9 @@ pub fn is_active_root(pid: u32) -> bool {
 #[cfg(target_os = "linux")]
 use crate::sandbox::linux::proctrack;
 #[cfg(target_os = "linux")]
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::fd::{FromRawFd, OwnedFd};
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
 #[cfg(windows)]
@@ -440,4 +442,38 @@ fn windows_wait(strategy: Option<&KillStrategy>) -> i32 {
     } else {
         -1
     }
+}
+
+/// Create an anonymous pipe pair with the `O_CLOEXEC` flag set on both ends.
+#[cfg(unix)]
+pub fn create_cloexec_pipe() -> anyhow::Result<(OwnedFd, OwnedFd)> {
+    let mut fds = [0 as libc::c_int; 2];
+    // SAFETY: valid out-array for the libc pipe call.
+    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+        anyhow::bail!("pipe: {}", std::io::Error::last_os_error());
+    }
+    for fd in fds {
+        // SAFETY: fd came from the successful pipe call.
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        if flags < 0 {
+            let error = std::io::Error::last_os_error();
+            unsafe {
+                libc::close(fds[0]);
+                libc::close(fds[1]);
+            }
+            anyhow::bail!("fcntl(F_GETFD): {error}");
+        }
+        // SAFETY: fd came from the successful pipe call; preserve existing
+        // descriptor flags while adding close-on-exec.
+        if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
+            let error = std::io::Error::last_os_error();
+            unsafe {
+                libc::close(fds[0]);
+                libc::close(fds[1]);
+            }
+            anyhow::bail!("fcntl(F_SETFD): {error}");
+        }
+    }
+    // SAFETY: fds are valid, open, and configured with FD_CLOEXEC.
+    unsafe { Ok((OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1]))) }
 }
