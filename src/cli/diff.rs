@@ -4,13 +4,13 @@
 //! all filesystem changes (added, modified, deleted) and integrates security telemetry
 //! (blocked file reads, blocked network egress, contacted domains).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::rescue::snapshot::{self, SnapshotMetadata};

@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 use serde::Deserialize;
 
-use crate::error::VettoError;
-use crate::policy::presets::{agent_network_allowlist, Preset, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
+use crate::policy::presets::Preset;
 pub use crate::policy::types::{strip_domain_port, NetMode, NetRule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

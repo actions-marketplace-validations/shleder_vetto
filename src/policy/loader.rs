@@ -16,7 +16,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;

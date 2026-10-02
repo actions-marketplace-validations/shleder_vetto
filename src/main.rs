@@ -23,8 +23,8 @@ use vetto::pty;
 #[cfg(unix)]
 use vetto::tui;
 use vetto::{
-    cli, daemon, events, exit_codes, history, logger, mcp, multi, policy, profile, remote, report,
-    rescue, sandbox, shim, watchdog,
+    cli, daemon, doctor, events, exit_codes, history, logger, mcp, multi, policy, profile, remote,
+    report, rescue, sandbox, shim, watchdog,
 };
 
 fn main() {
@@ -660,13 +660,15 @@ fn run() -> Result<()> {
             cli::PolicyCommand::Explain { json, why, limits } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
                 let effective_limits = limits.as_deref().or(args.limits.as_deref());
-                let backend = sandbox::Backend::detect(net.clone(), false).ok();
-                let tier = backend.as_ref().and_then(|b| b.tier());
-                let backend_desc = backend.as_ref().map(|b| b.describe());
-                let observes_seccomp = backend
-                    .as_ref()
-                    .map(|b| b.observes_seccomp())
-                    .unwrap_or(false);
+                let detected = sandbox::Backend::detect(net.clone(), false).ok();
+                let backend = vetto::policy::explain::ExplainBackend {
+                    tier: detected.as_ref().and_then(|b| b.tier()),
+                    backend_desc: detected.as_ref().map(|b| b.describe()),
+                    observes_seccomp: detected
+                        .as_ref()
+                        .map(|b| b.observes_seccomp())
+                        .unwrap_or(false),
+                };
                 vetto::policy::explain::run_cli(
                     *json,
                     why.as_deref(),
@@ -674,29 +676,27 @@ fn run() -> Result<()> {
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     &net,
                     effective_limits,
-                    tier,
-                    backend_desc.as_deref(),
-                    observes_seccomp,
+                    backend,
                 )
             }
             cli::PolicyCommand::Show { effective, json } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
-                let backend = sandbox::Backend::detect(net.clone(), false).ok();
-                let tier = backend.as_ref().and_then(|b| b.tier());
-                let backend_desc = backend.as_ref().map(|b| b.describe());
-                let observes_seccomp = backend
-                    .as_ref()
-                    .map(|b| b.observes_seccomp())
-                    .unwrap_or(false);
+                let detected = sandbox::Backend::detect(net.clone(), false).ok();
+                let backend = vetto::policy::explain::ExplainBackend {
+                    tier: detected.as_ref().and_then(|b| b.tier()),
+                    backend_desc: detected.as_ref().map(|b| b.describe()),
+                    observes_seccomp: detected
+                        .as_ref()
+                        .map(|b| b.observes_seccomp())
+                        .unwrap_or(false),
+                };
                 vetto::policy::explain::run_show(
                     *effective,
                     *json,
                     &args.profile,
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     &net,
-                    tier,
-                    backend_desc.as_deref(),
-                    observes_seccomp,
+                    backend,
                 )
             }
             cli::PolicyCommand::Lint { strict } => {

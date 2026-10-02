@@ -26,6 +26,14 @@ pub struct PathExplanation {
     pub how_to_change: String,
 }
 
+/// Execution target backend metadata for policy explain / show.
+#[derive(Debug, Clone, Default)]
+pub struct ExplainBackend {
+    pub tier: Option<Tier>,
+    pub backend_desc: Option<String>,
+    pub observes_seccomp: bool,
+}
+
 /// Detect the tier, load the effective policy and print it as text or JSON.
 pub fn run_cli(
     json: bool,
@@ -34,9 +42,7 @@ pub fn run_cli(
     policy_path: Option<&Path>,
     net: &NetMode,
     limits_spec: Option<&str>,
-    tier: Option<Tier>,
-    backend_desc: Option<&str>,
-    observes_seccomp: bool,
+    backend: ExplainBackend,
 ) -> Result<()> {
     let project = std::env::current_dir().context("getcwd")?;
     let home = std::env::var_os("HOME")
@@ -56,7 +62,7 @@ pub fn run_cli(
         policy_path,
         &project,
         &home,
-        tier.unwrap_or(Tier::Full), // macOS: no FS-ONLY enumeration semantics
+        backend.tier.unwrap_or(Tier::Full), // macOS: no FS-ONLY enumeration semantics
         &options,
     )?;
 
@@ -77,9 +83,11 @@ pub fn run_cli(
         net,
         nonce: "explain-preview",
         timeout: None,
-        tier,
-        backend: backend_desc.unwrap_or("none").to_string(),
-        observe_seccomp: observes_seccomp,
+        tier: backend.tier,
+        backend: backend
+            .backend_desc
+            .unwrap_or_else(|| "none".to_string()),
+        observe_seccomp: backend.observes_seccomp,
         debug_ports: None,
     };
     let contract = crate::policy_ir::compiler::PolicyCompiler::compile_effective(contract_input)?;
@@ -92,9 +100,9 @@ pub fn run_cli(
             print_why_text(&explanation);
         }
     } else if json {
-        print_json(&policy, &contract, tier, net)?;
+        print_json(&policy, &contract, backend.tier, net)?;
     } else {
-        print_text(&policy, &contract, tier, net)?;
+        print_text(&policy, &contract, backend.tier, net)?;
     }
 
     Ok(())
@@ -223,22 +231,10 @@ pub fn run_show(
     profile: &str,
     policy_path: Option<&Path>,
     net: &NetMode,
-    tier: Option<Tier>,
-    backend_desc: Option<&str>,
-    observes_seccomp: bool,
+    backend: ExplainBackend,
 ) -> Result<()> {
     let _ = effective;
-    run_cli(
-        json,
-        None,
-        profile,
-        policy_path,
-        net,
-        None,
-        tier,
-        backend_desc,
-        observes_seccomp,
-    )
+    run_cli(json, None, profile, policy_path, net, None, backend)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
