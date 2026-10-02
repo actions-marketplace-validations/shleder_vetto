@@ -227,10 +227,11 @@ mod tests {
         assert!(contained.contains("vetto audit --latest"));
     }
 
-    struct Lcg(u64);
+    #[derive(Debug, Clone)]
+    pub(crate) struct Lcg(pub u64);
 
     impl Lcg {
-        fn next(&mut self) -> u64 {
+        pub(crate) fn next(&mut self) -> u64 {
             self.0 = self
                 .0
                 .wrapping_mul(6364136223846793005)
@@ -238,7 +239,7 @@ mod tests {
             self.0
         }
 
-        fn below(&mut self, bound: u64) -> u64 {
+        pub(crate) fn below(&mut self, bound: u64) -> u64 {
             if bound == 0 {
                 0
             } else {
@@ -361,3 +362,6 @@ mod tests {
         assert!(recap_hint(0, 0, true).is_some());
     }
 }
+
+#[cfg(test)]
+pub(crate) use tests::Lcg;
