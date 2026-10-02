@@ -153,7 +153,7 @@ impl AsyncPipeReader {
             let mut truncated = false;
             let mut post_exit_start: Option<Instant> = None;
 
-            loop {
+            'drain_loop: loop {
                 if child_done_clone.load(Ordering::Relaxed) {
                     let start = *post_exit_start.get_or_insert_with(Instant::now);
                     if start.elapsed() >= config.drain_budget {
@@ -174,11 +174,36 @@ impl AsyncPipeReader {
                     )
                 };
                 if r > 0 {
-                    if !truncated {
-                        let remaining = config.max_bytes.saturating_sub(collected.len());
-                        if remaining == 0 {
-                            truncated = true;
-                            evidence.buffer_overflows.fetch_add(1, Ordering::SeqCst);
+                    loop {
+                        if !truncated {
+                            let remaining = config.max_bytes.saturating_sub(collected.len());
+                            if remaining == 0 {
+                                truncated = true;
+                                evidence.buffer_overflows.fetch_add(1, Ordering::SeqCst);
+                                continue;
+                            }
+                            let chunk_size = remaining.min(8192);
+                            let mut chunk = vec![0u8; chunk_size];
+                            let n = unsafe {
+                                libc::read(raw_fd, chunk.as_mut_ptr().cast(), chunk.len())
+                            };
+                            if n > 0 {
+                                chunk.truncate(n as usize);
+                                collected.extend_from_slice(&chunk);
+                            } else if n == 0 {
+                                break 'drain_loop;
+                            } else {
+                                let err = std::io::Error::last_os_error();
+                                let code = err.raw_os_error().unwrap_or(0);
+                                if code == libc::EAGAIN || code == libc::EWOULDBLOCK {
+                                    break;
+                                }
+                                if code != libc::EINTR {
+                                    break 'drain_loop;
+                                }
+                            }
+                        } else {
+                            // Bounded drain /dev/null discard mode
                             let n = unsafe {
                                 libc::read(
                                     raw_fd,
@@ -186,51 +211,19 @@ impl AsyncPipeReader {
                                     discard_buf.len(),
                                 )
                             };
-                            if n == 0 {
-                                break;
-                            }
-                            continue;
-                        }
-                        let chunk_size = remaining.min(8192);
-                        let mut chunk = vec![0u8; chunk_size];
-                        let n =
-                            unsafe { libc::read(raw_fd, chunk.as_mut_ptr().cast(), chunk.len()) };
-                        if n > 0 {
-                            chunk.truncate(n as usize);
-                            collected.extend_from_slice(&chunk);
-                        } else if n == 0 {
-                            break;
-                        } else {
-                            let err = std::io::Error::last_os_error();
-                            let code = err.raw_os_error().unwrap_or(0);
-                            if code != libc::EAGAIN
-                                && code != libc::EWOULDBLOCK
-                                && code != libc::EINTR
-                            {
-                                break;
-                            }
-                        }
-                    } else {
-                        // Bounded drain /dev/null discard mode
-                        let n = unsafe {
-                            libc::read(
-                                raw_fd,
-                                discard_buf.as_mut_ptr().cast(),
-                                discard_buf.len(),
-                            )
-                        };
-                        if n > 0 {
-                            // bytes discarded, kernel buffer drained
-                        } else if n == 0 {
-                            break;
-                        } else {
-                            let err = std::io::Error::last_os_error();
-                            let code = err.raw_os_error().unwrap_or(0);
-                            if code != libc::EAGAIN
-                                && code != libc::EWOULDBLOCK
-                                && code != libc::EINTR
-                            {
-                                break;
+                            if n > 0 {
+                                // bytes discarded, kernel buffer drained
+                            } else if n == 0 {
+                                break 'drain_loop;
+                            } else {
+                                let err = std::io::Error::last_os_error();
+                                let code = err.raw_os_error().unwrap_or(0);
+                                if code == libc::EAGAIN || code == libc::EWOULDBLOCK {
+                                    break;
+                                }
+                                if code != libc::EINTR {
+                                    break 'drain_loop;
+                                }
                             }
                         }
                     }

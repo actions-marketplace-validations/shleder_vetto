@@ -113,6 +113,8 @@ pub fn map_error_to_exit_code(err: &anyhow::Error) -> i32 {
         || msg.contains("not supported")
         || msg.contains("sandbox setup failed")
         || msg.contains("landlock")
+        || msg.contains("seccomp")
+        || msg.contains("cgroup")
         || msg.contains("namespace")
         || msg.contains("mount")
     {

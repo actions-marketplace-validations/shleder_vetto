@@ -760,7 +760,7 @@ impl SpawnedProductionExecution {
                 None => Vec::new(),
             };
             let observed = members.len();
-            self.handle.terminate();
+            let _ = self.handle.terminate();
             let residual =
                 we::pids_still_alive(&members, Duration::from_millis(MAX_EXTINCTION_DEADLINE_MS));
             surviving_processes = residual.len();
