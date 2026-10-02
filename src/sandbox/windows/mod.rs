@@ -31,7 +31,7 @@ use anyhow::{anyhow, bail, Context, Result};
 
 use crate::config::NetMode;
 use crate::error::VettoError;
-use crate::policy::{Policy, ResourceLimits};
+use crate::policy::{analyze_deny_overlap, Policy, ResourceLimits};
 use crate::sandbox::handle::{KillStrategy, SandboxHandle, SpawnOptions};
 use crate::sandbox::Spawned;
 

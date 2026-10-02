@@ -21,6 +21,7 @@ pub use loader::{
     PolicyOverrides,
 };
 pub use types::{
-    CgroupConfig, DenyEntry, EnvironmentPolicy, NetMode, NetRule, Policy, PolicyMetadata,
-    PolicySourceKind, ResourceLimits, SeccompNotifyConfig, SeccompProfile, SubtractiveRules, Tier,
+    analyze_deny_overlap, CgroupConfig, DenyEntry, DenyOverlapReport, EnvironmentPolicy, NetMode,
+    NetRule, Policy, PolicyMetadata, PolicySourceKind, ResourceLimits, SeccompNotifyConfig,
+    SeccompProfile, SubtractiveRules, Tier,
 };

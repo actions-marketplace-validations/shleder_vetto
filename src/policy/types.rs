@@ -747,6 +747,92 @@ fn normalize_scope_path(path: &Path) -> PathBuf {
     }
 }
 
+/// Result of analyzing whether a resolved deny path overlaps with granted roots.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DenyOverlapReport {
+    pub denied_path: PathBuf,
+    pub inside_grant: bool,
+    pub conflicting_root: Option<PathBuf>,
+}
+
+/// Analyze whether any resolved deny paths overlap with (sit inside) any granted
+/// read or write roots.
+///
+/// On backends where access is default-deny outside explicit grants (such as
+/// Windows AppContainer), a deny path outside all granted roots is safely
+/// isolated by construction. However, a deny path sitting inside a granted root
+/// cannot be carved out by AppContainer capabilities and constitutes a security
+/// conflict that must fail closed.
+pub fn analyze_deny_overlap(policy: &Policy) -> Vec<DenyOverlapReport> {
+    let granted_roots: Vec<&Path> = policy
+        .allow_write
+        .iter()
+        .chain(policy.allow_read.iter())
+        .map(|root| root.as_path())
+        .collect();
+
+    policy
+        .deny_resolved
+        .iter()
+        .map(|denied| {
+            let conflicting = granted_roots
+                .iter()
+                .copied()
+                .find(|root| path_is_inside(&denied.path, root))
+                .map(|r| r.to_path_buf());
+            let inside_grant = conflicting.is_some();
+            DenyOverlapReport {
+                denied_path: denied.path.clone(),
+                inside_grant,
+                conflicting_root: conflicting,
+            }
+        })
+        .collect()
+}
+
+fn path_is_inside(candidate: &Path, root: &Path) -> bool {
+    let mut roots = root.components();
+    let mut candidates = candidate.components();
+    loop {
+        match (candidates.next(), roots.next()) {
+            // Every root component matched: candidate equals the root or lies underneath it.
+            (_, None) => return true,
+            // Candidate exhausted while root components remain: candidate is a strict prefix of root.
+            (None, Some(_)) => return false,
+            (Some(cand), Some(root_component)) => {
+                if !component_matches(cand, root_component) {
+                    return false;
+                }
+            }
+        }
+    }
+}
+
+fn component_matches(left: std::path::Component<'_>, right: std::path::Component<'_>) -> bool {
+    use std::path::Component;
+    match (left, right) {
+        (Component::Prefix(l), Component::Prefix(r)) => l
+            .as_os_str()
+            .to_string_lossy()
+            .eq_ignore_ascii_case(&r.as_os_str().to_string_lossy()),
+        (Component::RootDir, Component::RootDir) => true,
+        (Component::CurDir, Component::CurDir) => true,
+        (Component::ParentDir, Component::ParentDir) => true,
+        (Component::Normal(l), Component::Normal(r)) => {
+            #[cfg(windows)]
+            {
+                l.to_string_lossy()
+                    .eq_ignore_ascii_case(&r.to_string_lossy())
+            }
+            #[cfg(not(windows))]
+            {
+                l == r
+            }
+        }
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod environment_tests {
     use super::EnvironmentPolicy;
