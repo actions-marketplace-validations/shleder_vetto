@@ -936,57 +936,7 @@ pub enum ReportCommand {
     },
 }
 
-#[derive(Subcommand, Debug)]
-pub enum RescueCommand {
-    /// Discover sessions. Codex defaults to verified index-first (limit 50);
-    /// other adapters use their bounded filesystem discovery.
-    Scan {
-        /// For Codex, use a verified provider index and return at most COUNT
-        /// sessions. This never falls back to a filesystem walk.
-        #[arg(long, value_name = "COUNT", conflicts_with = "all")]
-        limit: Option<usize>,
-        /// Explicitly use the bounded recursive filesystem walk. For Codex,
-        /// this opts out of the default index-first scan.
-        #[arg(long, conflicts_with = "limit")]
-        all: bool,
-    },
-    /// Diagnose one exact session key without changing agent state.
-    Diagnose {
-        #[arg(value_name = "SESSION")]
-        session: String,
-    },
-    /// Create a verified, exclusive new copy outside the agent state root.
-    Snapshot {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        #[arg(long, value_name = "PATH")]
-        output: PathBuf,
-    },
-    /// Create a recovery fork as a verified new copy outside agent state.
-    Fork {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        #[arg(long, value_name = "PATH")]
-        output: PathBuf,
-    },
-    /// Perform transactional state repair on a session with backup receipt.
-    Repair {
-        #[arg(value_name = "SESSION")]
-        session: String,
-        /// Directory in which pre-repair backups are stored (defaults to ~/.vetto/rescue_backups).
-        #[arg(long, value_name = "PATH")]
-        backup_dir: Option<PathBuf>,
-    },
-    /// Rollback a previous state repair using a repair receipt.
-    Rollback {
-        /// Path to the repair receipt JSON file.
-        #[arg(long, value_name = "RECEIPT_PATH")]
-        receipt: PathBuf,
-        /// Explicit target path override (if target was moved or renamed).
-        #[arg(long, value_name = "TARGET_PATH")]
-        target: Option<PathBuf>,
-    },
-}
+pub use crate::rescue::RescueCommand;
 
 /// Render completions to stdout without starting a sandbox session.
 pub fn print_completions(shell: Shell) -> anyhow::Result<()> {

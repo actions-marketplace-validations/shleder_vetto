@@ -1,6 +1,78 @@
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use clap::Subcommand;
+
+/// CLI command variants for the `vetto rescue` subsystem.
+#[derive(Subcommand, Debug, Clone)]
+pub enum RescueCommand {
+    /// Discover sessions. Codex defaults to verified index-first (limit 50);
+    /// other adapters use their bounded filesystem discovery.
+    Scan {
+        /// For Codex, use a verified provider index and return at most COUNT
+        /// sessions. This never falls back to a filesystem walk.
+        #[arg(long, value_name = "COUNT", conflicts_with = "all")]
+        limit: Option<usize>,
+        /// Explicitly use the bounded recursive filesystem walk. For Codex,
+        /// this opts out of the default index-first scan.
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
+    },
+    /// Diagnose one exact session key without changing agent state.
+    Diagnose {
+        #[arg(value_name = "SESSION")]
+        session: String,
+    },
+    /// Create a verified, exclusive new copy outside the agent state root.
+    Snapshot {
+        #[arg(value_name = "SESSION")]
+        session: String,
+        #[arg(long, value_name = "PATH")]
+        output: PathBuf,
+    },
+    /// Create a recovery fork as a verified new copy outside agent state.
+    Fork {
+        #[arg(value_name = "SESSION")]
+        session: String,
+        #[arg(long, value_name = "PATH")]
+        output: PathBuf,
+    },
+    /// Perform transactional state repair on a session with backup receipt.
+    Repair {
+        #[arg(value_name = "SESSION")]
+        session: String,
+        /// Directory in which pre-repair backups are stored (defaults to ~/.vetto/rescue_backups).
+        #[arg(long, value_name = "PATH")]
+        backup_dir: Option<PathBuf>,
+    },
+    /// Rollback a previous state repair using a repair receipt.
+    Rollback {
+        /// Path to the repair receipt JSON file.
+        #[arg(long, value_name = "RECEIPT_PATH")]
+        receipt: PathBuf,
+        /// Explicit target path override (if target was moved or renamed).
+        #[arg(long, value_name = "TARGET_PATH")]
+        target: Option<PathBuf>,
+    },
+}
+
+/// Security telemetry collected from session logs and reports.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SecurityTelemetry {
+    pub blocked_file_count: u64,
+    pub blocked_file_paths: Vec<String>,
+    pub blocked_network_count: u64,
+    pub blocked_network_destinations: Vec<String>,
+    pub allowed_egress: Vec<String>,
+}
+
+/// Kind of file modification observed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeType {
+    Added,
+    Modified,
+    Deleted,
+}
 
 pub const DEFAULT_MAX_FILES: usize = 10_000;
 pub const DEFAULT_MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;

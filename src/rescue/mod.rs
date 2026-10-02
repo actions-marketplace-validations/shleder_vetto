@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
-use crate::cli::RescueCommand;
+pub use types::{ChangeType, RescueCommand, SecurityTelemetry};
 use crate::report;
 
 use adapter::RescueAdapter;
