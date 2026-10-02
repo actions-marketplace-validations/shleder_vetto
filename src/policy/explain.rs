@@ -84,9 +84,7 @@ pub fn run_cli(
         nonce: "explain-preview",
         timeout: None,
         tier: backend.tier,
-        backend: backend
-            .backend_desc
-            .unwrap_or_else(|| "none".to_string()),
+        backend: backend.backend_desc.unwrap_or_else(|| "none".to_string()),
         observe_seccomp: backend.observes_seccomp,
         debug_ports: None,
     };
