@@ -473,7 +473,7 @@ pub struct UnpreparedProductionExecution {
     timeout: Option<Duration>,
     stdio: StdioMode,
     scenario: String,
-    debug_ports: Option<crate::multi::DebugPortConfig>,
+    debug_ports: Option<crate::policy_ir::contract::DebugPortConfig>,
 }
 
 impl UnpreparedProductionExecution {
@@ -511,7 +511,7 @@ impl UnpreparedProductionExecution {
     }
 
     /// Resolve multi-session relay settings before contract compilation.
-    pub fn with_debug_ports(mut self, config: crate::multi::DebugPortConfig) -> Self {
+    pub fn with_debug_ports(mut self, config: crate::policy_ir::contract::DebugPortConfig) -> Self {
         self.debug_ports = Some(config);
         self
     }
@@ -2343,7 +2343,7 @@ mod production_unit_tests {
                 }
                 "debug-ports" => {
                     contract.production.as_mut().unwrap().debug_ports =
-                        Some(crate::multi::DebugPortConfig::default());
+                        Some(crate::policy_ir::contract::DebugPortConfig::default());
                     "invalid production contract digest"
                 }
                 _ => unreachable!(),
@@ -2610,7 +2610,7 @@ mod production_unit_tests {
                         .push("10.0.0.0/8".into()),
                     "net_debug_ports" => {
                         prepared.contract.production.as_mut().unwrap().debug_ports =
-                            Some(crate::multi::DebugPortConfig::default())
+                            Some(crate::policy_ir::contract::DebugPortConfig::default())
                     }
                     "limits_max_memory_mb" => {
                         prepared.contract.resources.max_memory_bytes ^= 0x4000
@@ -2766,7 +2766,7 @@ mod production_unit_tests {
                         .push("10.0.0.0/8".into()),
                     "net_debug_ports" => {
                         prepared.contract.production.as_mut().unwrap().debug_ports =
-                            Some(crate::multi::DebugPortConfig::default())
+                            Some(crate::policy_ir::contract::DebugPortConfig::default())
                     }
                     "limits_max_memory_mb" => {
                         prepared.contract.resources.max_memory_bytes ^= 0x4000
@@ -2866,7 +2866,7 @@ mod production_unit_tests {
     fn phase1_caller_policy_cannot_change_canonical_backend_input() {
         let tmp = std::env::temp_dir();
         let mut policy = functional_test_policy(&tmp);
-        let mut debug_ports = crate::multi::DebugPortConfig {
+        let mut debug_ports = crate::policy_ir::contract::DebugPortConfig {
             allowed_ports: vec![9229, 5678],
             isolate_node_inspect: false,
             ..Default::default()

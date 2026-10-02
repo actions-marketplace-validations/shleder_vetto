@@ -23,8 +23,8 @@ use vetto::pty;
 #[cfg(unix)]
 use vetto::tui;
 use vetto::{
-    cli, daemon, doctor, events, exit_codes, history, logger, mcp, multi, policy, profile, remote,
-    report, rescue, sandbox, shim, watchdog,
+    cli, doctor, events, exit_codes, history, logger, mcp, policy, profile, report, rescue,
+    sandbox, shim, watchdog,
 };
 
 fn main() {
@@ -70,48 +70,31 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "allow",
         "deny",
         "doctor",
-        "tour",
         "status",
-        "tui",
-        "mission-control",
-        "mission_control",
         "kill",
-        "fleet",
         "verify",
         "verify-ng",
         "run",
         "exec",
-        "wizard",
         "undo",
         "ephemeral",
-        "eval",
         "bench",
         "diff",
-        "pack",
-        "unpack",
         "watchdog",
         "init",
         "profiles",
         "hook",
-        "plugin",
         "mcp",
-        "daemon",
-        "serve",
         "shim",
-        "multi",
-        "rescue",
-        "report",
         "redteam",
         "policy",
         "completions",
         "man",
         "shell-env",
         "profile",
-        "why-slow",
         "upgrade",
         "scan-secrets",
         "watch",
-        "rollback",
         "events",
         "audit",
         "digest",
@@ -138,9 +121,7 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "--otel-endpoint",
         "--timeout",
         "--limits",
-        "--remote",
         "--agent",
-        "--manifest",
         "--deny-glob",
     ];
 
@@ -270,33 +251,6 @@ fn run() -> Result<()> {
         }
     }
 
-    if let Some(remote_url) = &args.remote {
-        return remote::run_remote_client(
-            remote_url,
-            args.agent.clone(),
-            args.policy.clone(),
-            args.net.clone(),
-        );
-    }
-
-    if args.multi {
-        if args.command.is_some() {
-            bail!("--multi cannot be combined with a subcommand");
-        }
-        let code = multi::run_cli(
-            args.multi_manifest.clone(),
-            args.agents.clone(),
-            args.agent.clone(),
-        )?;
-        if code != 0 {
-            std::process::exit(code);
-        }
-        return Ok(());
-    }
-    if args.multi_manifest.is_some() {
-        bail!("--manifest is only valid with --multi or the `multi` subcommand");
-    }
-
     match &args.command {
         Some(cli::Command::Mask(mask_args)) => cli::mask::run_mask(mask_args),
         Some(cli::Command::Enable(enable_args)) => cli::enable::run_enable(enable_args),
@@ -393,7 +347,6 @@ fn run() -> Result<()> {
                 doctor::run_doctor(*probe, check_agent.as_deref(), *fix)
             }
         }
-        Some(cli::Command::Wizard(args)) => cli::wizard::run_wizard_cli(args),
         Some(cli::Command::Undo(undo_args)) => cli::undo::run_undo(undo_args),
         Some(cli::Command::Ephemeral(ephemeral_args)) => {
             let mut cfg = RunConfig::from_cli(&args)?;
@@ -439,38 +392,16 @@ fn run() -> Result<()> {
             }
             supervise(cfg)
         }
-        Some(cli::Command::Eval(eval_args)) => {
-            let cfg = cli::eval::configure_eval_run(eval_args, &args)?;
-            supervise(cfg)
-        }
         Some(cli::Command::Bench(bench_args)) => cli::bench::execute_bench(bench_args, &args),
         Some(cli::Command::Diff(args)) => cli::diff::run_diff(args),
-        Some(cli::Command::Pack(args)) => cli::bundle::run_pack(args),
-        Some(cli::Command::Unpack(args)) => cli::bundle::run_unpack(args),
         Some(cli::Command::Watchdog(args)) => watchdog::run_cli(args),
-        Some(cli::Command::Init { force, wizard }) => {
-            if *wizard {
-                cli::wizard::run_wizard_cli(&cli::wizard::WizardArgs {
-                    path: ".".to_string(),
-                    yes: false,
-                    force: *force,
-                    preset: None,
-                    agent: None,
-                })
-            } else {
-                init(*force, *wizard)
-            }
-        }
+        Some(cli::Command::Init { force, wizard }) => init(*force, *wizard),
         Some(cli::Command::Profiles) => profiles(),
         Some(cli::Command::Hook { command }) => cli::hook::run_cli(command),
-        Some(cli::Command::Registry { command }) => cli::registry::run_cli(command),
-        Some(cli::Command::Plugin { command }) => cli::plugin::run_cli(command),
         Some(cli::Command::Mcp { command }) => match command {
             None | Some(cli::McpCommand::Serve) => mcp::run_stdio_server(),
             Some(cli::McpCommand::Wrap(args)) => mcp::run_wrap(args),
         },
-        Some(cli::Command::Daemon { command }) => daemon::run_cli(command),
-        Some(cli::Command::Serve { port }) => remote::run_serve(*port),
         Some(cli::Command::Shim { binary, args }) => shim::run_cli(binary.clone(), args.clone()),
         Some(cli::Command::ShellEnv {
             session_id,
@@ -482,22 +413,7 @@ fn run() -> Result<()> {
             profile.as_deref(),
         ),
         Some(cli::Command::Status { json }) => cli::status::run_cli(*json),
-        Some(cli::Command::Tui { theme }) => {
-            #[cfg(unix)]
-            {
-                vetto::tui::mission_control::run_dashboard(theme.as_deref())
-            }
-            #[cfg(not(unix))]
-            {
-                let _ = theme;
-                eprintln!(
-                    "TUI Mission Control Dashboard is currently supported on Unix platforms."
-                );
-                std::process::exit(1);
-            }
-        }
         Some(cli::Command::Kill(kill_args)) => cli::kill::run_cli(kill_args),
-        Some(cli::Command::Fleet { command }) => cli::fleet::run_cli(command.clone()),
         Some(cli::Command::Profile { command }) => match command {
             cli::ProfileCommand::Save {
                 name,
@@ -518,7 +434,6 @@ fn run() -> Result<()> {
             cli::ProfileCommand::List { json } => profile::list_profiles(*json),
             cli::ProfileCommand::Rm { name } => profile::remove_profile(name),
         },
-        Some(cli::Command::WhySlow { session, json }) => cli::why_slow::run_cli(session, *json),
         Some(cli::Command::Allow {
             target,
             preset,
@@ -549,20 +464,6 @@ fn run() -> Result<()> {
             *global,
             args.policy.as_deref().map(Path::new),
         ),
-        Some(cli::Command::Multi {
-            manifest,
-            agents,
-            command,
-        }) => {
-            let code = multi::run_cli(manifest.clone(), agents.clone(), command.clone())?;
-            if code != 0 {
-                std::process::exit(code);
-            }
-            Ok(())
-        }
-        Some(cli::Command::Report {
-            command: cli::ReportCommand::Compare { session1, session2 },
-        }) => report::compare_reports(session1, session2),
         Some(cli::Command::Events {
             session,
             filter,
@@ -621,12 +522,6 @@ fn run() -> Result<()> {
             speed,
             json,
         }) => events::run_replay(session, *speed, *json),
-        Some(cli::Command::Rescue {
-            adapter,
-            root,
-            json,
-            command,
-        }) => rescue::run_cli(adapter, root.as_deref(), *json, command),
         Some(cli::Command::Verify { json }) => {
             let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
             vetto::verify::run_cli(
@@ -796,7 +691,6 @@ fn run() -> Result<()> {
                 vetto::version::run_upgrade(channel.as_deref(), *check, *dry_run)
             }
         }
-        Some(cli::Command::Tour { non_interactive }) => vetto::tour::run_tour(*non_interactive),
         Some(cli::Command::ScanSecrets {
             path,
             json,
@@ -805,16 +699,6 @@ fn run() -> Result<()> {
         }) => scan_secrets_cli(path.as_deref(), *json, *max_size, *max_files),
         Some(cli::Command::Watch { target, path, json }) => {
             vetto::watch::run_watch(target, path.as_deref(), *json)
-        }
-        Some(cli::Command::Rollback { session, target }) => {
-            let res = vetto::rescue::snapshot::rollback_snapshot(session, target.as_deref())?;
-            println!(
-                "vetto rollback: successfully restored {} file(s) ({} bytes) to {}",
-                res.files_restored,
-                res.bytes_restored,
-                res.target_dir.display()
-            );
-            Ok(())
         }
         Some(cli::Command::SshProxy { host, port }) => {
             #[cfg(target_os = "linux")]
@@ -844,14 +728,6 @@ fn run() -> Result<()> {
             }
         }
         None => {
-            #[cfg(unix)]
-            {
-                use std::io::IsTerminal;
-                if std::env::args().len() == 1 && std::io::stdout().is_terminal() {
-                    return vetto::tui::mission_control::run_dashboard(None);
-                }
-            }
-
             let mut cfg = RunConfig::from_cli(&args)?;
             let mut profile_loaded = false;
             if cfg.agent.is_empty() && args.profile != "default" {
@@ -953,8 +829,7 @@ fn resolve_target_agent(
             } else {
                 "1. `vetto enable` — wrap installed agents (e.g. `vetto enable claude`)\n  \
                  2. `vetto doctor` — see what this kernel can enforce\n  \
-                 3. `vetto tour` — guided introduction\n  \
-                 4. `vetto -- <command>` — sandbox any binary, e.g. `vetto -- python agent.py`\n\n\
+                 3. `vetto -- <command>` — sandbox any binary, e.g. `vetto -- python agent.py`\n\n\
                  Docs: https://shleder.github.io/vetto/"
             };
             bail!("{e}\n\nGet started:\n  {guidance}");
@@ -1107,32 +982,6 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
 
     let project = std::env::current_dir().context("getcwd")?;
 
-    #[cfg(windows)]
-    if cfg.windows_sandbox {
-        let command_str = agent_cmd.join(" ");
-        let spec = vetto::sandbox::windows::windows_sandbox::SandboxSpec {
-            command: command_str,
-            working_directory: Some(project.clone()),
-            networking: !matches!(cfg.net, NetMode::Off),
-            mapped_read_only: Vec::new(),
-            mapped_read_write: vec![(project.clone(), project.clone())],
-            memory_mb: None,
-        };
-        let temp_wsb = std::env::temp_dir().join(format!("vetto-{}.wsb", std::process::id()));
-        vetto::sandbox::windows::windows_sandbox::write_config(&temp_wsb, &spec)?;
-        println!(
-            "vetto: launching Windows Sandbox (disposable VM) with config: {}",
-            temp_wsb.display()
-        );
-        let mut child = vetto::sandbox::windows::windows_sandbox::launch_config(&temp_wsb, true)?;
-        let status = child.wait()?;
-        let _ = std::fs::remove_file(&temp_wsb);
-        std::process::exit(status.code().unwrap_or(0));
-    }
-    #[cfg(not(windows))]
-    if cfg.windows_sandbox {
-        bail!("--windows-sandbox is only supported on Windows");
-    }
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -1440,19 +1289,6 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
             pty_master = Some(master);
             pty_slave = Some(slave);
             sandbox::StdioMode::Pty { slave_fd }
-        }
-        TuiMode::Full => {
-            let (r1, w1) = sandbox::create_cloexec_pipe()?;
-            let (r2, w2) = sandbox::create_cloexec_pipe()?;
-            let stdio = sandbox::StdioMode::Captured {
-                stdout_w: w1.as_raw_fd(),
-                stderr_w: w2.as_raw_fd(),
-            };
-            stdout_r = Some(r1);
-            stdout_w = Some(w1);
-            stderr_r = Some(r2);
-            stderr_w = Some(w2);
-            stdio
         }
         TuiMode::None => {
             let is_interactive = vetto::config::is_interactive_agent_command(
@@ -1836,31 +1672,6 @@ fn supervise(mut cfg: RunConfig) -> Result<()> {
             let (code, timed_out) = tui::statusline::run(
                 &bus,
                 &master,
-                &mut spawned.handle,
-                tier_label(tier),
-                &cfg.net.label(),
-                &pol.name,
-                cfg.session_timeout,
-            );
-            let result = spawned.finish(Some(code), timed_out);
-            if timed_out {
-                bus.publish(Event::SessionTimeout {
-                    ts: events::types::now(),
-                });
-            }
-            eprintln!(
-                "vetto: enforcement {}",
-                result.report.render_deterministic()
-            );
-            (result.exit_code.unwrap_or(code), result.timed_out)
-        }
-        TuiMode::Full => {
-            let out = stdout_r.expect("full mode wires stdout pipe");
-            let err = stderr_r.expect("full mode wires stderr pipe");
-            let (code, timed_out) = tui::full::run(
-                &bus,
-                out,
-                err,
                 &mut spawned.handle,
                 tier_label(tier),
                 &cfg.net.label(),

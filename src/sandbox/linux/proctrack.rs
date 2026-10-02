@@ -229,6 +229,27 @@ fn state_letter(status_text: &str) -> Option<char> {
     None
 }
 
+/// Linux sub-reaper management: mark the calling process as a sub-reaper
+/// so that orphaned descendant processes are adopted by this process rather
+/// than PID 1 of the init system.
+#[cfg(target_os = "linux")]
+pub fn set_subreaper() -> crate::error::VettoResult<()> {
+    const PR_SET_CHILD_SUBREAPER: libc::c_int = 36;
+    // SAFETY: scalar prctl call
+    if unsafe { libc::prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) } != 0 {
+        return Err(crate::error::VettoError::Sandbox(format!(
+            "PR_SET_CHILD_SUBREAPER: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn set_subreaper() -> crate::error::VettoResult<()> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1292,7 +1292,7 @@ fn spawn_full(
 
     // INV-06: Parent subreaper invariant. Mark supervisor as subreaper before
     // spawning child processes; fail closed (Exit 125) if registration fails.
-    crate::multi::isolation::set_subreaper().map_err(anyhow::Error::new)?;
+    proctrack::set_subreaper().map_err(anyhow::Error::new)?;
 
     let (err_r, err_w) = pipe2_cloexec()?;
 
@@ -1564,7 +1564,7 @@ fn spawn_fs_only(policy: &Policy, opts: SpawnOptions, observe: bool) -> Result<S
     // vetto adopts every descendant that outlives the agent child, so the
     // teardown sweep can reach escapers kill(-pgid) cannot. If the prctl
     // fails the historical gap remains; say so loudly instead of silently.
-    if let Err(error) = crate::multi::isolation::set_subreaper() {
+    if let Err(error) = proctrack::set_subreaper() {
         tracing::warn!(
             "fs-only: PR_SET_CHILD_SUBREAPER failed ({error}); setsid-detached \
              grandchildren may survive teardown"
@@ -1744,7 +1744,7 @@ unsafe fn child_seccomp_only(a: FsChildArgs<'_>) -> ! {
 
 fn spawn_seccomp_only(policy: &Policy, opts: SpawnOptions, observe: bool) -> Result<Spawned> {
     let parent_pid = unsafe { libc::getpid() };
-    if let Err(error) = crate::multi::isolation::set_subreaper() {
+    if let Err(error) = proctrack::set_subreaper() {
         tracing::warn!(
             "seccomp: PR_SET_CHILD_SUBREAPER failed ({error}); setsid-detached \
              grandchildren may survive teardown"

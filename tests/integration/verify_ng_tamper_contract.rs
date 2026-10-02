@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use vetto::config::NetMode;
-use vetto::multi::DebugPortConfig;
+use vetto::policy_ir::contract::DebugPortConfig;
 use vetto::policy::{DenyEntry, Policy, Tier};
 use vetto::policy_ir::compiler::{EffectivePolicyInput, PolicyCompiler};
 use vetto::policy_ir::contract::{NetworkMode, SecurityContract};
