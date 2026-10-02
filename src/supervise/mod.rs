@@ -38,8 +38,7 @@ pub fn supervise(mut cfg: RunConfig) -> Result<SupervisionVerdict, SuperviseErro
     )?;
 
     // 3. Manage signals via RAII self-pipe, enforce timeouts, and await child
-    let timeout = cfg.session_timeout;
-    let lifecycle = lifecycle::manage_session_lifecycle(&mut session, &mut pump, timeout)?;
+    let lifecycle = lifecycle::manage_session_lifecycle(&mut session, &mut pump, &cfg)?;
 
     // 4. Drain output streams and apply secret masking
     let pump_data = pump.drain_and_redact().ok();

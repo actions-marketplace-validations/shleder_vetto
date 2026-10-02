@@ -20,6 +20,7 @@ use crate::supervise::error::SuperviseError;
 use crate::supervise::lifecycle::LifecycleOutcome;
 use crate::supervise::pump::PumpData;
 use crate::supervise::spawn::SupervisedSession;
+use crate::verify_ng::sandbox_backend::{EnforcementState, SecurityCapability};
 
 /// Result and authoritative security verdict of a finalized supervised session.
 #[derive(Debug, Clone)]
@@ -76,12 +77,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
     });
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    // 2. Cleanup handle if present
-    if let Some(ref mut h) = ctx.session.handle {
-        let _ = h.terminate();
-    }
-
-    // 3. Mathematical Process Tree Extinction Theorem (§12.1, INV-27)
+    // 2. Mathematical Process Tree Extinction Theorem (§12.1, INV-27)
     #[cfg(target_os = "linux")]
     let extinction_platform = match ctx.session.tier {
         Some(policy::Tier::Full) => PlatformExtinctionTier::LinuxTier1Proven,
@@ -94,23 +90,98 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     let extinction_platform = PlatformExtinctionTier::LinuxTier1Proven;
 
-    let surviving_processes = 0usize;
-    let surviving_resources = 0usize;
-    let elapsed_ms = ctx.session.started.elapsed().as_millis() as u64;
+    // Extract real extinction outcome and residual process metrics from production execution
+    let mut surviving_processes = 0usize;
+    let mut surviving_resources = 0usize;
+    let mut extinction_breach_detected = false;
+    let mut extinction_reason = String::new();
+
+    if let Some(ref prod_res) = ctx.lifecycle.production_result {
+        if let Some(ref v) = prod_res.verdict {
+            if v.exit_code == exit_codes::EXIT_FAIL_CLOSED || v.status == VerdictStatus::Fail {
+                if v.reason.contains("extinction") || v.reason.contains("Lifecycle breach") {
+                    extinction_breach_detected = true;
+                    extinction_reason = v.reason.clone();
+                    if let Some(pos) = v.reason.find("Lifecycle breach: ") {
+                        let after = &v.reason[pos + "Lifecycle breach: ".len()..];
+                        if let Some(end) = after.find(" descendant") {
+                            if let Ok(count) = after[..end].trim().parse::<usize>() {
+                                surviving_processes = count;
+                            }
+                        }
+                    }
+                    if surviving_processes == 0 {
+                        surviving_processes = 1;
+                    }
+                }
+            }
+        }
+
+        let tree_cap = prod_res.report.state(SecurityCapability::ProcessTreeContainment);
+        if tree_cap == EnforcementState::Failed {
+            extinction_breach_detected = true;
+            if surviving_processes == 0 {
+                surviving_processes = 1;
+            }
+            if extinction_reason.is_empty() {
+                extinction_reason = "Process tree containment capability failed verification".to_string();
+            }
+        }
+
+        if let Some(ref diag) = prod_res.diagnostic {
+            if diag.contains("extinction breach") {
+                extinction_breach_detected = true;
+                if extinction_reason.is_empty() {
+                    extinction_reason = diag.clone();
+                }
+            }
+            if let Some(idx) = diag.find("residual=[") {
+                let after = &diag[idx + "residual=[".len()..];
+                if let Some(end) = after.find(']') {
+                    let slice = after[..end].trim();
+                    if !slice.is_empty() {
+                        let count = slice.split(',').filter(|s| !s.trim().is_empty()).count();
+                        if count > 0 {
+                            surviving_processes = surviving_processes.max(count);
+                            extinction_breach_detected = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if prod_res.timed_out && prod_res.exit_code == Some(exit_codes::EXIT_FAIL_CLOSED) {
+            extinction_breach_detected = true;
+            if surviving_processes == 0 {
+                surviving_processes = 1;
+            }
+            if extinction_reason.is_empty() {
+                extinction_reason = "Session timeout teardown failed extinction verification".to_string();
+            }
+        }
+    }
+
+    if extinction_breach_detected && surviving_processes == 0 {
+        surviving_processes = 1;
+    }
 
     let extinction_res = ExtinctionVerifier::verify(
         extinction_platform,
         surviving_processes,
         surviving_resources,
-        elapsed_ms.min(crate::proctree::MAX_EXTINCTION_DEADLINE_MS),
+        0,
     );
 
     if let Err(ref breach) = extinction_res {
+        let msg = if !extinction_reason.is_empty() {
+            &extinction_reason
+        } else {
+            &breach.reason
+        };
         eprintln!(
-            "vetto: extinction breach (fail-closed exit 125, INV-20): platform={} elapsed={}ms reason={}",
+            "vetto: extinction breach (fail-closed exit 125, INV-20): platform={} reason={}",
             breach.platform.label(),
-            breach.elapsed_ms,
-            breach.reason
+            msg
         );
     }
 
@@ -234,16 +305,22 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
 
     if !ctx.cfg.shadow
         && !timed_out
+        && code != exit_codes::EXIT_POLICY_BLOCKED
         && (verdict.exit_code == exit_codes::EXIT_FAIL_CLOSED
             || verdict.status != VerdictStatus::Pass
             || blocked_total > 0
-            || extinction_res.is_err())
+            || extinction_res.is_err()
+            || surviving_processes > 0)
     {
         code = exit_codes::EXIT_FAIL_CLOSED;
     }
 
-    if timed_out && extinction_res.is_err() {
+    if timed_out && (extinction_res.is_err() || surviving_processes > 0) {
         // Extinction breach turns timeout 124 into fail-closed 125
+        code = exit_codes::EXIT_FAIL_CLOSED;
+    }
+
+    if extinction_res.is_err() || surviving_processes > 0 {
         code = exit_codes::EXIT_FAIL_CLOSED;
     }
 

@@ -56,6 +56,7 @@ impl SuperviseError {
             Self::ExecutableNotFound { .. } => exit_codes::EXIT_COMMAND_NOT_FOUND, // 127
             Self::PreflightVerificationFailed { .. }
             | Self::NetworkRelayTierMismatch { .. }
+            | Self::PolicyLoadFailed(_)
             | Self::StdioAllocationFailed(_)
             | Self::ProcessSpawnFailed(_) => exit_codes::EXIT_FAIL_CLOSED, // 125 (INV-01)
             Self::EmptyAgentCommand => exit_codes::EXIT_INVALID_USAGE,      // 2
@@ -123,7 +124,7 @@ mod tests {
 
         assert_eq!(
             SuperviseError::PolicyLoadFailed(anyhow::anyhow!("syntax error")).exit_code(),
-            1
+            125
         );
 
         assert_eq!(

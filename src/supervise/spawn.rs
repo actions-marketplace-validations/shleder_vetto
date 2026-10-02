@@ -29,7 +29,7 @@ use crate::sandbox::production::{
     PreparedProductionExecution, SpawnedProductionExecution, UnpreparedProductionExecution,
     PROD_SCENARIO_ID,
 };
-use crate::sandbox::{self, Backend, SandboxHandle, StdioMode};
+use crate::sandbox::{self, Backend, StdioMode};
 use crate::verify::VerifyReport;
 
 use super::error::SuperviseError;
@@ -59,8 +59,6 @@ pub struct SupervisedStdio {
 pub struct SupervisedSession {
     /// Spawned production execution boundary object (owns handle, contract, FSM, root pid, nonce, backend capability).
     pub spawned: Option<SpawnedProductionExecution>,
-    /// Optional standalone handle if needed.
-    pub handle: Option<SandboxHandle>,
     /// Stdio descriptors and secret masking state for the I/O pump.
     pub stdio: SupervisedStdio,
     /// Effective security policy for the session.
@@ -300,7 +298,7 @@ pub fn preflight_boundary_checks(
     let mut verify_report = None;
     if cfg.verify_preflight {
         let report = crate::verify::preflight_contract(contract)
-            .map_err(SuperviseError::Fatal)?;
+            .map_err(|_| SuperviseError::PreflightVerificationFailed { leaks: 1 })?;
         eprintln!("vetto: verify: {}", report.summary());
         let report_leaks = report.leaks();
         if report_leaks > 0 {
@@ -1019,7 +1017,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
 
     Ok(SupervisedSession {
         spawned: Some(spawned),
-        handle: None,
         stdio: stdio_holder,
         policy: pol,
         contract,

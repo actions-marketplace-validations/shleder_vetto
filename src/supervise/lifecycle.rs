@@ -262,15 +262,16 @@ pub struct LifecycleOutcome {
 pub fn manage_session_lifecycle(
     session: &mut SupervisedSession,
     pump: &mut StdioPump,
-    timeout: Option<Duration>,
+    cfg: &crate::config::RunConfig,
 ) -> Result<LifecycleOutcome, SuperviseError> {
     // 1. Install RAII signal controller
     let _sig_ctrl = SignalController::install(session.root_pid, session.tier)?;
 
     let start_time = session.started;
+    let timeout = cfg.session_timeout;
 
     // 2. Dispatch wait based on TUI mode
-    match session.cfg.tui {
+    match cfg.tui {
         crate::config::TuiMode::Statusline => {
             #[cfg(unix)]
             {
@@ -290,7 +291,7 @@ pub fn manage_session_lifecycle(
                     pty_master,
                     &mut spawned_ref.handle,
                     session.tier_label(),
-                    &session.cfg.net.label(),
+                    &cfg.net.label(),
                     &session.policy.name,
                     timeout,
                 );
