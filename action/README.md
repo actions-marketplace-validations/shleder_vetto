@@ -13,8 +13,8 @@ Vetto provides a standard, 10-50x faster, zero-Docker replacement for Docker-in-
 
 ## Action Flavors
 
-1. **`shleder/vetto/action@v0.5.14`** (`vetto-action`): Composite execution action that wraps a single agent command, produces audit logs, and uploads SARIF security reports.
-2. **`shleder/vetto@v0.5.14`** (`Setup Vetto`): Root action that installs the standalone `vetto` CLI binary onto the runner and configures `$GITHUB_PATH` for multi-step workflows.
+1. **`shleder/vetto/action@v0.5.15`** (`vetto-action`): Composite execution action that wraps a single agent command, produces audit logs, and uploads SARIF security reports.
+2. **`shleder/vetto@v0.5.15`** (`Setup Vetto`): Root action that installs the standalone `vetto` CLI binary onto the runner and configures `$GITHUB_PATH` for multi-step workflows.
 
 ---
 
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Sandboxed Agent
-        uses: shleder/vetto/action@v0.5.14
+        uses: shleder/vetto/action@v0.5.15
         with:
           command: 'npx claude-code -p "Run linter and fix basic formatting"'
 ```
@@ -46,7 +46,7 @@ jobs:
 
 ```yaml
       - name: Run Python Agent with PyPI Egress
-        uses: shleder/vetto/action@v0.5.14
+        uses: shleder/vetto/action@v0.5.15
         with:
           policy: 'policies/community/python-dev.toml'
           net: 'allowlist:pypi.org,files.pythonhosted.org,github.com'
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Strict Security Verification
-        uses: shleder/vetto/action@v0.5.14
+        uses: shleder/vetto/action@v0.5.15
         with:
           profile: 'strict'
           fail-on-block: '1' # Fails CI if agent attempts to read secrets or escape sandbox
@@ -87,7 +87,7 @@ jobs:
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.5.14
+        uses: shleder/vetto@v0.5.15
         with:
           version: 'latest'
 

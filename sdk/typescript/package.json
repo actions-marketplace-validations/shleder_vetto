@@ -1,6 +1,6 @@
 {
   "name": "@vetto/sdk",
-  "version": "0.5.14",
+  "version": "0.5.15",
   "type": "module",
   "description": "Official TypeScript and Node.js SDK for the Vetto rootless kernel sandbox runtime",
 

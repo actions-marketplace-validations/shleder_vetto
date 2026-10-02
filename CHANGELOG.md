@@ -5,6 +5,21 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-10-02
+
+### Added
+- **SWE-bench & High-Throughput Evaluation Runtime Adapter (`src/cli/bench.rs`, `src/cli.rs`, `src/main.rs`)**:
+  - Delivered drop-in execution runtime replacing Docker in SWE-bench evaluation harnesses (`vetto bench` / `vetto run --benchmark`) with <4ms cold-start latency and sub-megabyte memory overhead.
+  - Implemented hermetic sandbox isolation: Landlock LSM VFS boundaries, read-only root CoW tmpfs, cgroups v2 memory limits, network blocking/allowlisting, and deterministic process-tree extinction on task completion.
+  - Added native `vetto-bench` executable alias and shim transparency (`src/shim/mod.rs:is_internal_binary_stem`).
+  - Added npm distribution wrapper (`npm/bin/vetto-bench.js`) and manifest entries.
+  - Added Criterion micro-benchmark target `swebench_runtime` (`Cargo.toml`) and automated comparative Docker benchmark evaluation step in CI (`tools/benchmarks/compare_docker.py`, `.github/workflows/ci.yml`).
+  - Extended Python SDK with benchmark task runner and Docker container compatibility adapter (`sdk/python/vetto/bench.py`: `VettoTaskRunner`, `VettoContainer`, `VettoExecResult`).
+- **Native Aider CLI Agent Profile & Git Guard Hardening (`profiles/agents/aider.toml`, `src/shim/mod.rs`)**:
+  - Embedded dedicated security profile for Aider CLI with Landlock VFS boundaries (20 allow_read paths, 17 allow_write paths), LLM API provider environment pass-through (28 variables), and network egress allowlisting (18 domains).
+  - Wired PATH shim onboarding via `vetto enable aider` with automatic `NetMode::Allowlist` fallback and `TuiMode::None` terminal preservation.
+  - Enforced inode-level secret masking (`~/.ssh`, `~/.aws`, `.env`, `.git/config`) and fail-closed Exit 125 Git Guard for destructive commands (`git reset --hard`, `clean -fdx`, `push --force`, `branch -D`).
+
 ## [0.5.14] - 2026-09-30
 
 ### Added

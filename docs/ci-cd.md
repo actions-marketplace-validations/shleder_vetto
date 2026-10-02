@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Aider in Sandbox
-        uses: shleder/vetto@v0.5.14
+        uses: shleder/vetto@v0.5.15
         with:
           command: 'aider --yes-always --no-git --message "Review PR changes"'
           agent: 'aider'
@@ -53,7 +53,7 @@ When `command` is omitted, the action verifies and installs the standalone `vett
 
 ```yaml
       - name: Setup Vetto Sandbox
-        uses: shleder/vetto@v0.5.14
+        uses: shleder/vetto@v0.5.15
         with:
           version: 'latest'
 
@@ -73,7 +73,7 @@ The action downloads official pre-compiled release binaries from GitHub Releases
 |---|---|---|---|
 | `command` | String | `""` | Agent command to execute. If omitted, runs in Setup Mode. |
 | `agent` | String | `""` | Agent preset (`aider`, `claude`, `codex`, `cursor`, `opencode`). Auto-configures profile and network allowlists. |
-| `version` | String | `'latest'` | Target Vetto release version (e.g. `'0.5.14'` or `'latest'`). |
+| `version` | String | `'latest'` | Target Vetto release version (e.g. `'0.5.15'` or `'latest'`). |
 | `profile` | String | `'strict'` | Built-in policy profile: `strict`, `default`, `permissive`, `audit`. |
 | `net` | String | `""` | Network mode: `off`, `allowlist:<domains>`, `strict:<domains>`. If omitted with `agent`, auto-resolves provider domains. Defaults to `off` if neither is specified. |
 | `policy` | String | `""` | Path to custom TOML policy file. |
@@ -88,7 +88,7 @@ The action downloads official pre-compiled release binaries from GitHub Releases
 
 | Output | Description |
 |---|---|
-| `vetto-version` | Installed Vetto version string (e.g. `0.5.14`). |
+| `vetto-version` | Installed Vetto version string (e.g. `0.5.15`). |
 | `vetto-path` | Absolute path to the installed executable. |
 | `exit-code` | Process return code from the sandboxed agent command. |
 | `sarif-path` | Absolute path to the generated SARIF report file. |

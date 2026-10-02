@@ -200,6 +200,11 @@ def main():
     update_file(os.path.join(REPO_ROOT, "plugins", "vscode", "package-lock.json"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"', count=0)
     update_file(os.path.join(REPO_ROOT, "vscode", "README.md"), rf'vetto-vscode-{re.escape(current)}\.vsix', f'vetto-vscode-{target}.vsix', count=0)
 
+    # SDKs
+    update_file(os.path.join(REPO_ROOT, "sdk", "python", "pyproject.toml"), rf'version\s*=\s*"{re.escape(current)}"', f'version = "{target}"')
+    update_file(os.path.join(REPO_ROOT, "sdk", "python", "vetto", "__init__.py"), rf'__version__\s*=\s*"{re.escape(current)}"', f'__version__ = "{target}"')
+    update_file(os.path.join(REPO_ROOT, "sdk", "typescript", "package.json"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"')
+
     # Documentation & Tutorials
     update_file(os.path.join(REPO_ROOT, "docs", "tutorials", "installing.md"), rf'@shledery/vetto@{re.escape(current)}', f'@shledery/vetto@{target}')
     update_file(os.path.join(REPO_ROOT, "docs", "SBOM.md"), rf'/tag/v{re.escape(current)}', f'/tag/v{target}')
