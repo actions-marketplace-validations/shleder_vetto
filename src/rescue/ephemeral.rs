@@ -33,7 +33,9 @@ fn print_change_preview(session_id: &str, project_dir: &Path) {
     let Some(archive) = find_snapshot_archive(session_id) else {
         return;
     };
-    let Ok((modified, added, deleted)) = super::snapshot::preview_snapshot_changes(&archive, project_dir) else {
+    let Ok((modified, added, deleted)) =
+        super::snapshot::preview_snapshot_changes(&archive, project_dir)
+    else {
         return;
     };
 

@@ -660,9 +660,13 @@ fn run() -> Result<()> {
             cli::PolicyCommand::Explain { json, why, limits } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
                 let effective_limits = limits.as_deref().or(args.limits.as_deref());
-                let tier = sandbox::Backend::detect(net.clone(), false)
-                    .ok()
-                    .and_then(|b| b.tier());
+                let backend = sandbox::Backend::detect(net.clone(), false).ok();
+                let tier = backend.as_ref().and_then(|b| b.tier());
+                let backend_desc = backend.as_ref().map(|b| b.describe());
+                let observes_seccomp = backend
+                    .as_ref()
+                    .map(|b| b.observes_seccomp())
+                    .unwrap_or(false);
                 vetto::policy::explain::run_cli(
                     *json,
                     why.as_deref(),
@@ -671,13 +675,19 @@ fn run() -> Result<()> {
                     &net,
                     effective_limits,
                     tier,
+                    backend_desc.as_deref(),
+                    observes_seccomp,
                 )
             }
             cli::PolicyCommand::Show { effective, json } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
-                let tier = sandbox::Backend::detect(net.clone(), false)
-                    .ok()
-                    .and_then(|b| b.tier());
+                let backend = sandbox::Backend::detect(net.clone(), false).ok();
+                let tier = backend.as_ref().and_then(|b| b.tier());
+                let backend_desc = backend.as_ref().map(|b| b.describe());
+                let observes_seccomp = backend
+                    .as_ref()
+                    .map(|b| b.observes_seccomp())
+                    .unwrap_or(false);
                 vetto::policy::explain::run_show(
                     *effective,
                     *json,
@@ -685,6 +695,8 @@ fn run() -> Result<()> {
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     &net,
                     tier,
+                    backend_desc.as_deref(),
+                    observes_seccomp,
                 )
             }
             cli::PolicyCommand::Lint { strict } => {

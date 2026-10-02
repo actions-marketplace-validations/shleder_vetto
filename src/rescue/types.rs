@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
+use serde::{Deserialize, Serialize};
 
 /// CLI command variants for the `vetto rescue` subsystem.
 #[derive(Subcommand, Debug, Clone)]

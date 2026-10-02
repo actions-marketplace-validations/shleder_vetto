@@ -1174,7 +1174,10 @@ impl Cli {
         } else if cli.block_doh {
             true
         } else {
-            matches!(net, crate::config::NetMode::Allowlist(_) | crate::config::NetMode::Strict(_))
+            matches!(
+                net,
+                crate::config::NetMode::Allowlist(_) | crate::config::NetMode::Strict(_)
+            )
         };
 
         let benchmark = cli.benchmark;

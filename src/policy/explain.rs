@@ -35,6 +35,8 @@ pub fn run_cli(
     net: &NetMode,
     limits_spec: Option<&str>,
     tier: Option<Tier>,
+    backend_desc: Option<&str>,
+    observes_seccomp: bool,
 ) -> Result<()> {
     let project = std::env::current_dir().context("getcwd")?;
     let home = std::env::var_os("HOME")
@@ -76,14 +78,8 @@ pub fn run_cli(
         nonce: "explain-preview",
         timeout: None,
         tier,
-        backend: backend
-            .as_ref()
-            .map(|b| b.describe())
-            .unwrap_or_else(|| "none".to_string()),
-        observe_seccomp: backend
-            .as_ref()
-            .map(|b| b.observes_seccomp())
-            .unwrap_or(false),
+        backend: backend_desc.unwrap_or("none").to_string(),
+        observe_seccomp: observes_seccomp,
         debug_ports: None,
     };
     let contract = crate::policy_ir::compiler::PolicyCompiler::compile_effective(contract_input)?;
@@ -228,9 +224,21 @@ pub fn run_show(
     policy_path: Option<&Path>,
     net: &NetMode,
     tier: Option<Tier>,
+    backend_desc: Option<&str>,
+    observes_seccomp: bool,
 ) -> Result<()> {
     let _ = effective;
-    run_cli(json, None, profile, policy_path, net, None, tier)
+    run_cli(
+        json,
+        None,
+        profile,
+        policy_path,
+        net,
+        None,
+        tier,
+        backend_desc,
+        observes_seccomp,
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

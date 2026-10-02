@@ -300,7 +300,8 @@ fn doctor_probe_windows() -> Result<()> {
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
         .context("neither %USERPROFILE% nor $HOME is set")?;
-    let pol = crate::policy::loader::load("default", None, &project, &home, crate::policy::Tier::Full)?;
+    let pol =
+        crate::policy::loader::load("default", None, &project, &home, crate::policy::Tier::Full)?;
     if pol.deny_resolved.is_empty() {
         println!("probe: no deny paths resolve on this machine (nothing to verify)");
         return Ok(());

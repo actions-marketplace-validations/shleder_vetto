@@ -529,7 +529,10 @@ pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
 }
 
 /// Returns a tuple `(modified_count, added_count, deleted_count)` comparing snapshot archive against disk.
-pub fn preview_snapshot_changes(archive_path: &Path, project_dir: &Path) -> Result<(usize, usize, usize)> {
+pub fn preview_snapshot_changes(
+    archive_path: &Path,
+    project_dir: &Path,
+) -> Result<(usize, usize, usize)> {
     let snapshot_files = read_tar_archive(archive_path)?;
     let mut disk_files = scan_disk_files(project_dir)?;
     if let Ok(rel_archive) = archive_path.strip_prefix(project_dir) {
