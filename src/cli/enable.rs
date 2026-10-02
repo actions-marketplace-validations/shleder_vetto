@@ -187,16 +187,6 @@ pub fn enable_agent_silent(agent: &str, force: bool, scope: HookScope) -> Result
     enable_agent_internal(agent, force, false, scope, true)
 }
 
-/// Enables transparent sandbox wrapping for a specific agent.
-pub fn enable_agent(agent: &str, force: bool, scope: HookScope) -> Result<()> {
-    enable_agent_internal(agent, force, false, scope, false)
-}
-
-/// Enables transparent sandbox wrapping for a specific agent with explicit auto-repair control.
-pub fn enable_agent_with_fix(agent: &str, force: bool, fix: bool, scope: HookScope) -> Result<()> {
-    enable_agent_internal(agent, force, fix, scope, false)
-}
-
 fn enable_agent_internal(
     agent: &str,
     force: bool,

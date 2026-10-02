@@ -10,7 +10,6 @@ pub mod stats;
 pub mod storage;
 pub mod svg;
 
-pub use diff::run_diff_sessions;
 pub use diff_project::{ProjectDiff, ProjectManifest};
 
 use std::fs::File;
