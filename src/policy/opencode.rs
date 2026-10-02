@@ -360,7 +360,7 @@ mod tests {
         let parsed: serde_json::Value =
             serde_json::from_str(&stripped).expect("must parse edge cases as valid JSON");
         assert_eq!(parsed["url"], "http://example.com//path/*not_a_comment*/");
-        assert_eq!(parsed["backslashes"], "C:\\Windows\\System32");
+        assert_eq!(parsed["backslashes"], "C:\\\\Windows\\\\System32");
         assert_eq!(parsed["empty_comment"], "val");
         assert_eq!(parsed["starred"], "val");
         assert_eq!(parsed["trailing_in_array"], serde_json::json!([1]));
