@@ -660,6 +660,9 @@ fn run() -> Result<()> {
             cli::PolicyCommand::Explain { json, why, limits } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
                 let effective_limits = limits.as_deref().or(args.limits.as_deref());
+                let tier = sandbox::Backend::detect(net.clone(), false)
+                    .ok()
+                    .and_then(|b| b.tier());
                 vetto::policy::explain::run_cli(
                     *json,
                     why.as_deref(),
@@ -667,23 +670,34 @@ fn run() -> Result<()> {
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     &net,
                     effective_limits,
+                    tier,
                 )
             }
             cli::PolicyCommand::Show { effective, json } => {
                 let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
+                let tier = sandbox::Backend::detect(net.clone(), false)
+                    .ok()
+                    .and_then(|b| b.tier());
                 vetto::policy::explain::run_show(
                     *effective,
                     *json,
                     &args.profile,
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     &net,
+                    tier,
                 )
             }
-            cli::PolicyCommand::Lint { strict } => vetto::policy::lint::run_cli(
-                *strict,
-                &args.profile,
-                args.policy.as_deref().map(PathBuf::from).as_deref(),
-            ),
+            cli::PolicyCommand::Lint { strict } => {
+                let tier = sandbox::Backend::detect(NetMode::Off, false)
+                    .ok()
+                    .and_then(|b| b.tier());
+                vetto::policy::lint::run_cli(
+                    *strict,
+                    &args.profile,
+                    args.policy.as_deref().map(PathBuf::from).as_deref(),
+                    tier,
+                )
+            }
             cli::PolicyCommand::Import {
                 from,
                 path,

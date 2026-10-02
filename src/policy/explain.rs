@@ -10,7 +10,6 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::types::NetMode;
-use crate::sandbox::Backend;
 
 use super::loader::{load_with_options, PolicyLoadOptions};
 use super::types::{Policy, Tier};
@@ -35,11 +34,8 @@ pub fn run_cli(
     policy_path: Option<&Path>,
     net: &NetMode,
     limits_spec: Option<&str>,
+    tier: Option<Tier>,
 ) -> Result<()> {
-    // Same detect semantics as a real session: fail-closed when no tier exists.
-    let backend = Backend::detect(net.clone(), false).ok();
-    let tier = backend.as_ref().and_then(|b| b.tier());
-
     let project = std::env::current_dir().context("getcwd")?;
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
@@ -231,9 +227,10 @@ pub fn run_show(
     profile: &str,
     policy_path: Option<&Path>,
     net: &NetMode,
+    tier: Option<Tier>,
 ) -> Result<()> {
     let _ = effective;
-    run_cli(json, None, profile, policy_path, net, None)
+    run_cli(json, None, profile, policy_path, net, None, tier)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
