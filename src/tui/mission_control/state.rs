@@ -1790,8 +1790,6 @@ fn format_cgroup_cpu(raw: &str) -> String {
     }
 }
 
-pub(crate) use crate::proctree::collect_descendant_pids;
-
 fn find_session_pids(root_pid: u32, cgroup_scope: &str) -> Vec<u32> {
     #[cfg(target_os = "linux")]
     {
@@ -1870,7 +1868,7 @@ mod tests {
             // Synthetic cycle edge to ensure visited guard prevents infinite loop
             (200, 400),
         ];
-        let pids = collect_descendant_pids(100, &pairs);
+        let pids = crate::proctree::collect_descendant_pids(100, &pairs);
         assert_eq!(pids, vec![100, 200, 201, 300, 400]);
     }
 

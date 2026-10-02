@@ -123,6 +123,29 @@ pub fn map_error_to_exit_code(err: &anyhow::Error) -> i32 {
 }
 
 #[cfg(test)]
+#[derive(Debug, Clone)]
+pub(crate) struct Lcg(pub u64);
+
+#[cfg(test)]
+impl Lcg {
+    pub(crate) fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        self.0
+    }
+
+    pub(crate) fn below(&mut self, bound: u64) -> u64 {
+        if bound == 0 {
+            0
+        } else {
+            self.next() % bound
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use anyhow::anyhow;
@@ -225,27 +248,6 @@ mod tests {
         let contained = recap_hint(EXIT_SUCCESS, 4, false).expect("contained recap");
         assert!(contained.contains('4'));
         assert!(contained.contains("vetto audit --latest"));
-    }
-
-    #[derive(Debug, Clone)]
-    pub(crate) struct Lcg(pub u64);
-
-    impl Lcg {
-        pub(crate) fn next(&mut self) -> u64 {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            self.0
-        }
-
-        pub(crate) fn below(&mut self, bound: u64) -> u64 {
-            if bound == 0 {
-                0
-            } else {
-                self.next() % bound
-            }
-        }
     }
 
     fn arb_raw(rng: &mut Lcg) -> i32 {
@@ -362,6 +364,3 @@ mod tests {
         assert!(recap_hint(0, 0, true).is_some());
     }
 }
-
-#[cfg(test)]
-pub(crate) use tests::Lcg;

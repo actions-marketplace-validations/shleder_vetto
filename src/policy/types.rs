@@ -163,10 +163,9 @@ pub fn parse_byte_size(value: &str) -> Option<u64> {
         (n, 1000u64 * 1000)
     } else if let Some(n) = lower.strip_suffix('g') {
         (n, 1000u64 * 1000 * 1000)
-    } else if let Some(n) = lower.strip_suffix('b') {
-        (n, 1u64)
     } else {
-        return None;
+        let n = lower.strip_suffix('b')?;
+        (n, 1u64)
     };
     let base: u64 = number.trim().parse().ok()?;
     base.checked_mul(mult)
