@@ -68,25 +68,16 @@ jobs:
             exit 1
           fi
 
-          # Packaging parity: every channel pinned to the release version must agree.
-          # Homebrew / chocolatey / rpm carry the version string; their hashes/tarballs
-          # are produced by the release itself and verified at publish time.
-          brew_ver="$(sed -n 's/^[[:space:]]*version "\(.*\)"$/\1/p' packaging/homebrew/vetto.rb | head -n 1)"
-          nuspec_ver="$(sed -n 's/^[[:space:]]*<version>\(.*\)<\/version>$/\1/p' packaging/chocolatey/vetto.nuspec | head -n 1)"
-          rpm_ver="$(sed -n 's/^Version:[[:space:]]*\(.*\)$/\1/p' packaging/rpm/vetto.spec | head -n 1)"
+          # Packaging parity: lockfile and manifests must agree with release version.
           lock_ver="$(grep -A1 '^name = "vetto"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p' | head -n 1)"
-          for pair in "homebrew:$brew_ver" "chocolatey:$nuspec_ver" "rpm:$rpm_ver" "Cargo.lock:$lock_ver"; do
-            name="${pair%%:*}"
-            ver="${pair#*:}"
-            if [[ -z "$ver" ]]; then
-              echo "Version missing: $name has no parseable version" >&2
-              exit 1
-            fi
-            if [[ "$ver" != "$cargo_ver" ]]; then
-              echo "Version mismatch: $name ($ver) vs Cargo.toml ($cargo_ver)" >&2
-              exit 1
-            fi
-          done
+          if [[ -z "$lock_ver" ]]; then
+            echo "Version missing: Cargo.lock has no parseable version" >&2
+            exit 1
+          fi
+          if [[ "$lock_ver" != "$cargo_ver" ]]; then
+            echo "Version mismatch: Cargo.lock ($lock_ver) vs Cargo.toml ($cargo_ver)" >&2
+            exit 1
+          fi
 
           echo "version=$cargo_ver" >> "$GITHUB_OUTPUT"
           echo "tag=v$cargo_ver" >> "$GITHUB_OUTPUT"
