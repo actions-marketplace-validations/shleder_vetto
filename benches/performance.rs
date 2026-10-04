@@ -169,11 +169,6 @@ fn bench_report_generation(c: &mut Criterion) {
     for record_count in [0usize, 4, 32, 128] {
         let stats = session_stats(record_count);
         group.bench_with_input(
-            BenchmarkId::new("html", record_count),
-            &stats,
-            |bench, stats| bench.iter(|| black_box(report::html::render(black_box(stats)))),
-        );
-        group.bench_with_input(
             BenchmarkId::new("markdown", record_count),
             &stats,
             |bench, stats| bench.iter(|| black_box(report::markdown::render(black_box(stats)))),

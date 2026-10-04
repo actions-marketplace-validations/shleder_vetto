@@ -723,8 +723,9 @@ pub fn apply_policy_advanced(
         let owned = match open_landlock_path_fd(&rule.path) {
             Ok(fd) => fd,
             Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
-                // Reject symlink or magiclink traversal: never attach Landlock rules
-                // through a symlink, while allowing real paths in the ruleset to proceed.
+                // Reject symlink or magiclink traversal: Landlock rules cannot be attached
+                // to symlink inodes (e.g. /bin -> usr/bin). Real directories in the ruleset
+                // (e.g. /usr) provide the underlying Landlock coverage.
                 continue;
             }
             Err(err) => {
