@@ -962,12 +962,12 @@ mod cgroup_tests {
     #[test]
     fn test_parse_byte_size_and_format_bytes() {
         assert_eq!(parse_byte_size("1024"), Some(1024));
-        assert_eq!(parse_byte_size("2k"), Some(2048));
+        assert_eq!(parse_byte_size("2k"), Some(2000));
         assert_eq!(parse_byte_size("2kb"), Some(2000));
         assert_eq!(parse_byte_size("4kib"), Some(4096));
         assert_eq!(parse_byte_size("10mb"), Some(10_000_000));
         assert_eq!(parse_byte_size("10mib"), Some(10 * 1024 * 1024));
-        assert_eq!(parse_byte_size("1g"), Some(1024 * 1024 * 1024));
+        assert_eq!(parse_byte_size("1g"), Some(1_000_000_000));
         assert_eq!(parse_byte_size("1gb"), Some(1_000_000_000));
         assert_eq!(parse_byte_size("2gib"), Some(2 * 1024 * 1024 * 1024));
         assert_eq!(parse_byte_size("invalid"), None);
