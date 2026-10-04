@@ -1,6 +1,9 @@
 //! ScopedSignalForwarder RAII signal management.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
+use std::sync::atomic::Ordering;
+#[cfg(unix)]
 use std::sync::Arc;
 use std::time::Duration;
 

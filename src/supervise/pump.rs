@@ -2,6 +2,7 @@
 //!
 //! Handles concurrent draining of stdout, stderr, and PTY without deadlocks.
 
+#[cfg(unix)]
 use std::io::Write;
 use std::time::Duration;
 

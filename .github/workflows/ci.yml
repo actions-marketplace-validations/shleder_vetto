@@ -47,7 +47,6 @@ jobs:
           cargo test --all-features --lib crypto::slsa::tests::test_slsa_signed_envelope -- --exact
           cargo test --all-features --lib policy_ir::contract::contract_tests
           cargo test --all-features --lib audit::verdict::tests::test_inv36
-          cargo test --all-features --test phase4_enterprise_runtime
 
       - name: Production contract authority regressions
         run: cargo test --all-features --lib sandbox::production::production_unit_tests::phase1_

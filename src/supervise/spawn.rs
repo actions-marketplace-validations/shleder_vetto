@@ -28,7 +28,7 @@ use crate::report::diff_project::ProjectManifest;
 use crate::sandbox::production::{
     SpawnedProductionExecution, UnpreparedProductionExecution, PROD_SCENARIO_ID,
 };
-use crate::sandbox::{self, Backend, StdioMode};
+use crate::sandbox::{Backend, StdioMode};
 use crate::verify::VerifyReport;
 
 use super::error::SuperviseError;
@@ -587,8 +587,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         #[cfg(target_os = "linux")]
         {
             if cfg.net.uses_relay() {
-                for (k, v) in sandbox::linux::net_relay::build_proxy_env(
-                    sandbox::linux::net_relay::RELAY_PORT_BASE,
+                for (k, v) in crate::sandbox::linux::net_relay::build_proxy_env(
+                    crate::sandbox::linux::net_relay::RELAY_PORT_BASE,
                 ) {
                     env_extra.insert(k, v);
                 }
@@ -601,7 +601,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 })?;
                 env_extra.insert(
                     "GIT_SSH_COMMAND".into(),
-                    sandbox::linux::net_relay::build_git_ssh_command(&exe),
+                    crate::sandbox::linux::net_relay::build_git_ssh_command(&exe),
                 );
             }
         }
@@ -664,10 +664,10 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 &cfg.agent,
             );
             if !is_interactive && cfg.mask_secrets {
-                let (r1, w1) = sandbox::create_cloexec_pipe().map_err(|e| {
+                let (r1, w1) = crate::sandbox::create_cloexec_pipe().map_err(|e| {
                     SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
                 })?;
-                let (r2, w2) = sandbox::create_cloexec_pipe().map_err(|e| {
+                let (r2, w2) = crate::sandbox::create_cloexec_pipe().map_err(|e| {
                     SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
                 })?;
                 let stdio = StdioMode::Captured {
@@ -897,22 +897,25 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         if let Some(fd) = spawned.take_broker_ctrl_fd() {
             let broker_policy = match &production.net {
                 NetMode::Allowlist(d) => {
-                    sandbox::linux::net_relay::BrokerPolicy::Allowlist(d.clone())
+                    crate::sandbox::linux::net_relay::BrokerPolicy::Allowlist(d.clone())
                 }
                 NetMode::Strict(rules) => {
-                    sandbox::linux::net_relay::BrokerPolicy::Strict(rules.clone())
+                    crate::sandbox::linux::net_relay::BrokerPolicy::Strict(rules.clone())
                 }
                 NetMode::Ask => {
-                    sandbox::linux::net_relay::BrokerPolicy::Ask(pol.network_allow.clone())
+                    crate::sandbox::linux::net_relay::BrokerPolicy::Ask(pol.network_allow.clone())
                 }
-                NetMode::Off => sandbox::linux::net_relay::BrokerPolicy::Allowlist(Vec::new()),
+                NetMode::Off => {
+                    crate::sandbox::linux::net_relay::BrokerPolicy::Allowlist(Vec::new())
+                }
             };
-            let mut broker_config = sandbox::linux::net_relay::BrokerConfig::from(broker_policy);
+            let mut broker_config =
+                crate::sandbox::linux::net_relay::BrokerConfig::from(broker_policy);
             broker_config.allow_cidr = pol.allow_cidr.clone();
             broker_config.quotas = pol.net_quota.clone();
             broker_config.policy_path = cfg.policy_path.clone();
             broker_config.block_doh = cfg.block_doh;
-            sandbox::linux::net_relay::spawn_broker(
+            crate::sandbox::linux::net_relay::spawn_broker(
                 fd.into_raw_fd(),
                 broker_config,
                 (*bus).clone(),
@@ -923,7 +926,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             let notifier_policy = std::sync::Arc::new(pol.clone());
             if let Some(notify_cfg) = &pol.seccomp_notify {
                 if notify_cfg.enabled {
-                    sandbox::linux::observe_seccomp::spawn_enforcement_supervisor(
+                    crate::sandbox::linux::observe_seccomp::spawn_enforcement_supervisor(
                         fd,
                         (*bus).clone(),
                         notify_cfg.clone(),
@@ -936,7 +939,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                             .to_string(),
                     });
                 } else {
-                    sandbox::linux::observe_seccomp::spawn_notifier(
+                    crate::sandbox::linux::observe_seccomp::spawn_notifier(
                         fd,
                         (*bus).clone(),
                         notifier_policy,
@@ -944,7 +947,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                     );
                 }
             } else {
-                sandbox::linux::observe_seccomp::spawn_notifier(
+                crate::sandbox::linux::observe_seccomp::spawn_notifier(
                     fd,
                     (*bus).clone(),
                     notifier_policy,
@@ -958,7 +961,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 });
             }
         }
-        let audit_reason = sandbox::linux::audit_reader::spawn_reader_if_available((*bus).clone());
+        let audit_reason =
+            crate::sandbox::linux::audit_reader::spawn_reader_if_available((*bus).clone());
         if !cfg.observe_seccomp {
             if let Some(reason) = audit_reason {
                 bus.publish(crate::events::Event::Notice {
@@ -969,12 +973,12 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 });
             }
         }
-        sandbox::linux::visibility::spawn_poller((*bus).clone(), vec![root_pid]);
+        crate::sandbox::linux::visibility::spawn_poller((*bus).clone(), vec![root_pid]);
     }
     #[cfg(target_os = "macos")]
     {
         let _ = &relay_port;
-        if let Some(reason) = sandbox::macos::fsevents::spawn_watcher_if_available(&bus) {
+        if let Some(reason) = crate::sandbox::macos::fsevents::spawn_watcher_if_available(&bus) {
             bus.publish(crate::events::Event::Notice {
                 ts: crate::events::types::now(),
                 message: reason,

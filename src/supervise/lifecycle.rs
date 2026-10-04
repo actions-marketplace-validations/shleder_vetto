@@ -8,8 +8,11 @@
 //! - 2nd interrupt within 500ms window: immediate escalation to `SIGKILL`.
 //! - 500ms grace period expiry: escalation to `SIGKILL` if child is still running.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+#[cfg(unix)]
+use std::sync::atomic::AtomicI32;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
