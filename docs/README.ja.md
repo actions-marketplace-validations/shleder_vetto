@@ -128,60 +128,20 @@ vetto doctor --preflight --json   # 診断結果を JSON 形式で出力
 
 ## GitHub Actions との連携
 
-CI 環境で AI コーディングエージェントを実行する場合、通常 Docker-in-Docker が使用されますが、イメージのプル遅延が発生し、特権ランナーを必要とすることが多く、非 Linux VM では動作しません。
-
-`shleder/vetto` アクションは、Docker なしで標準の GitHub Actions ランナー上でエージェントを実行します：
-
-- バイナリ検証付きで 4ms 未満のコールドスタート。
-- 標準 Ubuntu ランナー上でのルートレス Landlock LSM および cgroups v2 の適用。
-- `$GITHUB_WORKSPACE` およびキャッシュ（`actions/cache`、`actions/setup-node`、`actions/setup-python`）への直接アクセス。
-- `cgroup.kill` によるすべてのサブプロセスの確実なクリーンアップ。
-- Ubuntu、macOS、Windows ランナーのクロスプラットフォームサポート。
-
-### オプション A：サンドボックス化されたエージェントステップの実行
-
-ポリシー許可リストおよびオプションの SARIF 監査出力を備えたエージェント実行：
+公式の `shleder/vetto` アクションを使用することで、Docker や root 特権なしで CI パイプライン内で AI エージェントを安全に実行できます：
 
 ```yaml
-name: Agent Security Gate
-on: [pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.6.0
-        with:
-          command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
-          agent: 'claude'
-          profile: 'strict'
-          fail-on-block: '1'
-          upload-sarif: 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+- name: Run Sandboxed Agent
+  uses: shleder/vetto@v0.6.0
+  with:
+    command: 'npx @anthropic-ai/claude-code -p "Fix linter errors"'
+    agent: 'claude'
+    profile: 'strict'
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### オプション B：マルチステップワークフロー用の Vetto セットアップ
-
-`command` 入力を省略すると、`vetto` バイナリが `$GITHUB_PATH` にインストールされます：
-
-```yaml
-      - name: Setup Vetto
-        uses: shleder/vetto@v0.6.0
-        with:
-          version: 'latest'
-
-      - name: Run Sandboxed Commands
-        run: |
-          vetto doctor --preflight
-          vetto run -- aider --message "Refactor parser error handling"
-```
+設定オプション、複数ステップのワークフロー、SARIF セキュリティレポートの詳細については、[CI/CD 連携ガイド](ci-cd.md) を参照してください。
 
 ---
 
@@ -226,60 +186,6 @@ Vetto には、25 種類以上の AI コーディングツール用の事前設�
 
 ---
 
-## Python SDK (`vetto-python`)
-
-`../sdk/python/` にある Python パッケージは、サンドボックス化されたコマンドの実行やエージェントステップの分離を行うバインディングを提供します：
-
-```python
-from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
-
-sandbox = VettoSandbox(
-    project_dir=".",
-    network="allowlist:api.anthropic.com,api.openai.com",
-    profile="default",
-    timeout_secs=60,
-)
-
-# サンドボックス内でコマンドを実行。ポリシー違反時 (exit 125) に VettoSecurityError を送出。
-result = sandbox.run(["pytest", "tests/"])
-```
-
-### LangGraph 連携
-
-LangGraph ワークフロー内でツール実行を分離するための `VettoToolNode` が含まれています：
-
-```python
-from vetto.langgraph import VettoToolNode
-
-tool_node = VettoToolNode(
-    tools=[search_tool, execute_code_tool],
-    network="off",
-    timeout_secs=30,
-)
-```
-
----
-
-## アップストリーム連携
-
-Vetto は、複数のオープンソースエージェントフレームワークにコンテナレスプロセス分離の Pull Request を提供しています：
-
-| フレームワーク | Issue | Pull Request | 詳細 |
-| :--- | :--- | :--- | :--- |
-| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | ワークスペース境界の保護とタイムアウト処理を備えた `VettoExecTool` および `VettoPythonTool` による非特権プロセス分離。 |
-| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `autogen-ext` における `VettoCommandLineCodeExecutor` コンテナレスサンドボックス。 |
-| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | `--max-old-space-size` に基づくメモリ封じ込めとヒープ閾値制御。 |
-| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | ハードタイムアウトとプロセスグループ終了を備えた `ProcessIsolatedExecutor`。 |
-| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | ループバック、RFC 1918、CGNAT、およびクラウドメタデータアドレスをブロックする DNS プリフライトチェック。 |
-| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | Linux Landlock ABI 1 〜 6 自動検出を使用する `LandlockWorkspace` バックエンド。 |
-| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | subreaper 追跡と名前空間サンドボックスを備えた `SubprocessExt` プロセスフェンサー。 |
-| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | サンドボックス検出付きシェル実行ポリシー (`GOOSE_ACP_CLIENT_TERMINAL`)。 |
-| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | `ClineIgnoreController` における端末サンドボックス実行とシークレットマスキング (`~/.ssh`, `.env`)。 |
-| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | 資格情報の送信除去とワークスペース保護。 |
-| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | セッション再開フラグと入力検証。 |
-
----
-
 ## 検証と完全性
 
 リリースバイナリは自動化された GitHub Actions ワークフローでビルドされ、公開暗号検証が適用されます：
@@ -295,7 +201,8 @@ Vetto は、複数のオープンソースエージェントフレームワー�
 - [プラットフォームバックエンドと分離仕様](platform-backends.md)
 - [エージェントプリセットと設定](agents.md)
 - [脅威モデルとセキュリティ境界](threat-model.md)
-- [Preflight 診断チェック](architecture/verify-ng.md)
+- [CI/CD 連携と GitHub Actions](ci-cd.md)
+- [Python SDK バインディング](../sdk/python/)
 - [終了コードと失敗モード](exit-codes.md)
 - [セキュリティポリシーと脆弱性報告](../SECURITY.md)
 

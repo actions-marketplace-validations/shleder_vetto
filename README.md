@@ -128,60 +128,20 @@ vetto doctor --preflight --json   # output diagnostic report as JSON
 
 ## GitHub Actions integration
 
-Running AI coding agents in CI usually involves Docker-in-Docker, which adds image pull overhead, often requires privileged runners, and is not portable across non-Linux VMs.
-
-The `shleder/vetto` action runs agents on standard GitHub Actions runners without Docker:
-
-- Cold start under 4ms with standalone binary verification.
-- Rootless Landlock LSM and cgroups v2 enforcement on standard Ubuntu runners.
-- Direct access to `$GITHUB_WORKSPACE` and action caches (`actions/cache`, `actions/setup-node`, `actions/setup-python`).
-- Clean teardown of all subprocesses via `cgroup.kill`.
-- Multi-platform support on Ubuntu, macOS, and Windows runners.
-
-### Option A: Run a sandboxed agent step
-
-Run an agent with policy allowlisting and optional SARIF audit output:
+Run AI coding agents securely inside your CI pipelines without Docker or root privileges using the official `shleder/vetto` action:
 
 ```yaml
-name: Agent Security Gate
-on: [pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.6.0
-        with:
-          command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
-          agent: 'claude'
-          profile: 'strict'
-          fail-on-block: '1'
-          upload-sarif: 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+- name: Run Sandboxed Agent
+  uses: shleder/vetto@v0.6.0
+  with:
+    command: 'npx @anthropic-ai/claude-code -p "Fix linter errors"'
+    agent: 'claude'
+    profile: 'strict'
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Option B: Install Vetto for multi-step workflows
-
-Omit the `command` input to install the `vetto` binary into `$GITHUB_PATH`:
-
-```yaml
-      - name: Setup Vetto
-        uses: shleder/vetto@v0.6.0
-        with:
-          version: 'latest'
-
-      - name: Run Sandboxed Commands
-        run: |
-          vetto doctor --preflight
-          vetto run -- aider --message "Refactor parser error handling"
-```
+See the [CI/CD integration guide](docs/ci-cd.md) for full configuration options, multi-step workflows, and SARIF security reporting.
 
 ---
 
@@ -226,60 +186,6 @@ For the complete list of supported agents, network scopes, and path rules, see t
 
 ---
 
-## Python SDK (`vetto-python`)
-
-The Python package in `sdk/python/` provides bindings to run sandboxed commands and isolate agent steps:
-
-```python
-from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
-
-sandbox = VettoSandbox(
-    project_dir=".",
-    network="allowlist:api.anthropic.com,api.openai.com",
-    profile="default",
-    timeout_secs=60,
-)
-
-# Runs command inside the sandbox. Raises VettoSecurityError on policy violation (exit 125).
-result = sandbox.run(["pytest", "tests/"])
-```
-
-### LangGraph integration
-
-The package includes `VettoToolNode` to isolate tool execution inside LangGraph workflows:
-
-```python
-from vetto.langgraph import VettoToolNode
-
-tool_node = VettoToolNode(
-    tools=[search_tool, execute_code_tool],
-    network="off",
-    timeout_secs=30,
-)
-```
-
----
-
-## Upstream integrations
-
-Vetto provides containerless process isolation pull requests for several open-source agent frameworks:
-
-| Framework | Issue | Pull request | Details |
-| :--- | :--- | :--- | :--- |
-| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | `VettoExecTool` and `VettoPythonTool` unprivileged process isolation with workspace boundary fencing and timeout handling. |
-| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `VettoCommandLineCodeExecutor` containerless sandbox in `autogen-ext`. |
-| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | Memory containment and heap threshold controls under `--max-old-space-size`. |
-| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` with wall-clock timeout and process group termination. |
-| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | DNS preflight check blocking loopback, RFC 1918, CGNAT, and cloud metadata addresses. |
-| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` backend using Linux Landlock ABI 1 to 6 detection. |
-| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` containerless process fencer with subreaper tracking and namespace sandboxing. |
-| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | Shell execution policy (`GOOSE_ACP_CLIENT_TERMINAL`) with sandbox detection. |
-| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Terminal sandbox execution and secret masking (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
-| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | Credential egress scrubbing and workspace protection. |
-| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | Session resume flags and input validation. |
-
----
-
 ## Verification and integrity
 
 Releases are built via automated GitHub Actions workflows with public cryptographic verification:
@@ -295,7 +201,8 @@ Releases are built via automated GitHub Actions workflows with public cryptograp
 - [Platform backends and isolation specs](docs/platform-backends.md)
 - [Agent presets and configuration](docs/agents.md)
 - [Threat model and security boundaries](docs/threat-model.md)
-- [Preflight diagnostic checks](docs/architecture/verify-ng.md)
+- [CI/CD integration and GitHub Actions](docs/ci-cd.md)
+- [Python SDK bindings](sdk/python/)
 - [Exit codes and failure modes](docs/exit-codes.md)
 - [Security policy and vulnerability reporting](SECURITY.md)
 

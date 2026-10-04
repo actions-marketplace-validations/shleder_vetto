@@ -128,60 +128,20 @@ vetto doctor --preflight --json   # 以 JSON 格式输出诊断报告
 
 ## GitHub Actions 集成
 
-在 CI 中运行 AI 编码代理通常需要使用 Docker-in-Docker，这会带来镜像拉取延迟、通常需要特权 runner，且无法跨非 Linux 虚拟机移植。
-
-`shleder/vetto` Action 可以在标准 GitHub Actions runner 上无需 Docker 直接运行代理：
-
-- 冷启动低于 4ms，附带独立的二进制完整性验证。
-- 在标准 Ubuntu runner 上实现无特权 Landlock LSM 与 cgroups v2 边界。
-- 原生访问 `$GITHUB_WORKSPACE` 以及 Actions 缓存（`actions/cache`、`actions/setup-node`、`actions/setup-python`）。
-- 退出时通过 `cgroup.kill` 彻底清理所有子进程。
-- 支持 Ubuntu、macOS 和 Windows runner。
-
-### 方案 A：运行沙箱化代理步骤
-
-运行带有网络出站白名单并可选生成 SARIF 审计报告的代理：
+使用官方 `shleder/vetto` Action 在 CI 流水线中安全运行 AI 代理，无需 Docker 或 root 特权：
 
 ```yaml
-name: Agent Security Gate
-on: [pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.6.0
-        with:
-          command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
-          agent: 'claude'
-          profile: 'strict'
-          fail-on-block: '1'
-          upload-sarif: 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+- name: Run Sandboxed Agent
+  uses: shleder/vetto@v0.6.0
+  with:
+    command: 'npx @anthropic-ai/claude-code -p "Fix linter errors"'
+    agent: 'claude'
+    profile: 'strict'
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### 方案 B：在多步骤工作流中安装 Vetto
-
-省略 `command` 参数即可将 `vetto` 二进制文件安装至 `$GITHUB_PATH`：
-
-```yaml
-      - name: Setup Vetto
-        uses: shleder/vetto@v0.6.0
-        with:
-          version: 'latest'
-
-      - name: Run Sandboxed Commands
-        run: |
-          vetto doctor --preflight
-          vetto run -- aider --message "Refactor parser error handling"
-```
+完整配置参数、多步骤工作流与 SARIF 安全报告支持请参阅 [CI/CD 集成指南](ci-cd.md)。
 
 ---
 
@@ -226,60 +186,6 @@ Vetto 为 25 种以上的 AI 编码工具提供了预置策略文件。每个配
 
 ---
 
-## Python SDK (`vetto-python`)
-
-位于 `../sdk/python/` 的 Python 包提供了用于在代码中直接隔离子进程与 Agent 步骤的 API：
-
-```python
-from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
-
-sandbox = VettoSandbox(
-    project_dir=".",
-    network="allowlist:api.anthropic.com,api.openai.com",
-    profile="default",
-    timeout_secs=60,
-)
-
-# 在沙箱内执行命令。策略违规 (exit 125) 时抛出 VettoSecurityError。
-result = sandbox.run(["pytest", "tests/"])
-```
-
-### LangGraph 集成
-
-该包提供了 `VettoToolNode`，可在 LangGraph 工作流中无缝沙箱化工具执行：
-
-```python
-from vetto.langgraph import VettoToolNode
-
-tool_node = VettoToolNode(
-    tools=[search_tool, execute_code_tool],
-    network="off",
-    timeout_secs=30,
-)
-```
-
----
-
-## 上游框架集成
-
-Vetto 已为多个开源代理框架贡献了无容器进程隔离集成：
-
-| 框架 | Issue | Pull Request | 说明 |
-| :--- | :--- | :--- | :--- |
-| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | 基于 `VettoExecTool` 和 `VettoPythonTool` 的无特权进程隔离与超时管理。 |
-| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `autogen-ext` 中的 `VettoCommandLineCodeExecutor` 无容器沙箱执行器。 |
-| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | `--max-old-space-size` 下的内存遏制与堆阈值控制。 |
-| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | 带有硬超时和进程组终止的 `ProcessIsolatedExecutor`。 |
-| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | DNS 预检，拦截回环、RFC 1918、CGNAT 及云元数据地址。 |
-| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | 自动适配 Linux Landlock ABI 1 至 6 的 `LandlockWorkspace` 后端。 |
-| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | 带有 subreaper 跟踪与命名空间沙箱的 `SubprocessExt` 进程隔离器。 |
-| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | 带有沙箱检测的 Shell 执行策略 (`GOOSE_ACP_CLIENT_TERMINAL`)。 |
-| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | `ClineIgnoreController` 中的终端沙箱执行与密钥屏蔽 (`~/.ssh`, `.env`)。 |
-| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | 凭据出站过滤与项目工作区保护。 |
-| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | 会话恢复参数与输入验证。 |
-
----
-
 ## 验证与完整性
 
 所有发布包均通过自动化 GitHub Actions 工作流构建，并支持公开密码学验证：
@@ -295,7 +201,8 @@ Vetto 已为多个开源代理框架贡献了无容器进程隔离集成：
 - [平台后端与隔离规范](platform-backends.md)
 - [代理预设与配置参考](agents.md)
 - [威胁模型与安全边界](threat-model.md)
-- [预检诊断与内核验证](architecture/verify-ng.md)
+- [CI/CD 集成与 GitHub Actions](ci-cd.md)
+- [Python SDK 绑定](../sdk/python/)
 - [退出代码与故障模式](exit-codes.md)
 - [安全政策与漏洞提报](../SECURITY.md)
 

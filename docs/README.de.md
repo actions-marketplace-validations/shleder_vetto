@@ -128,60 +128,20 @@ vetto doctor --preflight --json   # gibt den Diagnosebericht als JSON aus
 
 ## Integration in GitHub Actions
 
-Das Ausführen von KI-Coding-Agenten in CI nutzt häufig Docker-in-Docker, was zu Image-Download-Verzögerungen führt, oft privilegierte Runner erfordert und auf Nicht-Linux-VMs nicht portabel ist.
-
-Die Action `shleder/vetto` führt Agenten auf Standard-GitHub-Actions-Runnern ohne Docker aus:
-
-- Kaltstart unter 4 ms mit kryptografischer Binary-Verifikation.
-- Rootlose Landlock LSM- und cgroups v2-Isolierung auf Standard-Ubuntu-Runnern.
-- Direkter Zugriff auf `$GITHUB_WORKSPACE` und Caches (`actions/cache`, `actions/setup-node`, `actions/setup-python`).
-- Zuverlässige Bereinigung aller Subprozesse über `cgroup.kill`.
-- Multi-Plattform-Unterstützung auf Ubuntu-, macOS- und Windows-Runnern.
-
-### Option A: Einzelnen isolierten Agent-Schritt ausführen
-
-Agenten mit Domain-Allowlist und optionalem SARIF-Sicherheitsbericht ausführen:
+Führen Sie KI-Agenten sicher in Ihren CI-Pipelines ohne Docker oder Root-Rechte mit der offiziellen `shleder/vetto`-Action aus:
 
 ```yaml
-name: Agent Security Gate
-on: [pull_request]
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run Sandboxed Agent
-        uses: shleder/vetto@v0.6.0
-        with:
-          command: 'npx @anthropic-ai/claude-code -p "Run linter and fix basic formatting"'
-          agent: 'claude'
-          profile: 'strict'
-          fail-on-block: '1'
-          upload-sarif: 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+- name: Run Sandboxed Agent
+  uses: shleder/vetto@v0.6.0
+  with:
+    command: 'npx @anthropic-ai/claude-code -p "Fix linter errors"'
+    agent: 'claude'
+    profile: 'strict'
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Option B: Vetto für mehrstufige Workflows einrichten
-
-Wird der Parameter `command` weggelassen, installiert die Action das Binary `vetto` in `$GITHUB_PATH`:
-
-```yaml
-      - name: Setup Vetto
-        uses: shleder/vetto@v0.6.0
-        with:
-          version: 'latest'
-
-      - name: Run Sandboxed Commands
-        run: |
-          vetto doctor --preflight
-          vetto run -- aider --message "Refactor parser error handling"
-```
+Detaillierte Konfigurationsoptionen, mehrstufige Workflows und SARIF-Sicherheitsberichte finden Sie im [CI/CD-Integrationsleitfaden](ci-cd.md).
 
 ---
 
@@ -226,60 +186,6 @@ Die vollständige Liste der unterstützten Agenten, Netzwerkbereiche und Pfadreg
 
 ---
 
-## Python SDK (`vetto-python`)
-
-Das Python-Paket in `../sdk/python/` bietet Anbindungen zum Ausführen isolierter Befehle und Absichern von Agent-Schritten:
-
-```python
-from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
-
-sandbox = VettoSandbox(
-    project_dir=".",
-    network="allowlist:api.anthropic.com,api.openai.com",
-    profile="default",
-    timeout_secs=60,
-)
-
-# Führt Befehl in der Sandbox aus. Löst VettoSecurityError bei Richtlinienverletzung aus (Exit 125).
-result = sandbox.run(["pytest", "tests/"])
-```
-
-### LangGraph-Integration
-
-Das Paket enthält `VettoToolNode` zur Isolierung von Werkzeugausführungen in LangGraph-Workflows:
-
-```python
-from vetto.langgraph import VettoToolNode
-
-tool_node = VettoToolNode(
-    tools=[search_tool, execute_code_tool],
-    network="off",
-    timeout_secs=30,
-)
-```
-
----
-
-## Upstream-Integrationen
-
-Vetto stellt Pull Requests zur containerlosen Prozessisolierung für verschiedene Open-Source-Agenten-Frameworks bereit:
-
-| Framework | Issue | Pull Request | Details |
-| :--- | :--- | :--- | :--- |
-| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | Unprivilegierte Prozessisolierung mit `VettoExecTool` und `VettoPythonTool`, Workspace-Begrenzung und Timeout-Verwaltung. |
-| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | Containerlose Sandbox `VettoCommandLineCodeExecutor` in `autogen-ext`. |
-| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | Speicherbegrenzung und Heap-Schwellenwerte unter `--max-old-space-size`. |
-| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` mit absolutem Timeout und Prozessgruppen-Terminierung. |
-| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | DNS-Vorabprüfung zur Blockierung von Loopback, RFC 1918, CGNAT und Cloud-Metadaten. |
-| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace`-Backend mit Erkennung von Linux Landlock ABI 1 bis 6. |
-| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` Prozess-Isolation mit Subreaper-Tracking und Namespace-Sandboxing. |
-| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | Shell-Ausführungsrichtlinie (`GOOSE_ACP_CLIENT_TERMINAL`) mit Sandbox-Erkennung. |
-| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Terminal-Sandbox-Ausführung und Maskierung von Geheimnissen (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
-| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | Bereinigung ausgehender Zugangsdaten und Workspace-Schutz. |
-| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | Validierung von Eingaben und Sitzungs-Wiederaufnahme-Flags. |
-
----
-
 ## Verifikation und Integrität
 
 Releases werden über automatisierte GitHub-Actions-Workflows erstellt und sind öffentlich kryptografisch verifizierbar:
@@ -295,7 +201,8 @@ Releases werden über automatisierte GitHub-Actions-Workflows erstellt und sind 
 - [Plattform-Backends und Isolationsspezifikation](platform-backends.md)
 - [Agent-Presets und Konfiguration](agents.md)
 - [Bedrohungsmodell und Sicherheitsgrenzen](threat-model.md)
-- [Preflight-Diagnoseprüfungen](architecture/verify-ng.md)
+- [CI/CD-Integration und GitHub Actions](ci-cd.md)
+- [Python SDK Anbindungen](../sdk/python/)
 - [Exit-Codes und Fehlermodi](exit-codes.md)
 - [Sicherheitsrichtlinie und Schwachstellenmeldung](../SECURITY.md)
 
