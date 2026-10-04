@@ -311,7 +311,6 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
 
     if !ctx.cfg.shadow
         && !timed_out
-        && code != exit_codes::EXIT_POLICY_BLOCKED
         && (verdict.exit_code == exit_codes::EXIT_FAIL_CLOSED
             || verdict.status != VerdictStatus::Pass
             || blocked_threshold_reached

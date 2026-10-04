@@ -1092,7 +1092,7 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
         },
         ..policy::loader::PolicyLoadOptions::default()
     };
-    let pol = policy::loader::load_with_options(
+    let mut pol = policy::loader::load_with_options(
         &cfg.profile,
         cfg.policy_path.as_deref(),
         &project,
@@ -1101,6 +1101,10 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
         &policy_options,
     )
     .map_err(SuperviseError::PolicyLoadFailed)?;
+
+    if let Some(spec) = &cfg.limits_spec {
+        policy::limits_spec::apply_cli(&mut pol, spec).map_err(SuperviseError::Fatal)?;
+    }
 
     // Git-guard verification on protected branches
     if (pol.git_guard || cfg.git_guard) && !pol.allow_write.is_empty() {
