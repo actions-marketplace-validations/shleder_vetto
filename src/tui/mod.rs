@@ -2,5 +2,4 @@
 
 pub mod app;
 pub mod input;
-pub mod mission_control;
 pub mod statusline;
