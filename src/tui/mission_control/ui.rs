@@ -7,7 +7,6 @@ use ratatui::widgets::{Block, Borders, Paragraph, Row, Table, Tabs, Wrap};
 use ratatui::Frame;
 
 use super::state::{DashboardState, MissionTab};
-use super::theme::Theme;
 
 /// Circuit-modular VETTO logo with microchip nodes and dual bus lines.
 const ASCII_LOGO_CIRCUIT: &[&str] = &[

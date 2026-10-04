@@ -207,22 +207,18 @@ impl DashboardState {
 
     pub fn select_prev(&mut self) {
         match self.active_tab {
-            MissionTab::Agents => {
-                if !self.installed_agents.is_empty() {
-                    if self.selected_agent > 0 {
-                        self.selected_agent -= 1;
-                    } else {
-                        self.selected_agent = self.installed_agents.len() - 1;
-                    }
+            MissionTab::Agents if !self.installed_agents.is_empty() => {
+                if self.selected_agent > 0 {
+                    self.selected_agent -= 1;
+                } else {
+                    self.selected_agent = self.installed_agents.len() - 1;
                 }
             }
-            MissionTab::Sessions => {
-                if !self.snapshots.is_empty() {
-                    if self.selected_snapshot > 0 {
-                        self.selected_snapshot -= 1;
-                    } else {
-                        self.selected_snapshot = self.snapshots.len() - 1;
-                    }
+            MissionTab::Sessions if !self.snapshots.is_empty() => {
+                if self.selected_snapshot > 0 {
+                    self.selected_snapshot -= 1;
+                } else {
+                    self.selected_snapshot = self.snapshots.len() - 1;
                 }
             }
             _ => {}
@@ -231,22 +227,18 @@ impl DashboardState {
 
     pub fn select_next(&mut self) {
         match self.active_tab {
-            MissionTab::Agents => {
-                if !self.installed_agents.is_empty() {
-                    if self.selected_agent + 1 < self.installed_agents.len() {
-                        self.selected_agent += 1;
-                    } else {
-                        self.selected_agent = 0;
-                    }
+            MissionTab::Agents if !self.installed_agents.is_empty() => {
+                if self.selected_agent + 1 < self.installed_agents.len() {
+                    self.selected_agent += 1;
+                } else {
+                    self.selected_agent = 0;
                 }
             }
-            MissionTab::Sessions => {
-                if !self.snapshots.is_empty() {
-                    if self.selected_snapshot + 1 < self.snapshots.len() {
-                        self.selected_snapshot += 1;
-                    } else {
-                        self.selected_snapshot = 0;
-                    }
+            MissionTab::Sessions if !self.snapshots.is_empty() => {
+                if self.selected_snapshot + 1 < self.snapshots.len() {
+                    self.selected_snapshot += 1;
+                } else {
+                    self.selected_snapshot = 0;
                 }
             }
             _ => {}
