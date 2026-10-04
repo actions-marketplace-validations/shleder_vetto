@@ -111,7 +111,9 @@ impl DashboardState {
                 continue;
             }
 
-            if let Ok((real_bin_name, real_bin_path)) = crate::onboard::find_real_agent_binary(canon) {
+            if let Ok((real_bin_name, real_bin_path)) =
+                crate::onboard::find_real_agent_binary(canon)
+            {
                 let is_shim_active = if let Some(ref sdir) = shims_dir {
                     let shim = sdir.join(canon);
                     shim.exists() && crate::shim::is_vetto_shim_content(&shim)
@@ -191,7 +193,11 @@ impl DashboardState {
             agent.is_shim_active = false;
             self.set_status(format!("Disabled Vetto shim for '{name}'"));
         } else {
-            crate::cli::enable::enable_agent_silent(name, true, crate::cli::hook::HookScope::Global)?;
+            crate::cli::enable::enable_agent_silent(
+                name,
+                true,
+                crate::cli::hook::HookScope::Global,
+            )?;
             agent.is_shim_active = true;
             self.set_status(format!("Enabled Vetto shim for '{name}' in ~/.vetto/shims"));
         }
