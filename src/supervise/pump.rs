@@ -2,7 +2,8 @@
 //!
 //! Handles concurrent draining of stdout, stderr, and PTY without deadlocks.
 
-#[cfg(unix)]
+#![cfg_attr(windows, allow(unused_imports))]
+
 use std::io::Write;
 use std::time::Duration;
 

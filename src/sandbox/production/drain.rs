@@ -1,11 +1,10 @@
 //! Bounded stdio drain, AsyncPipeReader, PipePair, StreamCollector (INV-25).
 
-#[cfg(unix)]
+#![cfg_attr(windows, allow(unused_imports))]
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
-#[cfg(unix)]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};

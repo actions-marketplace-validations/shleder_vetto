@@ -11,6 +11,8 @@
 //! 8. Initialize Phase 2 runtime infrastructure (EventBus, sinks, telemetry, observation threads).
 //! 9. Package state into `SupervisedSession`.
 
+#![cfg_attr(windows, allow(unused_imports))]
+
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -28,9 +30,7 @@ use crate::report::diff_project::ProjectManifest;
 use crate::sandbox::production::{
     SpawnedProductionExecution, UnpreparedProductionExecution, PROD_SCENARIO_ID,
 };
-#[cfg(unix)]
-use crate::sandbox;
-use crate::sandbox::{Backend, StdioMode};
+use crate::sandbox::{self, Backend, StdioMode};
 use crate::verify::VerifyReport;
 
 use super::error::SuperviseError;
