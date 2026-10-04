@@ -152,7 +152,6 @@ Windows native isolation uses Win32 security tokens and Job Objects:
 - **Process Guardrails**: Job Objects enforce `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to terminate all descendant processes on exit. AppContainer and LPAC (`S-1-15-2-2`) tokens isolate IPC and local tokens.
 - **No Unprivileged LSM / Mounts**: The Windows kernel does not expose unprivileged mount namespaces or LSM hooks. Fine-grained network filtering via WFP requires administrator rights, which Vetto strictly refuses to require.
 - **Production Recommendation**: For production-grade Tier 1 isolation on Windows hosts, execute Vetto within **WSL2** (`wsl -- vetto ...`).
-- **Windows Sandbox**: Available as an opt-in hardware-virtualized tier (`--backend win-sandbox`), generating `.wsb` specifications with dedicated virtual storage.
 
 ---
 

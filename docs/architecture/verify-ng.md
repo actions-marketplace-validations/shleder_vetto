@@ -218,11 +218,11 @@ macOS/Windows, CI timing statistics.
 
 ## Stage 3C — Production Integration (Verified, Proven by Tests Only)
 
-Single production path: `src/sandbox/production.rs` (`ProductionRunner`).
-Production spawns (`src/main.rs supervise`, `src/multi/runtime.rs`,
+Single production path: `src/sandbox/production/` (`ProductionRunner`).
+Production spawns (`src/main.rs supervise`,
 `src/mcp/wrap.rs`) execute exclusively via `spawn_authoritative` /
 `execute_simple` / `execute_with_backend`; direct `Backend::spawn` outside
-`production.rs` does not exist in production code. Timeout uses only verified
+`production/` does not exist in production code. Timeout uses only verified
 killer path (deadline → kill → bounded re-wait → nonce sweep), no raw
 blocking `wait()` without subsequent printer-friendly sweep cleanup.
 Reporting strictly uses typed `EnforcementState`, never `sandboxed/secure`.

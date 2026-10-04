@@ -11,8 +11,8 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 | **Linux x86_64** (Kernel >= 5.13) | **Tier 1 (Production - FULL)** | Landlock (ABI 1–6), unprivileged userns, PID/net namespaces, seccomp-BPF | Empty tmpfs & `/dev/null` bind-mount overlays | Broker relay with domain/port strict allowlist | PID namespace init reaps all descendants |
 | **Linux aarch64** (Kernel >= 5.13) | **Tier 1 (Production - FULL)** | Landlock (ABI 1–6), unprivileged userns, PID/net namespaces, seccomp-BPF | Empty tmpfs & `/dev/null` bind-mount overlays | Broker relay with domain/port strict allowlist | PID namespace init reaps all descendants |
 | **Linux (Legacy/Restricted)** | **Tier 1 (Fallback - FS-ONLY)** | Landlock (ABI 1–6), seccomp-BPF (userns disabled) | Read allowlist carve-out (fail-closed) | Disabled by default (fail-closed for relay) | `PR_SET_PDEATHSIG` + Process Group |
-| **macOS Apple Silicon** (macOS 14+) | **Tier 2 (Experimental - Darwin)** | `sandbox-exec` / Seatbelt (write-isolation), FSEvents | Seatbelt path deny rules for credentials (no VFS overlay) | Loopback restriction / `--net=off` static deny (no netns) | Child process tree termination via kqueue watchdog |
-| **macOS Intel** (macOS 14+) | **Tier 2 (Experimental - Darwin)** | `sandbox-exec` / Seatbelt (write-isolation), FSEvents | Seatbelt path deny rules for credentials (no VFS overlay) | Loopback restriction / `--net=off` static deny (no netns) | Child process tree termination via kqueue watchdog |
+| **macOS Apple Silicon** (macOS 14+) | **Tier 2 (Experimental - Darwin)** | Seatbelt (`libsandbox.1.dylib` write-isolation), FSEvents | Seatbelt path deny rules for credentials (no VFS overlay) | Loopback restriction / `--net=off` static deny (no netns) | Child process tree termination via kqueue watchdog |
+| **macOS Intel** (macOS 14+) | **Tier 2 (Experimental - Darwin)** | Seatbelt (`libsandbox.1.dylib` write-isolation), FSEvents | Seatbelt path deny rules for credentials (no VFS overlay) | Loopback restriction / `--net=off` static deny (no netns) | Child process tree termination via kqueue watchdog |
 | **Windows 11 x86_64** | **Tier 3 (Preview - AppContainer)** | AppContainer, Low-Integrity Token, Job Object kill-on-close | Token ACL isolation & deny SID rules (no VFS overlay) | Host broker relay with Windows Firewall / AppContainer caps | Job Object `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` |
 
 ---
@@ -21,10 +21,10 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 
 | Agent Name | Preset Flag | Tested Execution Method | Secret Masking | Network Broker | PTY Statusline | Verify Battery |
 |---|---|---|---|---|---|---|
-| **Claude Code** | `--agent claude` | `claude -p "..."` / `npx @anthropic-ai/claude-code` | ✅ Verified | ✅ `--net=allowlist:api.anthropic.com` | ✅ Full TUI & Statusline | ✅ 100% Pass |
-| **OpenAI Codex** | `--agent codex` | `codex exec "..."` | ✅ Verified | ✅ `--net=allowlist:api.openai.com` | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **Claude Code** | `--agent claude` | `claude -p "..."` / `npx @anthropic-ai/claude-code` | ✅ Verified | ✅ `--net=allowlist:api.anthropic.com` | ✅ Statusline & PTY | ✅ 100% Pass |
+| **OpenAI Codex** | `--agent codex` | `codex exec "..."` | ✅ Verified | ✅ `--net=allowlist:api.openai.com` | ✅ Statusline & PTY | ✅ 100% Pass |
 | **OpenCode** | `--agent opencode` | `opencode "..."` | ✅ Verified | ✅ Allowlisted model endpoints | ✅ Statusline | ✅ 100% Pass |
-| **Antigravity** | `--agent antigravity` | `antigravity "..."` / `agy "..."` | ✅ Verified | ✅ Allowlisted Google Cloud & API endpoints | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **Antigravity** | `--agent antigravity` | `antigravity "..."` / `agy "..."` | ✅ Verified | ✅ Allowlisted Google Cloud & API endpoints | ✅ Statusline & PTY | ✅ 100% Pass |
 | **OMP** | `--agent omp` | `omp "..."` | ✅ Verified | ✅ `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | ✅ Statusline | ✅ 100% Pass |
 | **ZCode** | `--agent zcode` | `zcode "..."` | ✅ Verified | ✅ `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | ✅ Statusline | ✅ 100% Pass |
 | **Kimi Code** | `--agent kimi` | `kimi "..."` | ✅ Verified | ✅ `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | ✅ Statusline | ✅ 100% Pass |
@@ -34,10 +34,10 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 | **Aider** | `--agent aider` | `aider --message "..."` | ✅ Verified | ✅ Allowlisted API targets | ✅ Full PTY | ✅ 100% Pass |
 | **GitHub Copilot** | `--agent copilot` | `copilot "..."` | ✅ Verified | ✅ Allowlisted GitHub endpoints | ✅ Statusline | ✅ 100% Pass |
 | **Windsurf** | `--agent windsurf` | `windsurf "..."` | ✅ Verified | ✅ `api.codeium.com`, `windsurf.codeium.com` | ✅ Statusline | ✅ 100% Pass |
-| **Goose** | `--agent goose` | `goose "..."` | ✅ Verified | ✅ Block, OpenAI, Anthropic endpoints | ✅ Full TUI & Statusline | ✅ 100% Pass |
+| **Goose** | `--agent goose` | `goose "..."` | ✅ Verified | ✅ Block, OpenAI, Anthropic endpoints | ✅ Statusline & PTY | ✅ 100% Pass |
 | **OpenHands** | `--agent openhands` | `openhands "..."` | ✅ Verified | ✅ Configured model endpoints | ✅ Statusline | ✅ 100% Pass |
 | **Devin** | `--agent devin` | `devin "..."` | ✅ Verified | ✅ `api.devin.ai`, `cognition.ai` | ✅ Statusline | ✅ 100% Pass |
-| **Smolagents** | `--agent smolagents` | `smolagents "..."` / `vetto eval` | ✅ Verified | ✅ Hugging Face Hub + model endpoints | ✅ Non-interactive & TUI | ✅ 100% Pass |
+| **Smolagents** | `--agent smolagents` | `smolagents "..."` | ✅ Verified | ✅ Hugging Face Hub + model endpoints | ✅ Non-interactive & Statusline | ✅ 100% Pass |
 | **Custom Agent / Shell** | (Default) | `vetto -- <command> [args...]` | ✅ Strict-Wins | ✅ Mode-dependent | ✅ Configurable | ✅ 100% Pass |
 
 ---
@@ -46,14 +46,14 @@ This matrix documents the verified isolation levels, platform primitives, and fe
 
 | Capability | Linux Tier 1 (FULL) | Linux Tier 1 (FS-ONLY) | macOS Tier 2 (Seatbelt) | Windows Tier 3 (AppContainer) |
 |---|:---:|:---:|:---:|:---:|
-| **Filesystem Write Protection** | ✅ Hard Inode Enforced | ✅ Hard Inode Enforced | ✅ Sandbox-exec Policy | ✅ Access Control Token |
+| **Filesystem Write Protection** | ✅ Hard Inode Enforced | ✅ Hard Inode Enforced | ✅ Seatbelt SBPL Policy | ✅ Access Control Token |
 | **Secret File Overlays (`.env`)** | ✅ Masked with tmpfs | ⚠️ Read-carveout | ⚠️ Path-deny rules (no VFS overlay) | ⚠️ Capability ACL (no overlay) |
 | **Network Isolation (`--net=off`)** | ✅ Isolated Netns | ✅ Seccomp socket block | ✅ Deny network rule | ✅ AppContainer network cap |
-| **Domain Allowlist Broker** | ✅ Unix Bridge Relay | ❌ (Requires Tier 1 FULL) | ⚠️ Fail-closed / Off (no Darwin netns) | ⚠️ Local Broker / WSL2 recommended |
+| **Domain Allowlist Broker** | ✅ Unix Bridge Relay | ❌ (Requires Tier 1 FULL) | ⚠️ Loopback Broker Relay | ⚠️ Local Broker / WSL2 recommended |
 | **Cross-Process `ptrace` Block** | ✅ Seccomp-BPF | ✅ Seccomp-BPF | ✅ Hardened Runtime | ✅ Restricted Token |
 | **Post-Session Audit Reports** | ✅ HTML/MD/JSON/SARIF | ✅ HTML/MD/JSON/SARIF | ✅ HTML/MD/JSON/SARIF | ✅ HTML/MD/JSON/SARIF |
 | **Mathematical Preflight (`verify`)**| ✅ Throwaway Sandbox | ✅ Throwaway Sandbox | ✅ Throwaway Sandbox | ⚠️ Capability Probe |
-| **Session Rescue & Rollback** | ✅ Full Support | ✅ Full Support | ✅ Full Support | ✅ Full Support |
+| **Workspace Snapshot & Rollback** | ✅ Full Support | ✅ Full Support | ✅ Full Support | ✅ Full Support |
 
 ---
 

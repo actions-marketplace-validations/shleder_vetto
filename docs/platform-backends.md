@@ -26,7 +26,6 @@ Accordingly, Vetto enforces an immutable 3-tier boundary architecture:
 | **Linux (WSL2)**<br/>*Tier 1 (Production)* | **100% Kernel Deny** (Landlock via WSL2 Linux Kernel) | **100% Scoped Read** (Landlock VFS Inode checks) | **Yes** (`CLONE_NEWNET` inside WSL2 VM) | **100% PID Namespace** teardown + `/proc` sweep | **Yes** (tmpfs mount overlays inside WSL2) | **Tier 1 (Production)**: Recommended path for Windows workstations |
 | **macOS (Darwin)**<br/>*Tier 2 (Experimental)* | **100% Locked** (Seatbelt SBPL `(allow file-write*)` to workspace & `/tmp`) | **Broad Reads** (System `/` read due to dyld bug; tail `deny` on known secrets) | **No** (Unsupported by Darwin; `--net=off` via SBPL `(deny network*)`) | **pgroup host sweep** (Watchdog `kqueue` `pdeath_watch` + group-death SIGKILL sweep) | **No** (VFS overlays unavailable unprivileged; SBPL static deny only) | **Tier 2 (Experimental)**: Write confinement and `--net=off` network lockdown. Unprivileged read-isolation and syscall filtering unsupported (use OrbStack/Linux VM for full read isolation) |
 | **Windows Native**<br/>*Tier 3 (Preview)* | **Workspace Only** (AppContainer DACL + LPAC `S-1-15-2-2` write grants) | **ACL Fallback** (AppContainer default-deny; partial token restriction) | **No** (Network namespaces unavailable; `--net=off` via AppContainer caps) | **100% Job Object** (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` terminates process tree) | **No** (No unprivileged mount namespaces; fails closed on collision) | **Tier 3 (Preview)**: Process guardrails with kill-on-close and `--net off`; no seccomp/BPF or exec-root isolation. Use WSL2 for full kernel boundary |
-| **Windows Sandbox**<br/>*Tier 3 (VM Isolated)* | **VM Isolated** (Dedicated virtual disk, mapped read-write folders only) | **VM Isolated** (Host secrets never mapped into `.wsb` specification) | **Virtual Switch** (Hyper-V vSwitch disabled under `--net=off`) | **VM Teardown** (Hyper-V VM instance termination) | **Full Isolation** (Physically separated filesystem in disposable VM) | **Disposable VM**: Hardware-virtualized container (requires Hyper-V) |
 
 ---
 
@@ -78,7 +77,7 @@ The Linux backend represents Vetto's reference production architecture, leveragi
 - Logging is non-blocking and best-effort: logging failures never interrupt the sandbox session.
 
 ### Packaging and Apple Notarization
-- `packaging/macos/build_pkg.sh` packages `vetto` into a native `.pkg` installer.
+- `scripts/package-macos-pkg.sh` packages `vetto` into a native `.pkg` installer.
 - Supports Hardened Runtime codesigning (`codesign --options runtime`), component package building (`pkgbuild`), Apple notary service submission (`xcrun notarytool submit --wait`), ticket stapling (`xcrun stapler staple`), and Gatekeeper verification (`spctl --assess`).
 
 ---
@@ -99,23 +98,18 @@ The Windows native backend is designated **Tier 3 (Preview)**. It provides proce
 - Vetto now executes `analyze_deny_overlap(allow_paths, deny_paths)`. If a deny path overlaps or is nested inside an allowed workspace root without kernel masking capability, Vetto fails closed (`ExitCode::FAIL_CLOSED`, 125) with a precise diagnostic report detailing the conflicting paths and pointing the operator to WSL2 for Tier 1 mount masking.
 - If deny paths are disjoint from the allowed workspace, AppContainer DACL construction proceeds normally without artificial blockage.
 
-### WFP lease: explicit admin opt-in, fail-closed without it
-- Fine-grained per-domain egress via Windows Filtering Platform (`src/sandbox/windows/firewall.rs`: dynamic WFP session, private sub-layer, process-image + pinned TCP/IP conditions, filters removed on lease drop) REQUIRES administrator privileges — WFP engine open + filter install fail without elevation by Windows design.
-- Vetto refuses to demand elevation: `firewall::probe()` reports WFP/token state without requesting it; any lease attempt without admin fails closed (`--net` allowlist on native Windows degrades to AppContainer capability deny, never to silent allow).
-- Maximum-achievable: `--net=off` enforced via AppContainer capabilities unprivileged; per-domain allowlist needs explicit admin opt-in OR WSL2 (where the Linux broker does it unprivileged).
+### Windows network filtering: admin opt-in, fail-closed without it
+- Fine-grained per-domain egress via Windows Filtering Platform (WFP) requires administrator privileges by Windows OS design.
+- Vetto refuses to demand elevation: unprivileged runs enforce `--net=off` via AppContainer network capability restrictions; per-domain allowlisting without admin fails closed. For full unprivileged domain-filtered egress on Windows hosts, execute Vetto within WSL2 (where the Linux broker operates unprivileged).
 
 ### Authenticode Digital Signing
-- `packaging/windows/sign.ps1` signs `vetto.exe` using `signtool.exe` or `osslsigncode` with SHA-256 and RFC 3161 timestamps (`http://timestamp.digicert.com`).
+- `scripts/sign-windows.ps1` signs `vetto.exe` using `signtool.exe` or `osslsigncode` with SHA-256 and RFC 3161 timestamps (`http://timestamp.digicert.com`).
 - Configured in CI release workflows via `SIGNING_CERT_PFX` and `SIGNING_CERT_PASSWORD`.
 - **Release signing status (issue #63)**: release archives are minisign-signed in `release-train.yml` (threshold-signed key, SLSA-verified); Authenticode `vetto.exe` signing runs when `SIGNING_CERT_PFX` is present, otherwise CI emits an explicit warning and ships the binary unsigned — never silently claimed as signed. `vetto doctor` reports the effective state.
 
 ### Job Object Lifecycle & IO Rate Control
 - Windows Job Objects enforce `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` to ensure 100% of descendant processes are terminated when Vetto exits.
 - When `io_rate` limits are specified (`--limits max_iops=...,max_bandwidth=...`), Vetto sets `JOB_OBJECT_IO_RATE_CONTROL_INFORMATION` (information class 37) on the Job Object, capping IOPS and bandwidth across the sandbox.
-
-### Windows Sandbox VM Opt-in (`--backend win-sandbox`)
-- `sandbox::windows::windows_sandbox` generates `.wsb` disposable VM specifications with mapped read-only and read-write folders (`mapped_read_only`, `mapped_read_write`).
-- Activated explicitly via `--backend win-sandbox`. Fails closed if Hyper-V virtualization or the Windows Sandbox feature is not enabled.
 
 ### Platform Boundary & WSL2 Recommendation
 - The native Windows kernel does not provide unprivileged mount namespaces, seccomp, BPF, or LSM hooks equivalent to Linux Landlock. Syscall filtering and exec-root isolation remain unsupported on native Windows. Fine-grained network filtering via Windows Filtering Platform (WFP) requires administrator privileges, which Vetto strictly refuses to demand.

@@ -26,13 +26,7 @@ Vetto intercepts the execution, defaults network egress to provider inference AP
 
 ## 2. Configuration Runner Integration
 
-You can also integrate Vetto directly into OpenCode's configuration runner:
-
-```bash
-vetto plugin install opencode
-```
-
-This merges the sandbox runner into `~/.config/opencode/config.json`:
+You can also integrate Vetto directly into OpenCode's configuration file (`~/.config/opencode/config.json`):
 
 ```json
 {

@@ -13,8 +13,8 @@ the exact revision and test environment.
   of replacing a precise policy with a broad allow.
 - Landlock is evaluated in the kernel on filesystem operations. There is no
   userspace broker on the ordinary allowed-file path.
-- FULL-tier namespace, overlay and relay setup is paid once per sandbox. In
-  multi-agent mode each agent intentionally pays this cost independently.
+- FULL-tier namespace, overlay and relay setup is paid once per sandbox session.
+  Concurrent sandboxed processes pay this setup cost independently.
 - Allowed-operation visibility walks the sandbox process tree and `/proc` file
   descriptors. Polling adapts from 50 ms while active to 500 ms after five
   idle seconds and two seconds after thirty idle seconds.
@@ -67,7 +67,7 @@ promote a single run or a development build to a product claim.
 
 ## Publication gate
 
-Performance targets in the mega-spec are acceptance goals, not measured facts.
+Performance targets are acceptance goals, not measured facts.
 They may be marked achieved only when the benchmark artifacts are reproducible
 on all claimed platforms. Until then documentation must say “not yet measured”
 rather than inventing a number.

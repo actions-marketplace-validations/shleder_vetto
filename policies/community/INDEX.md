@@ -2,11 +2,14 @@
 
 This directory contains curated, battle-tested security policies for common development ecosystems and agent workflows.
 
-To adopt any policy into your project, run:
+To adopt any policy into your project, copy it to your workspace:
 ```bash
-vetto policy use <name>
+cp policies/community/<name>.toml ./vetto.toml
 ```
-This copies the selected policy into `./vetto.toml`.
+Or apply it explicitly at runtime:
+```bash
+vetto --policy policies/community/<name>.toml -- <command>
+```
 
 ---
 

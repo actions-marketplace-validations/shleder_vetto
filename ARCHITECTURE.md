@@ -1,9 +1,8 @@
 # vetto architecture
 
 vetto is the uniform operator-controlled boundary above heterogeneous coding
-agents and their built-in sandboxes. One invocation owns one session (or one
-explicit multi-agent group), starts no persistent daemon, uses no cloud
-service, and sends no telemetry.
+agents and their built-in sandboxes. One invocation owns one session,
+starts no persistent daemon, uses no cloud service, and sends no telemetry.
 
 ## Trust boundaries and startup order
 
@@ -24,8 +23,7 @@ Startup order is load-bearing:
 5. On exit, terminate/reap the entire platform process container, finalize
    sanitized reports outside the sandbox, and return the agent/failure status.
 
-This ordering avoids unsafe post-thread `fork()` paths and prevents a partial
-multi-agent launch from becoming an unsandboxed fallback.
+This ordering avoids unsafe post-thread `fork()` paths.
 
 ## Policy pipeline
 
@@ -128,20 +126,19 @@ memory without limit.
 
 ## macOS
 
-The backend generates a Seatbelt profile from the same concrete policy and
-invokes `/usr/bin/sandbox-exec`. Profile files use unpredictable names,
-exclusive/no-follow creation, private permissions and cleanup. Network off is
-Seatbelt-denied. The current Seatbelt spawn path does not wire the standalone
-macOS broker helper, so domain allowlist traffic is not advertised here.
+The backend generates an in-memory SBPL profile template from the concrete policy
+and binds dynamically to Apple's private Seatbelt API
+(`libsandbox.1.dylib!sandbox_init_with_parameters`), avoiding disk files and the
+deprecated `/usr/bin/sandbox-exec` wrapper. Network off is Seatbelt-denied via
+`(deny network*)`, while `--net=allowlist` runs an ephemeral loopback proxy on
+`127.0.0.1`.
 
 FSEvents watches project changes with inherent latency and reports change
-labels, not reads or Seatbelt denials. Optional Endpoint Security dynamically
-probes the framework, signed entitlement and privilege/TCC gates; unavailable
-ES falls back to Seatbelt plus FSEvents and is reported honestly. The current
-spawn path supports network-off; `--net=allowlist` is rejected and the
-loopback broker helper is not wired into Seatbelt execution. Strict mode does
-not provide a macOS allowlist relay. Seatbelt rules are inherited by
-descendants. `sandbox-exec` deprecation remains an explicit platform risk.
+labels, not reads or Seatbelt denials. Unprivileged read denial cannot guarantee
+absolute secrecy against all native binaries due to dyld shared cache requirements
+(maximum achievable is Shape A + trailing secret denies). Seatbelt rules are
+inherited by descendants, and a kqueue watchdog (`pdeath_watch`) terminates
+the process tree if the supervisor disappears.
 
 ## Windows
 
@@ -160,9 +157,9 @@ conditional:
 - the core launcher currently supports inherited stdio only, so callers should
   use `--tui=none`/`--ci` on Windows;
 - ETW, directory-change and handle feeds are observation only;
-- Windows Sandbox, WFP/firewall, Event Log and minifilter modules are separate,
-  explicit capability-gated integrations. They do not install features,
-  register services, start drivers or elevate automatically.
+- Event Log and observation feeds are separate, explicit capability-gated
+  integrations. They do not install features, register services, start drivers
+  or elevate automatically.
 
 There is no weaker WIN-BASIC fallback in this implementation. Low integrity or
 a Job Object by itself is not claimed as filesystem/network isolation. If the
@@ -170,31 +167,17 @@ experimental process-sandbox boundary is unavailable, or a policy asks for a
 resolved denied-path field that the Windows schema cannot verify, Windows
 fails before process creation.
 
-## PTY and TUI
+## PTY and Statusline
 
 Statusline mode gives an interactive agent a PTY sized to reserve one terminal
 row and transparently forwards input/output/resizes. `Ctrl+]` enters the event
-overlay. Full mode owns the alternate screen and embeds captured headless
-output. Both render only on dirty/event input and cap repaint to five frames
-per second.
+overlay. Headless mode (`--tui=none` / `--ci`) disables UI rendering entirely for
+CI and scripting. Statusline rendering caps repaints to five frames per second.
 
 The shared state contains a bounded event ring, blocked table, accessed-file
 tree, network records, activity buckets and session summary. Pause/resume acts
 on the platform process container, not a UI-only flag. Exports use the same
 safe report/JSONL paths as non-TUI output.
-
-## Multi-agent isolation
-
-A strict manifest represents commands as argv arrays, avoiding a shell quoting
-language. All policies, executables, report paths and backend capabilities are
-preflighted before launch. Every entry gets its own backend instance,
-Landlock/namespaces or platform process container, event bus, output buffer and
-report directory. Failure terminates already-created sandboxes. The current
-multi-agent runtime is Unix-only; Windows rejects a multi-agent launch rather
-than weakening isolation.
-
-The split-pane UI consumes a tagged aggregate stream. Combined reports contain
-per-agent sections and comparisons but do not merge enforcement boundaries.
 
 ## Reports and storage
 
