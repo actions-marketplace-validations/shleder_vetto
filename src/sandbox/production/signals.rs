@@ -78,7 +78,9 @@ impl ScopedSignalForwarder {
     ) -> Result<Self, ProductionError> {
         let raw_target = target.as_raw_target();
         if raw_target == 0 {
-            return Err(ProductionError::SignalError("invalid signal target 0".into()));
+            return Err(ProductionError::SignalError(
+                "invalid signal target 0".into(),
+            ));
         }
 
         if ACTIVE_FORWARDER_PID

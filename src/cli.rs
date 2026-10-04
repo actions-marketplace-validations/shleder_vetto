@@ -810,13 +810,11 @@ impl Cli {
         let cli = self;
         let agent_preset = match cli.agents.as_slice() {
             [] => crate::config::detect_agent_preset(&cli.agent),
-            [agent] if !agent.contains('=') && !agent.trim().is_empty() => {
-                Some(
-                    crate::policy::defaults::canonical_agent_name(agent)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| agent.clone()),
-                )
-            }
+            [agent] if !agent.contains('=') && !agent.trim().is_empty() => Some(
+                crate::policy::defaults::canonical_agent_name(agent)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| agent.clone()),
+            ),
             [_] => anyhow::bail!("--agent expects a preset name (e.g. claude, codex, aider)"),
             _ => anyhow::bail!("accepts at most one --agent preset"),
         };
@@ -919,9 +917,7 @@ impl Cli {
                     "json" => crate::config::ReportFormat::Json,
                     "sarif" => crate::config::ReportFormat::Sarif,
                     other => {
-                        anyhow::bail!(
-                            "unknown report format '{other}' (expected md, json, sarif)"
-                        )
+                        anyhow::bail!("unknown report format '{other}' (expected md, json, sarif)")
                     }
                 });
             }
@@ -1328,10 +1324,7 @@ mod tests {
     #[test]
     fn init_subcommand_parses() {
         let cli = Cli::try_parse_from(["vetto", "init", "--force"]).expect("init parsing");
-        assert!(matches!(
-            cli.command,
-            Some(Command::Init { force: true })
-        ));
+        assert!(matches!(cli.command, Some(Command::Init { force: true })));
     }
 
     #[test]

@@ -13,8 +13,7 @@ use clap::Parser;
 
 use vetto::config::{NetMode, RunConfig, TuiMode};
 use vetto::{
-    cli, doctor, events, exit_codes, logger, mcp, policy, profile, sandbox, shim,
-    watchdog,
+    cli, doctor, events, exit_codes, logger, mcp, policy, profile, sandbox, shim, watchdog,
 };
 
 fn main() {

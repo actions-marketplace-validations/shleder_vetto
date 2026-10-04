@@ -104,8 +104,7 @@ pub fn freeze_production_contract(
     let production = contract.production.as_ref().ok_or_else(|| {
         ProductionError::ContractDrift("missing production installation contract".into())
     })?;
-    if production.backend != backend
-        || production.tier.map(|t| t.label()).unwrap_or("none") != tier
+    if production.backend != backend || production.tier.map(|t| t.label()).unwrap_or("none") != tier
     {
         return Err(ProductionError::ContractDrift(
             "production contract/backend mismatch".into(),
@@ -115,9 +114,7 @@ pub fn freeze_production_contract(
         .agent_identity
         .invoked_binary
         .to_str()
-        .ok_or_else(|| {
-            ProductionError::PreparationFailed("non-UTF8 production executable".into())
-        })?
+        .ok_or_else(|| ProductionError::PreparationFailed("non-UTF8 production executable".into()))?
         .to_string()];
     argv.extend(contract.agent_identity.invoked_args.clone());
 
@@ -163,8 +160,12 @@ pub fn freeze_production_contract(
     .map_err(|e| ProductionError::PreparationFailed(e.to_string()))?;
 
     let canonical = CanonicalPolicy::from_frozen(&spec);
-    let identity =
-        ExecutionIdentity::new(scenario, &contract.session_nonce, PROD_REGISTRY, &spec.hash());
+    let identity = ExecutionIdentity::new(
+        scenario,
+        &contract.session_nonce,
+        PROD_REGISTRY,
+        &spec.hash(),
+    );
     Ok((canonical, identity))
 }
 
@@ -240,10 +241,7 @@ impl UnpreparedProductionExecution {
         self
     }
 
-    pub fn with_debug_ports(
-        mut self,
-        config: crate::policy_ir::contract::DebugPortConfig,
-    ) -> Self {
+    pub fn with_debug_ports(mut self, config: crate::policy_ir::contract::DebugPortConfig) -> Self {
         self.debug_ports = Some(config);
         self
     }
@@ -527,27 +525,30 @@ impl PreparedProductionExecution {
             let _serial = engine::spawn_serial()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            self.fsm
-                .transition(ExecutionState::Spawn)
-                .map_err(|_| ProductionError::InvalidState {
+            self.fsm.transition(ExecutionState::Spawn).map_err(|_| {
+                ProductionError::InvalidState {
                     expected: ExecutionState::Spawn,
                     actual: self.fsm.current_state(),
-                })?;
+                }
+            })?;
             self.mechanics
                 .spawn(policy, opts)
                 .map_err(|e| ProductionError::SpawnFailed(e.to_string()))?
         };
 
-        self.fsm
-            .transition(ExecutionState::Enforce)
-            .map_err(|_| ProductionError::InvalidState {
+        self.fsm.transition(ExecutionState::Enforce).map_err(|_| {
+            ProductionError::InvalidState {
                 expected: ExecutionState::Enforce,
                 actual: self.fsm.current_state(),
-            })?;
+            }
+        })?;
 
         self.context.metrics.record_spawn();
         let pid = spawned.handle.root_pid;
-        self.context.signals.target_pid.store(pid as i32, Ordering::SeqCst);
+        self.context
+            .signals
+            .target_pid
+            .store(pid as i32, Ordering::SeqCst);
         crate::sandbox::handle::register_active_root(pid);
         self.capability.note_spawned(pid);
 
@@ -572,8 +573,7 @@ impl PreparedProductionExecution {
                     Some(x) => le::limits_field_is(&limits_body, row, x),
                     None => false,
                 };
-                verification.rlimit_as_ok =
-                    expect("Max address space", lim.address_space_bytes);
+                verification.rlimit_as_ok = expect("Max address space", lim.address_space_bytes);
                 verification.rlimit_nproc_ok = expect("Max processes", lim.processes);
                 verification.rlimit_cpu_ok = expect("Max cpu time", lim.cpu_seconds);
                 verification.rlimit_fsize_ok = expect("Max file size", lim.file_size_bytes);
@@ -594,12 +594,12 @@ impl PreparedProductionExecution {
         )
         .ok();
 
-        self.fsm
-            .transition(ExecutionState::Observe)
-            .map_err(|_| ProductionError::InvalidState {
+        self.fsm.transition(ExecutionState::Observe).map_err(|_| {
+            ProductionError::InvalidState {
                 expected: ExecutionState::Observe,
                 actual: self.fsm.current_state(),
-            })?;
+            }
+        })?;
 
         Ok(SpawnedProductionExecution {
             context: self.context,
@@ -783,8 +783,7 @@ impl SpawnedProductionExecution {
             let deadline = Instant::now() + Duration::from_millis(250);
             let mut escaped = false;
             loop {
-                let children =
-                    crate::sandbox::linux::proctrack::scan_children(me, self.pid as i32);
+                let children = crate::sandbox::linux::proctrack::scan_children(me, self.pid as i32);
                 let found = children.iter().any(|&pid| {
                     if let Ok(st) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
                         if let Some(rest) = st
@@ -1163,7 +1162,9 @@ pub fn wait_for_exit(handle: &mut SandboxHandle, timeout: Option<Duration>) -> (
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sandbox::production::{execute_with_backend, prod_tier_mapping, ProdSpawnLog, PROD_SCENARIO_ID};
+    use crate::sandbox::production::{
+        execute_with_backend, prod_tier_mapping, ProdSpawnLog, PROD_SCENARIO_ID,
+    };
     use crate::verify_ng::sandbox_backend::{EnforcementState, SecurityCapability};
 
     fn test_policy() -> Policy {
@@ -1307,8 +1308,7 @@ mod tests {
                 let envelope: serde_json::Value = serde_json::from_slice(&input.policy_bytes)
                     .expect("production preparation must receive a serialized sealed contract");
                 let mut contract: SecurityContract =
-                    serde_json::from_value(envelope["contract"].clone())
-                        .expect("contract payload");
+                    serde_json::from_value(envelope["contract"].clone()).expect("contract payload");
                 contract.contract_digest_blake3 = envelope["digest"]
                     .as_str()
                     .expect("separate contract digest")
@@ -1958,6 +1958,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn phase1_caller_policy_cannot_change_canonical_backend_input() {
         let tmp = std::env::temp_dir();
         let mut policy = functional_test_policy(&tmp);

@@ -359,8 +359,14 @@ mod tests {
 
     #[test]
     fn parse_memory_units() {
-        assert_eq!(parse_cgroup_memory("2g").unwrap(), Some(2 * 1024 * 1024 * 1024));
-        assert_eq!(parse_cgroup_memory("512M").unwrap(), Some(512 * 1024 * 1024));
+        assert_eq!(
+            parse_cgroup_memory("2g").unwrap(),
+            Some(2 * 1024 * 1024 * 1024)
+        );
+        assert_eq!(
+            parse_cgroup_memory("512M").unwrap(),
+            Some(512 * 1024 * 1024)
+        );
         assert_eq!(parse_cgroup_memory("0").unwrap(), Some(0));
         assert_eq!(parse_cgroup_memory("max").unwrap(), None);
         assert_eq!(parse_cgroup_memory("1024").unwrap(), Some(1024));

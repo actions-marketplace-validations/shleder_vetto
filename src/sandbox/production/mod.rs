@@ -11,13 +11,13 @@ use crate::audit::verdict::FinalVerdict;
 use crate::config::NetMode;
 use crate::policy::{Policy, Tier};
 use crate::policy_ir::ExecutionState;
+use crate::sandbox::StdioMode;
 use crate::verify_ng::evidence::ExecutionIdentity;
 use crate::verify_ng::frozen::FrozenSpec;
 use crate::verify_ng::sandbox_backend::{
     BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, SandboxBackend,
     SecurityCapability,
 };
-use crate::sandbox::StdioMode;
 
 pub mod context;
 pub mod drain;

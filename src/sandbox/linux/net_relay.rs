@@ -502,7 +502,8 @@ where
 }
 
 fn handle_broker_connection(conn_broker: OwnedFd, config: BrokerConfig, bus: EventBus) {
-    let mut ctrl = unsafe { std::os::unix::net::UnixStream::from_raw_fd(conn_broker.into_raw_fd()) };
+    let mut ctrl =
+        unsafe { std::os::unix::net::UnixStream::from_raw_fd(conn_broker.into_raw_fd()) };
     let _ = ctrl.set_read_timeout(Some(std::time::Duration::from_secs(300)));
 
     let Some(req) = read_framed_request(&mut ctrl) else {
@@ -1614,7 +1615,9 @@ pub(crate) fn recv_fd(sock: RawFd) -> Result<OwnedFd, ()> {
 static RELAY_DISPATCH_LOCK: Mutex<()> = Mutex::new(());
 
 fn dispatch_conn_to_broker(ctrl_fd: RawFd, conn_broker: RawFd) -> Result<(), ()> {
-    let _guard = RELAY_DISPATCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = RELAY_DISPATCH_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     send_fd(ctrl_fd, conn_broker)
 }
 
@@ -2819,8 +2822,14 @@ mod tests {
         assert!(!super::validate_sni_host("api.openai.com", "com"));
 
         // Suffix spoofing rejected
-        assert!(!super::validate_sni_host("api.openai.com", "api.openai.com.attacker.com"));
-        assert!(!super::validate_sni_host("api.openai.com.attacker.com", "api.openai.com"));
+        assert!(!super::validate_sni_host(
+            "api.openai.com",
+            "api.openai.com.attacker.com"
+        ));
+        assert!(!super::validate_sni_host(
+            "api.openai.com.attacker.com",
+            "api.openai.com"
+        ));
         assert!(!super::validate_sni_host("api.openai.com", "attacker.com"));
     }
 

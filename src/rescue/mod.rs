@@ -1,7 +1,7 @@
 //! Workspace snapshot, atomic rollback, lock management and ephemeral execution cleanup.
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 pub mod ephemeral;
 pub mod lock;

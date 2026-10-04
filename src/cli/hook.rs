@@ -310,13 +310,10 @@ mod tests {
 
     #[test]
     fn parses_hook_install_subcommand() {
-        let cli =
-            TestCli::try_parse_from(["vetto", "install", "--scope", "local", "--force"])
-                .expect("parse hook install");
+        let cli = TestCli::try_parse_from(["vetto", "install", "--scope", "local", "--force"])
+            .expect("parse hook install");
         match cli.hook {
-            HookCommand::Install {
-                scope, force, ..
-            } => {
+            HookCommand::Install { scope, force, .. } => {
                 assert_eq!(scope, HookScope::Local);
                 assert!(force);
             }

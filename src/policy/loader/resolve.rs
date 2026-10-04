@@ -344,11 +344,7 @@ pub fn normalize_env_patterns(patterns: Vec<String>) -> Vec<String> {
     out.into_iter().collect()
 }
 
-pub fn resolve_list(
-    entries: &[String],
-    vars: &Vars,
-    agent: Option<&Path>,
-) -> Result<Vec<PathBuf>> {
+pub fn resolve_list(entries: &[String], vars: &Vars, agent: Option<&Path>) -> Result<Vec<PathBuf>> {
     let mut out = BTreeSet::new();
     for e in entries {
         if e.contains("$AGENT") && agent.is_none() {

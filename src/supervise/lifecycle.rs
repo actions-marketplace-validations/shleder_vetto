@@ -54,7 +54,10 @@ impl SignalController {
     /// Installs a signal controller for the target root process or process group.
     ///
     /// For `Tier::FsOnly`, target PID is inverted (`-(root_pid as i32)`), targeting the whole process group.
-    pub fn install(root_pid: u32, tier: Option<crate::policy::Tier>) -> Result<Self, SuperviseError> {
+    pub fn install(
+        root_pid: u32,
+        tier: Option<crate::policy::Tier>,
+    ) -> Result<Self, SuperviseError> {
         let target = match tier {
             Some(crate::policy::Tier::FsOnly) => -(root_pid as i32),
             _ => root_pid as i32,
@@ -202,10 +205,7 @@ impl SignalController {
 
         #[cfg(not(unix))]
         {
-            Ok(Self {
-                target,
-                active,
-            })
+            Ok(Self { target, active })
         }
     }
 }

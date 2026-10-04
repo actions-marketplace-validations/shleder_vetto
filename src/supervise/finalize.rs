@@ -117,14 +117,17 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
             }
         }
 
-        let tree_cap = prod_res.report.state(SecurityCapability::ProcessTreeContainment);
+        let tree_cap = prod_res
+            .report
+            .state(SecurityCapability::ProcessTreeContainment);
         if tree_cap == EnforcementState::Failed {
             extinction_breach_detected = true;
             if surviving_processes == 0 {
                 surviving_processes = 1;
             }
             if extinction_reason.is_empty() {
-                extinction_reason = "Process tree containment capability failed verification".to_string();
+                extinction_reason =
+                    "Process tree containment capability failed verification".to_string();
             }
         }
 
@@ -156,7 +159,8 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
                 surviving_processes = 1;
             }
             if extinction_reason.is_empty() {
-                extinction_reason = "Session timeout teardown failed extinction verification".to_string();
+                extinction_reason =
+                    "Session timeout teardown failed extinction verification".to_string();
             }
         }
     }
@@ -192,7 +196,10 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
 
     // 5. Filesystem diff calculation
     let diff = if ctx.session.diff_enabled {
-        report::diff_project::ProjectDiff::compute(&ctx.session.initial_manifest, &ctx.session.project)
+        report::diff_project::ProjectDiff::compute(
+            &ctx.session.initial_manifest,
+            &ctx.session.project,
+        )
     } else {
         report::diff_project::ProjectDiff::default()
     };
@@ -308,7 +315,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
         && code != exit_codes::EXIT_POLICY_BLOCKED
         && (verdict.exit_code == exit_codes::EXIT_FAIL_CLOSED
             || verdict.status != VerdictStatus::Pass
-            || blocked_total > 0
+            || blocked_threshold_reached
             || extinction_res.is_err()
             || surviving_processes > 0)
     {
@@ -384,7 +391,9 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
                     egress_allowed.push(h);
                 }
             } else {
-                *egress_map.entry(format!("{}:{}", r.host, r.port)).or_insert(0) += 1;
+                *egress_map
+                    .entry(format!("{}:{}", r.host, r.port))
+                    .or_insert(0) += 1;
             }
         }
         let mut egress_denied: Vec<(String, u64)> = egress_map.into_iter().collect();
@@ -428,7 +437,11 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
             .unwrap_or_else(|| ctx.cfg.agent.first().cloned().unwrap_or_default()),
         command: Some(ctx.cfg.agent.join(" ")),
         profile: ctx.session.policy.name.clone(),
-        policy_path: ctx.cfg.policy_path.as_ref().map(|p| p.display().to_string()),
+        policy_path: ctx
+            .cfg
+            .policy_path
+            .as_ref()
+            .map(|p| p.display().to_string()),
         exit_code: code,
         duration_secs,
         tier: ctx.session.tier_label().to_string(),

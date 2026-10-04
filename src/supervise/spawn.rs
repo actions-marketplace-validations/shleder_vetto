@@ -15,10 +15,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, OwnedFd};
 #[cfg(target_os = "linux")]
 use std::os::fd::IntoRawFd;
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, OwnedFd};
 
 use crate::config::{NetMode, RunConfig, TuiMode};
 use crate::events::EventBus;
@@ -330,12 +330,11 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
 
     // 1. Resolve agent executable in PATH (fail-closed with 127 if missing)
     let mut agent_cmd = cfg.agent.clone();
-    agent_cmd[0] = resolve_in_path(&agent_cmd[0]).map_err(|source| {
-        SuperviseError::ExecutableNotFound {
+    agent_cmd[0] =
+        resolve_in_path(&agent_cmd[0]).map_err(|source| SuperviseError::ExecutableNotFound {
             cmd: agent_cmd[0].clone(),
             source,
-        }
-    })?;
+        })?;
 
     // 2. Banner and auto-update staging
     let user_config = crate::version::load_user_config().unwrap_or_default();
@@ -350,11 +349,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     }
 
     // 3. Detect sandbox backend
-    let backend_res = Backend::detect_with_backend(
-        cfg.net.clone(),
-        cfg.observe_seccomp,
-        cfg.backend.as_deref(),
-    );
+    let backend_res =
+        Backend::detect_with_backend(cfg.net.clone(), cfg.observe_seccomp, cfg.backend.as_deref());
     let (mut backend_opt, tier) = match backend_res {
         Ok(b) => {
             let t = b.tier();
@@ -369,9 +365,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     };
 
     // 4. Resolve workspace and home directories
-    let project = std::env::current_dir().map_err(|e| {
-        SuperviseError::Fatal(anyhow::anyhow!("getcwd failed: {e}"))
-    })?;
+    let project = std::env::current_dir()
+        .map_err(|e| SuperviseError::Fatal(anyhow::anyhow!("getcwd failed: {e}")))?;
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -443,16 +438,19 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             }
         }
         if backend_opt.is_some() {
-            backend_opt = Some(Box::new(Backend::detect_with_backend(
-                cfg.net.clone(),
-                cfg.observe_seccomp,
-                cfg.backend.as_deref(),
-            ).map_err(|e| {
-                SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
-            })?));
+            backend_opt = Some(Box::new(
+                Backend::detect_with_backend(
+                    cfg.net.clone(),
+                    cfg.observe_seccomp,
+                    cfg.backend.as_deref(),
+                )
+                .map_err(|e| {
+                    SuperviseError::ProcessSpawnFailed(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e.to_string(),
+                    ))
+                })?,
+            ));
         }
     }
 
@@ -562,22 +560,23 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     // 10. Check backend and tier invariants (INV-01)
     let backend = match backend_opt {
         Some(b) => b,
-        None => Box::new(Backend::detect_with_backend(
-            cfg.net.clone(),
-            cfg.observe_seccomp,
-            cfg.backend.as_deref(),
-        ).map_err(|e| {
-            SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
-        })?),
+        None => Box::new(
+            Backend::detect_with_backend(
+                cfg.net.clone(),
+                cfg.observe_seccomp,
+                cfg.backend.as_deref(),
+            )
+            .map_err(|e| {
+                SuperviseError::ProcessSpawnFailed(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))
+            })?,
+        ),
     };
     tracing::debug!("backend: {}", backend.describe());
 
-    if cfg.net.uses_relay()
-        && (tier == Some(Tier::FsOnly) || tier == Some(Tier::Seccomp))
-    {
+    if cfg.net.uses_relay() && (tier == Some(Tier::FsOnly) || tier == Some(Tier::Seccomp)) {
         return Err(SuperviseError::NetworkRelayTierMismatch {
             tier: tier_label(tier).to_string(),
         });
@@ -610,7 +609,9 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             }
             if cfg.git_ssh {
                 let exe = std::env::current_exe().map_err(|e| {
-                    SuperviseError::Fatal(anyhow::anyhow!("resolve vetto executable for SSH helper: {e}"))
+                    SuperviseError::Fatal(anyhow::anyhow!(
+                        "resolve vetto executable for SSH helper: {e}"
+                    ))
                 })?;
                 env_extra.insert(
                     "GIT_SSH_COMMAND".into(),
@@ -662,10 +663,9 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     let stdio = match cfg.tui {
         TuiMode::Statusline => {
             let (rows, cols) = crossterm::terminal::size().unwrap_or((24, 80));
-            let p = crate::pty::Pty::open(rows.saturating_sub(1).max(1), cols)
-                .map_err(|e| {
-                    SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
-                })?;
+            let p = crate::pty::Pty::open(rows.saturating_sub(1).max(1), cols).map_err(|e| {
+                SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+            })?;
             let crate::pty::Pty { master, slave } = p;
             let slave_fd = slave.as_raw_fd();
             pty_master = Some(master);
@@ -678,14 +678,12 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 &cfg.agent,
             );
             if !is_interactive && cfg.mask_secrets {
-                let (r1, w1) = sandbox::create_cloexec_pipe()
-                    .map_err(|e| {
-                        SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
-                    })?;
-                let (r2, w2) = sandbox::create_cloexec_pipe()
-                    .map_err(|e| {
-                        SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
-                    })?;
+                let (r1, w1) = sandbox::create_cloexec_pipe().map_err(|e| {
+                    SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+                })?;
+                let (r2, w2) = sandbox::create_cloexec_pipe().map_err(|e| {
+                    SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
+                })?;
                 let stdio = StdioMode::Captured {
                     stdout_w: w1.as_raw_fd(),
                     stderr_w: w2.as_raw_fd(),
@@ -739,12 +737,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         .clone();
     let pol = production.installation_policy.clone();
 
-    let verify_outcome = preflight_boundary_checks(
-        prepared.contract(),
-        &pol,
-        &prepared.env,
-        cfg,
-    )?;
+    let verify_outcome = preflight_boundary_checks(prepared.contract(), &pol, &prepared.env, cfg)?;
 
     // 15. Spawn the sandbox process
     let started = Instant::now();
@@ -827,14 +820,17 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     }
     let stats = crate::report::stats::StatsCollector::spawn(&bus);
 
-    let otel_session = std::sync::Arc::new(crate::telemetry::TelemetrySession::start(
-        cfg.otel,
-        cfg.otel_endpoint.as_deref(),
-        &format!("session-{root_pid}"),
-        tier_label(tier),
-        &cfg.net.label(),
-        &pol.name,
-    ).map_err(SuperviseError::Fatal)?);
+    let otel_session = std::sync::Arc::new(
+        crate::telemetry::TelemetrySession::start(
+            cfg.otel,
+            cfg.otel_endpoint.as_deref(),
+            &format!("session-{root_pid}"),
+            tier_label(tier),
+            &cfg.net.label(),
+            &pol.name,
+        )
+        .map_err(SuperviseError::Fatal)?,
+    );
     crate::telemetry::spawn_telemetry_subscriber(&bus, otel_session.clone());
 
     if cfg.notify {

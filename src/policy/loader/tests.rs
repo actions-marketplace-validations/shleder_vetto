@@ -50,7 +50,8 @@ fn enumeration_budget_returns_error_instead_of_fallback() {
     let mut out = Vec::new();
     let mut count = FS_ONLY_ENUMERATION_BUDGET;
     let mut excluded = 0;
-    let result = resolve::enumerate_tree(&root, &BTreeSet::new(), &mut out, &mut count, &mut excluded);
+    let result =
+        resolve::enumerate_tree(&root, &BTreeSet::new(), &mut out, &mut count, &mut excluded);
 
     let _ = std::fs::remove_dir_all(&root);
     assert!(result.is_err(), "budget overflow must be an error");
@@ -631,8 +632,7 @@ fn merged_policy_cgroup_and_cpu_max_strictest_merge() {
 
 #[test]
 fn test_parse_deny_unix_sockets_in_policy_toml() {
-    let root =
-        std::env::temp_dir().join(format!("vetto-policy-deny-sock-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("vetto-policy-deny-sock-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let policy_path = root.join("policy.toml");

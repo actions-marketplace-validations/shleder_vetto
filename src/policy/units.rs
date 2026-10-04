@@ -79,13 +79,37 @@ pub fn parse_bytes_with_standard(
     } else if let Some(n) = lower.strip_suffix("kib") {
         (n, KIB)
     } else if let Some(n) = lower.strip_suffix("tb") {
-        (n, match standard { UnitStandard::IecBinary => TIB, UnitStandard::SiDecimal => TB })
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => TIB,
+                UnitStandard::SiDecimal => TB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix("gb") {
-        (n, match standard { UnitStandard::IecBinary => GIB, UnitStandard::SiDecimal => GB })
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => GIB,
+                UnitStandard::SiDecimal => GB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix("mb") {
-        (n, match standard { UnitStandard::IecBinary => MIB, UnitStandard::SiDecimal => MB })
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => MIB,
+                UnitStandard::SiDecimal => MB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix("kb") {
-        (n, match standard { UnitStandard::IecBinary => KIB, UnitStandard::SiDecimal => KB })
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => KIB,
+                UnitStandard::SiDecimal => KB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix('t') {
         (n, TIB)
     } else if let Some(n) = lower.strip_suffix('g') {
@@ -248,7 +272,10 @@ mod tests {
             parse_bytes_with_standard("0.5mb", UnitStandard::SiDecimal).unwrap(),
             500_000
         );
-        assert_eq!(parse_bytes("1.5 MB").unwrap(), (1.5 * 1024.0 * 1024.0) as u64);
+        assert_eq!(
+            parse_bytes("1.5 MB").unwrap(),
+            (1.5 * 1024.0 * 1024.0) as u64
+        );
         assert_eq!(
             parse_bytes_with_standard("1.5 MB", UnitStandard::SiDecimal).unwrap(),
             1_500_000
@@ -394,7 +421,10 @@ mod tests {
         assert_eq!(format_bytes(1023, UnitStandard::IecBinary), "1023 B");
         assert_eq!(format_bytes(1024, UnitStandard::IecBinary), "1.0 KiB");
         assert_eq!(format_bytes(1536, UnitStandard::IecBinary), "1.5 KiB");
-        assert_eq!(format_bytes(1024 * 1024, UnitStandard::IecBinary), "1.0 MiB");
+        assert_eq!(
+            format_bytes(1024 * 1024, UnitStandard::IecBinary),
+            "1.0 MiB"
+        );
         assert_eq!(
             format_bytes(1024 * 1024 * 5, UnitStandard::IecBinary),
             "5.0 MiB"
