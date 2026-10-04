@@ -37,7 +37,7 @@ test matrix for the exact revision being used.
   Security entitlement detection explicit; optimize SBPL profile AST shape and track Apple dyld shared-cache regressions.
 - **Tier 3 (Windows)**: Treat the experimental Windows process-sandbox API as unstable and refuse
   fallback whenever an equivalent filesystem/network boundary cannot be proved; enforce Job Object memory quotas,
-  AppContainer DACL edge cases, and Windows Sandbox `.wsb` specification parity.
+  and AppContainer DACL edge cases.
 - Expand malicious descendant, DNS rebinding, symlink/race and lifecycle
   fixtures as new bypass techniques are disclosed.
 

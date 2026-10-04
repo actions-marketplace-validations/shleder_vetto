@@ -3,12 +3,7 @@
 `vetto` starts with `--net=off`. Network enforcement is independent from the
 agent's own settings and is inherited by every descendant process.
 
-The domain relay described below is currently a Linux FULL-tier path. Linux
-FS-ONLY rejects relay modes before launch. macOS Seatbelt currently supports
-network-off; `--net=allowlist` is rejected and the Seatbelt spawn path does not
-wire the standalone macOS broker helper. The Windows process backend currently
-accepts network-off only. These platform limits are fail-closed rather than a
-fallback to unrestricted networking.
+On Linux FULL tier, domain allowlisting uses dedicated network namespaces (`CLONE_NEWNET`) with an in-process TCP/TLS relay broker. Linux FS-ONLY rejects domain relay modes before launch (fail-closed). On macOS Darwin, `--net=off` blocks IP egress via Seatbelt rules, while `--net=allowlist` binds an ephemeral loopback proxy on `127.0.0.1` and configures proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`); `--net=ask` requires Linux network namespaces and fails closed on macOS. The native Windows process backend enforces `--net=off` via AppContainer capability restrictions (use WSL2 for unprivileged domain filtering). These platform limits fail closed rather than falling back to unrestricted networking.
 
 ## Off
 

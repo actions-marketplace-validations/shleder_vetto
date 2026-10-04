@@ -114,22 +114,20 @@ vetto allow --net api.openai.com
 
 ---
 
-## 5. Cursor Session Diagnostics & Rescue
+## 5. Workspace Snapshot Rollback & Audit
 
-During heavy multi-turn agent refactorings, session state can occasionally corrupt or desynchronize. Vetto provides a built-in recovery adapter specifically for Cursor:
+During autonomous multi-turn agent refactorings, you can inspect modified files or instantly roll back unintended edits:
 
 ```bash
-# Scan recent Cursor sessions
-vetto rescue --adapter cursor scan
+# Inspect file modifications made during the agent session
+vetto diff
 
-# Snapshot and back up an active session safely before a risky refactor
-vetto rescue --adapter cursor snapshot <session-id> --output ./cursor-backup.jsonl
+# Instantly restore project files to their pre-session snapshot
+vetto undo
 
-# Diagnose corrupted state
-vetto rescue --adapter cursor diagnose <session-id>
+# Inspect sandbox events, blocked paths, and network denials
+vetto audit --latest
 ```
-
-All rescue commands operate safely outside the sandbox boundary and never mutate active IDE state without explicit user confirmation.
 
 ---
 

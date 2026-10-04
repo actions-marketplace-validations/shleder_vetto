@@ -37,8 +37,7 @@ Enforcement relies on host operating system kernel primitives. `vetto` never sil
 - **Read Isolation Caveat**: Due to a known Apple Seatbelt regression where path-fragmented SBPL read rules trigger dynamic linker (`dyld`) aborts (SIGABRT), broad read permissions are maintained on macOS to guarantee process stability.
 
 ### Windows (Experimental)
-- Default process sandbox uses **AppContainer + LPAC** (Less Privileged AppContainer) tokens and Job Objects for process lifecycle termination and IO rate control.
-- Disposable full VM isolation is available via `--backend win-sandbox` (requires Hyper-V and Windows Sandbox feature enabled).
+- Default process sandbox uses **AppContainer + LPAC** (Less Privileged AppContainer) tokens and Job Objects for process lifecycle termination and IO rate control (Tier 3 guardrail; use WSL2 for full Tier 1 kernel isolation).
 
 ---
 

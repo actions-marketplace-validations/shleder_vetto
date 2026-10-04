@@ -1,4 +1,4 @@
-# Vetto alpha field testing
+# Vetto field testing
 
 This checklist is for testing a published Vetto npm package on a real local
 machine. It is intentionally npm-only: testers do not need Rust, a checkout of
@@ -16,11 +16,11 @@ from a Git URL.
 ```console
 npm install --global @shledery/vetto
 vetto --version
-vetto doctor
+vetto doctor --preflight
 ```
 
-The package contains the native executable for the host platform. It does not
-need a Rust toolchain or an install-time binary download. If npm reports an
+The package contains the native executable for the host platform in the current `0.5.15` package.
+It does not need a Rust toolchain or an install-time binary download. If npm reports an
 unsupported platform, record the platform and architecture and stop; do not
 work around the package selector by copying a binary from another platform.
 
@@ -35,22 +35,22 @@ as a whole:
 
 | Surface | Current claim | Safe test path |
 | --- | --- | --- |
-| Codex CLI | `protected` when the process is launched through Vetto; persisted-session inspection is `rescue-only` | Wrap `codex` with `vetto -- ...`; use `vetto rescue` for copy-only inspection |
-| Claude Code CLI | `protected` when launched through Vetto; the explicit-root Claude adapter is `rescue-only` and opaque | Wrap `claude` with `vetto -- ...`; pass `--root` for Claude rescue |
-| Aider, OpenCode, Copilot, or another CLI | `protected` only for the process actually launched by Vetto | Use the executable command as the final argv after `--`; report the exact command and version |
-| Codex/Claude/Cursor/Antigravity desktop GUI | `observe-only` or `unavailable`; Vetto does not inject into an already-running GUI | Test only a documented CLI, if the product has one; never claim that an existing GUI process was sandboxed |
+| Codex CLI | `protected` when launched through Vetto | Wrap `codex` with `vetto enable codex` or `vetto -- codex exec ...` |
+| Claude Code CLI | `protected` when launched through Vetto | Wrap `claude` with `vetto enable claude` or `vetto -- claude ...` |
+| Aider, OpenCode, Cursor, or another CLI | `protected` for processes launched by Vetto | Use transparent shims (`vetto enable <agent>`) or `vetto -- <command> [args...]` |
+| Codex/Claude/Cursor/Antigravity desktop GUI | `observe-only` or `unavailable` | Vetto intercepts child processes and CLI tools, not pre-existing external GUI windows |
 
-`integrated` is not a blanket claim for a provider. A provider adapter must
-earn that level through its adapter contract and fixtures. An unavailable
+`integrated` is not a blanket claim for a provider. An unavailable
 desktop integration is an honest result, not a failed workaround to hide.
 
 ## Baseline commands
 
 Run these from a disposable project directory. The commands only launch a
-process through Vetto or inspect state read-only.
+process through Vetto or inspect state read-only:
 
 ```console
 vetto doctor
+vetto doctor --preflight
 vetto doctor --probe
 
 # Codex CLI, headless smoke test
@@ -75,54 +75,57 @@ On Windows PowerShell, the same commands work. A desktop application that has
 no CLI cannot be wrapped by typing its name into this command: an already
 running GUI process is outside this support claim.
 
-## Read-only rescue checks
+## Transparent shim testing
 
-Rescue never edits the provider state root. Put output in a new directory that
-is outside `.codex`, `.claude`, or another agent state directory.
-
-Codex uses `CODEX_HOME`, then the platform home directory. An explicit root is
-useful for a fixture or a copied state tree:
+Verify that transparent shims intercept commands without breaking terminal workflows:
 
 ```console
-# Current stable release
-vetto rescue --json scan
-vetto rescue --json diagnose "sessions/2026/08/23/session.jsonl"
-vetto rescue --json snapshot "sessions/2026/08/23/session.jsonl" --output "./recovery/session.jsonl"
+# Enable wrapping for target agent
+vetto enable claude
+vetto status
+
+# Verify the shim resolves first in PATH
+which claude
+
+# Run agent normally
+claude --version
+
+# Restore unconfined execution
+vetto disable claude
 ```
 
-Codex scan is index-first and returns at most 50 verified index candidates,
-with `--limit N`, explicit `--all`, and the JSON `discovery` object shipping in
-the current `0.5.15` package. `discovery.complete` describes only the selected
-evidence source; it will not prove that the provider index covers every file under the
-state root. The public result shapes are defined in
-[`docs/schema/rescue-output-v1.schema.json`](schema/rescue-output-v1.schema.json).
+## Workspace snapshot and diff verification
 
-On Windows PowerShell, an explicit Claude root looks like this:
+Test copy-on-write snapshot and rollback capabilities:
 
-```powershell
-vetto rescue --adapter claude --root "$env:USERPROFILE\.claude" --json scan
-vetto rescue --adapter claude --root "$env:USERPROFILE\.claude" --json diagnose "projects/example/session.jsonl"
+```console
+# Inspect changes made by the sandboxed agent
+vetto diff
+
+# Revert workspace to pre-session state
+vetto undo
 ```
 
-The Claude adapter treats provider JSONL as opaque. It does not reconstruct
-provider state or write a vendor database. `snapshot` and `fork` are verified,
-exclusive copies; an existing destination, a symlink, a changing source, or a
-destination inside the source root must fail closed.
+## Audit and failure verification
 
-For a rescue report, record the adapter, operation, exit code, and whether the
-source hash stayed unchanged. Do not use a real session as a public fixture.
-Use a synthetic JSONL fixture with fake names and fake content whenever a
-reproduction needs an input file.
+Inspect audit events and verify fail-closed enforcement:
+
+```console
+# Inspect the most recent session events and violations
+vetto audit --latest
+
+# Verify fail-closed exit code 125 on unauthorized access
+vetto --profile strict --net off --tui none -- cat ~/.ssh/id_rsa
+# Expect exit code 125 (EXIT_FAIL_CLOSED)
+```
 
 ## Report a result safely
 
 Open the closest issue form:
 
-- **Alpha compatibility test** for a protected CLI launch or a desktop/IDE
-  compatibility result;
-- **Alpha recovery test** for `scan`, `diagnose`, `snapshot`, or `fork`;
+- **Compatibility test** for a protected CLI launch or environment test;
 - **Sanitized diagnostic report** for a cross-cutting doctor, environment, or
-  support-level result that does not fit the two forms above.
+  support-level result.
 
 Include only the following, after review:
 
@@ -132,11 +135,7 @@ Include only the following, after review:
   replaced by placeholders;
 - expected result, actual result, exit code, and a short reproduction;
 - sanitized `vetto doctor` output and, when relevant, sanitized `--json` output;
-- the selected support level (`protected`, `rescue-only`, `observe-only`, or
-  `unsupported`) and why that level is appropriate. `unavailable` describes
-  runtime availability and is separate from the `unsupported` support claim;
-- for snapshot/fork, confirmation that the source was unchanged and the
-  destination did not already exist.
+- the selected support level (`protected`, `observe-only`, or `unsupported`).
 
 The sanitizer is best-effort, not a guarantee. Inspect every line before
 posting. In particular, replace paths even when they look harmless:
@@ -149,7 +148,7 @@ https://api.example.test/key   -> <URL>
 
 Never attach or paste any of the following:
 
-- raw Codex/Claude/agent JSONL, SQLite databases, or copied state directories;
+- raw agent internal databases or copied state directories;
 - `auth.json`, `config.toml`, `.env`, shell history, SSH keys, certificates,
   cookies, access tokens, API keys, npm credentials, or cloud credentials;
 - prompts, tool arguments, repository source, diffs, private project names, or
@@ -165,19 +164,16 @@ publish a working exploit while asking for a compatibility review.
 
 One issue should describe one host, one Vetto version, one agent version, and
 one primary failure. Separate unrelated platform results. A result from a
-desktop GUI is not evidence that the corresponding CLI is broken, and a
-rescue-only finding is not evidence that the launch boundary failed.
+desktop GUI is not evidence that the corresponding CLI is broken.
 
-Maintainers may request a synthetic fixture or a second run with an explicit
-root. They should never request raw vendor state or credentials. A missing
-capability, a moving session, an opaque provider schema, and an unsupported
-desktop surface are valid bounded outcomes and should remain visible in the
-report.
+Maintainers may request a synthetic fixture or a second run with explicit
+flags. They should never request raw vendor state or credentials. A missing
+capability, a moving session, and an unsupported desktop surface are valid
+bounded outcomes and should remain visible in the report.
 
-## Alpha gate
+## Release gate
 
-The alpha line advances only after the scoped change has a green cross-platform
+The release line advances only after the scoped change has a green cross-platform
 CI run, focused regression coverage, and a documented limitation. Field tests
 can provide evidence, but they do not turn an unverified provider or desktop
-integration into a support claim. No tester should publish a release or modify
-the provider's state to qualify a result.
+integration into a support claim.

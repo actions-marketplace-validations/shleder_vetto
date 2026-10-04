@@ -6,8 +6,7 @@ from best-effort observation.
 
 1. [Install in two minutes](installing.md)
 2. [Run Codex safely](codex.md)
-3. [Understand the TUI](tui.md)
-4. [Configure profiles](profiles.md)
-5. [Use vetto in CI](ci.md)
-6. [Run multiple agents](multi-agent.md)
-7. [Debug blocked operations](debugging.md)
+3. [Configure profiles](profiles.md)
+4. [Use vetto in CI](ci.md)
+5. [Integrate with Model Context Protocol](mcp.md)
+6. [Debug blocked operations](debugging.md)

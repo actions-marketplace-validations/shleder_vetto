@@ -4,7 +4,7 @@ When running under a `vetto` sandboxed session, the supervisor exports the follo
 
 - `VETTO_SANDBOX=1`
 - `VETTO_SESSION_ID=<uuid>`
-- `VETTO_TIER=<full|fs-only|macos-seatbelt|windows-sandbox>`
+- `VETTO_TIER=<full|fs-only|seccomp|macos-seatbelt>`
 - `VETTO_PROFILE=<profile-name>`
 
 ## `vetto shell-env`

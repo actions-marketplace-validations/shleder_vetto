@@ -17,13 +17,13 @@
   <a href="docs/README.de.md">Deutsch</a>
 </p>
 
-Rootless, daemon-less kernel-level sandbox and policy enforcement runtime for AI coding CLI agents (**Claude Code**, **OpenAI Codex**, **Cursor**, **OpenCode**, **Aider**, **Antigravity**, **OMP**, **ZCode**, **Kimi**, **Grok**). Vetto injects immutable security boundaries directly between `fork()` and `execve()` with sub-4ms startup latency and zero Docker overhead.
+Vetto is an unprivileged sandbox for AI coding CLI agents such as Claude Code, OpenAI Codex, Cursor, OpenCode, and Aider. It isolates filesystem access, network sockets, and child processes between `fork()` and `execve()` using native kernel facilities on Linux and macOS without running a background daemon or requiring root privileges.
 
 ---
 
-## Proof Before Promises
+## Kernel boundary enforcement
 
-Autonomous agents execute non-deterministic code. Untrusted dependency hooks, prompt injections, or hallucinated bash commands can compromise host credentials (`~/.ssh`, `~/.aws`, `.env`) or leak runaway background servers. Under Vetto, unauthorized system calls are blocked deterministically:
+AI coding agents run generated shell commands and build scripts. If an agent tries to read private credentials, open raw network sockets, or spawn untracked background processes, Vetto blocks the operation at the kernel layer:
 
 ```text
 > Reading ~/.ssh/id_rsa...         BLOCKED (secret mask, EACCES)
@@ -31,9 +31,9 @@ Autonomous agents execute non-deterministic code. Untrusted dependency hooks, pr
 > Spawning detached daemon...       TERMINATED (process tree extinction, exit 125)
 ```
 
-### Fail-Closed Contract (Exit 125)
+### Fail-closed execution (exit 125)
 
-If an isolation boundary is violated or if required kernel primitives cannot be enforced, execution is terminated immediately with **exit code 125**. Descendant process trees and orphaned subprocesses are reaped synchronously via cgroups v2 `cgroup.kill`. Guarantees that the underlying OS cannot enforce are reported as unsupported; security is never silently downgraded.
+When an agent violates policy or when the host kernel lacks a required isolation mechanism, Vetto exits immediately with code 125. Descendant processes and background workers are terminated synchronously through cgroups v2 `cgroup.kill`. If the host operating system cannot enforce a configured rule, Vetto reports the missing capability and halts instead of running with reduced security.
 
 ---
 
@@ -60,116 +60,87 @@ Or via standalone curl installer:
 curl -fsSL https://raw.githubusercontent.com/shleder/vetto/main/install.sh | sh
 ```
 
-### 2. Wrap All AI Coding Agents in 5 Seconds (Primary Adoption)
+### 2. Transparent agent wrapping
 
-Wrap every installed AI coding agent on your system in a single command without modifying configs or aliases:
+Wrap installed AI coding agents without modifying shell configurations or aliases:
 
 ```bash
 vetto enable --all
 ```
 
-Vetto scans `$PATH` for recognized coding agent executables (`claude`, `codex`, `cursor`, `opencode`, `aider`, `antigravity`, `omp`, `zcode`, `kimi`, `grok`, and 15 others), discovers their real binaries, and installs non-destructive interception shims into `~/.vetto/shims`.
+Vetto searches `$PATH` for supported agent binaries (`claude`, `codex`, `cursor`, `opencode`, `aider`, `antigravity`, and others) and places interceptor shims in `~/.vetto/shims`.
 
-Once enabled, invoke your agent normally. Execution is confined at the kernel LSM boundary with zero friction:
-
-```bash
-claude                # runs normally, fully sandboxed at the kernel boundary
-cursor                # launched with protected credentials and scoped network
-```
-
-#### Selective Single-Agent Management
-
-To selectively wrap or unwrap specific agents instead of all:
+After enabling, run the agent normally:
 
 ```bash
-vetto enable claude    # wrap only claude
-vetto disable claude   # unwrap and restore native unconfined execution
+claude                # runs sandboxed under kernel LSM policies
+cursor                # runs with protected credentials and restricted network egress
 ```
 
-#### The Containerless Advantage over Docker
+To manage individual agents:
 
-AI coding agents require real compilers, local package managers, and low latency. Running them inside Docker introduces friction that Vetto completely eliminates:
+```bash
+vetto enable claude    # wrap claude only
+vetto disable claude   # restore direct execution without sandboxing
+```
 
-| Dimension | Docker / DinD | Vetto Containerless Runtime |
+### Comparison with Docker
+
+AI coding agents need local compilers, existing package caches, and interactive terminal handling. Running them inside Docker requires heavy container setup, whereas Vetto applies kernel sandboxing directly to host processes:
+
+| Dimension | Docker / DinD | Vetto |
 | :--- | :--- | :--- |
-| **Startup Overhead** | 500ms–2000ms container creation | **<4ms** cold start between `fork()` and `execve()` |
-| **Background Footprint** | `dockerd` daemon consuming 500MB+ RAM | **0MB** in RAM (daemon-less, pure kernel enforcement) |
-| **Privilege Model** | Requires `root` or `docker` group (escalation risk) | **Rootless** unprivileged Landlock LSM + cgroups v2 |
-| **Host Toolchains** | Requires rebuilding massive images with compilers | **Native**: direct access to host `cargo`, `npm`, `pip`, `uv` |
-| **Package Caches** | Isolated or slow volume bind mounts | **Host speed**: native package caches preserved |
-| **Process Cleanup** | Orphaned containers and leaked host processes | **Synchronous extinction** via `cgroups v2` (`cgroup.kill`) |
+| Startup overhead | 500ms to 2000ms container creation | Under 4ms cold start between `fork()` and `execve()` |
+| Memory footprint | Background `dockerd` process | 0 MB background memory (no daemon) |
+| Privilege model | Requires `root` or `docker` group membership | Unprivileged user namespaces, Landlock LSM, and cgroups v2 |
+| Toolchains | Requires rebuilding container images | Direct access to host `cargo`, `npm`, `pip`, and `uv` |
+| Package caches | Volume mounts or repeated downloads | Reuses host package caches directly |
+| Process cleanup | Can leave orphaned containers | Synchronous process tree termination via cgroups v2 `cgroup.kill` |
 
-### 3. Direct Execution & Disposable Eval
+### 3. Direct execution
 
-Execute standalone scripts under strict default isolation:
+Run arbitrary commands or scripts inside the sandbox:
 
 ```bash
 vetto run -- python script.py
 vetto -- npm test
 ```
 
-Safely evaluate code snippets with cgroups v2 memory ceilings and monotonic hardware timeouts:
+### 4. Workspace snapshot rollback
+
+Vetto takes a copy-on-write snapshot of the project directory before the agent starts work:
 
 ```bash
-vetto eval --python -c "print(1 + 1)" --timeout 5 --memory 256
+vetto diff        # show files modified, added, or removed by the agent
+vetto undo        # revert the workspace back to its pre-execution state
 ```
 
-### 4. Instant Snapshot Rollback
+### 5. Host diagnostics
 
-Vetto takes automatic, copy-on-write workspace snapshots before agent execution:
-
-```bash
-vetto diff        # inspect exact file modifications made by the agent
-vetto undo        # roll back workspace to the pre-execution clean state
-```
-
-### 5. Diagnostics & Preflight Probe
-
-Audit host kernel isolation capabilities and container limits:
+Check which kernel isolation features are available on the current machine:
 
 ```bash
-vetto doctor --preflight          # audit Landlock ABI, namespaces, and cgroups v2
-vetto doctor --preflight --json   # machine-readable capability payload
-```
-
-### 6. Multi-Agent Fleet Concurrency (`vetto fleet`)
-
-Orchestrate swarms of isolated AI coding agents with fair-share cgroups v2 resource quotas, pairwise namespace isolation, and ephemeral CoW branches:
-
-```bash
-# Inspect fleet capacity, fair-share limits, and active worker scopes
-vetto fleet status
-vetto fleet status --json
-
-# Concurrently spawn isolated worker agents with fair-share cgroups
-vetto fleet spawn claude --count 3
-vetto fleet spawn --count 4 -- sh -c "python agent.py"
-
-# Run automated pairwise isolation verification across N workers (28 checks for N=8)
-vetto fleet verify --workers 8 --json
-
-# Terminate worker or clean up entire fleet swarm
-vetto fleet kill agent-01
-vetto fleet kill --all
+vetto doctor --preflight          # inspect Landlock ABI, namespaces, and cgroups v2
+vetto doctor --preflight --json   # output diagnostic report as JSON
 ```
 
 ---
 
-## CI/CD: Zero-Docker GitHub Actions Integration
+## GitHub Actions integration
 
-Running AI coding agents in CI pipelines commonly relies on Docker-in-Docker (DinD). DinD introduces 30–120 second base image pull delays, requires insecure `--privileged` flags that expose the host runner, and lacks native support on macOS and Windows runner VMs.
+Running AI coding agents in CI usually involves Docker-in-Docker, which adds image pull overhead, often requires privileged runners, and is not portable across non-Linux VMs.
 
-Vetto provides a standard, zero-Docker replacement published on GitHub Marketplace (`shleder/vetto`):
+The `shleder/vetto` action runs agents on standard GitHub Actions runners without Docker:
 
-- **Sub-4ms Cold Start**: Pre-compiled binaries (<15MB) with SHA-256 integrity verification install in under 1 second without container image pulls.
-- **Rootless Kernel Sandboxing**: Enforces Landlock LSM and cgroups v2 boundaries on standard Ubuntu runners without `--privileged` flags or root access.
-- **Host Toolchain & Cache Access**: Directly executes against `$GITHUB_WORKSPACE` and runner caching layers (`actions/cache`, `actions/setup-node`, `actions/setup-python`), avoiding costly container rebuilds.
-- **Deterministic Process Reaping**: Eliminates orphaned background workers and fork-bombs via cgroups v2 (`cgroup.kill`).
-- **Cross-Platform Support**: Operates consistently across `ubuntu-latest` (Landlock LSM), `macos-latest` (Seatbelt SBPL), and `windows-latest` (Job Objects).
+- Cold start under 4ms with standalone binary verification.
+- Rootless Landlock LSM and cgroups v2 enforcement on standard Ubuntu runners.
+- Direct access to `$GITHUB_WORKSPACE` and action caches (`actions/cache`, `actions/setup-node`, `actions/setup-python`).
+- Clean teardown of all subprocesses via `cgroup.kill`.
+- Multi-platform support on Ubuntu, macOS, and Windows runners.
 
-### Option A: Universal Marketplace Action (`shleder/vetto`)
+### Option A: Run a sandboxed agent step
 
-Execute a sandboxed agent command with automatic preset allowlisting, audit logs, and CodeQL SARIF reporting:
+Run an agent with policy allowlisting and optional SARIF audit output:
 
 ```yaml
 name: Agent Security Gate
@@ -180,7 +151,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write # Required for upload-sarif
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -196,9 +167,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Option B: Setup Mode for Multi-Step Workflows
+### Option B: Install Vetto for multi-step workflows
 
-When `command` is omitted, `shleder/vetto` verifies and installs the standalone `vetto` binary into `$GITHUB_PATH`:
+Omit the `command` input to install the `vetto` binary into `$GITHUB_PATH`:
 
 ```yaml
       - name: Setup Vetto
@@ -214,78 +185,50 @@ When `command` is omitted, `shleder/vetto` verifies and installs the standalone 
 
 ---
 
-## Interactive TUI Mission Control
+## Terminal handling and statusline
 
-Launch the interactive Mission Control dashboard by running `vetto` in any interactive terminal:
+Interactive agents such as Claude Code and Codex manage their own terminal state (PTY). Vetto preserves direct terminal input and output while showing sandbox status:
 
-```bash
-vetto
-```
-
-Features live AI agent fleet detection, one-touch PATH-shim toggling, real-time VFS secret matrix auditing, kernel preflight diagnostics, zero-loss snapshot rollbacks, real-time policy interception streaming (`[5: SECURITY STREAM]`), and multi-agent swarm orchestration (`[6: FLEET SWARM]`).
-
-For keybindings, detailed views, and theme configuration, see the [Mission Control TUI Guide](docs/tui.md).
+- **Statusline overlay (`--tui=statusline`)**: Default for non-interactive commands. Shows active filesystem and network policies in the bottom line of the terminal.
+- **Headless mode (`--tui=none` / `--ci`)**: Disables terminal UI rendering. Use this flag in CI environments, shell scripts, or when piping standard streams.
 
 ---
 
-## Platform Guarantees
+## Platform support
 
-Vetto enforces an immutable three-tier boundary model based on kernel capabilities available to unprivileged userspace:
+Vetto uses the unprivileged isolation features provided by each operating system:
 
-| Platform / Tier | Filesystem Isolation | Network Isolation | Process Lifecycle | Status |
+| Platform | Filesystem isolation | Network isolation | Process lifecycle | Tier |
 | :--- | :--- | :--- | :--- | :--- |
-| **Linux (Native)**<br>Tier 1 | **Landlock LSM (ABI 1–6)**<br>Inode-level VFS masking over `~/.ssh`, `~/.aws`, `.env` (mode 0000 tmpfs) | **Network Namespaces (`CLONE_NEWNET`)**<br>Loopback isolation + local TCP/TLS broker with SNI inspection | **PID Namespaces (`CLONE_NEWPID`)**<br>Deterministic process tree extinction via `cgroups v2` | Production |
-| **Linux (WSL2)**<br>Tier 1 | **Landlock LSM via WSL2 kernel**<br>Full inode restriction | **Network Namespaces inside VM**<br>Isolated broker egress | **PID Namespaces + `/proc` sweep**<br>Full tree extinction | Production (Recommended for Windows) |
-| **macOS (Darwin)**<br>Tier 2 | **Seatbelt (`libsandbox.1.dylib`)**<br>Write confinement to `$PROJECT` and `/tmp` | **Network Lockdown**<br>`--net=off` (mDNS blocked) & `--net=allowlist` (local proxy)* | **Process Group Sweeping**<br>`pidfd` / kqueue watchdog supervision | Standard (Requires Full Disk Access for `~/Documents`) |
-| **Windows Native**<br>Tier 3 | **AppContainer & LPAC**<br>DACL token restriction | **Capability Lockdown**<br>Restricted network SIDs | **Job Objects**<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Guardrail (Use WSL2 for Tier 1 kernel namespaces) |
+| **Linux (Native)** | **Landlock LSM (ABI 1 to 6)**<br>Tmpfs masking over `~/.ssh`, `~/.aws`, `.env` | **Network namespaces (`CLONE_NEWNET`)**<br>Loopback isolation with local TCP/TLS proxy | **PID namespaces (`CLONE_NEWPID`)**<br>Process tree cleanup via cgroups v2 `cgroup.kill` | Tier 1 (Full) |
+| **Linux (WSL2)** | **Landlock LSM via WSL2 kernel**<br>Path access restrictions | **Network namespaces in VM**<br>Filtered outbound connections | **PID namespaces and `/proc` sweep**<br>Full tree termination | Tier 1 (Full) |
+| **macOS (Darwin)** | **Seatbelt (`libsandbox.1.dylib`)**<br>Restricts writes to project directory and `/tmp` | **Network restriction**<br>`--net=off` blocks IP egress; `--net=allowlist` uses local loopback proxy | **Process supervision**<br>Watchdog tracking child process groups | Tier 2 (Target Tier 1.5) |
+| **Windows Native** | **AppContainer and LPAC**<br>Token-based access control | **Capability restrictions**<br>Restricted network SIDs | **Job Objects**<br>`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | Tier 3 (Guardrail) |
 
-\* **macOS Tier 2 Seatbelt Enforcement**: Darwin lacks unprivileged network namespaces (`CLONE_NEWNET`). Vetto enforces strict filesystem write isolation via native Seatbelt (`libsandbox.1.dylib`) and masks host secrets. `--net=off` blocks all IP egress and IPC to `mDNSResponder`. `--net=allowlist` runs an ephemeral in-process loopback proxy on `127.0.0.1:<port>` with Seatbelt confining TCP egress strictly to that port. Read isolation remains broad due to Apple's dyld linker regression on fragmented profiles (use Linux VM / OrbStack for hermetic read-isolation).
+### Note on macOS Seatbelt
+
+macOS does not offer unprivileged network namespaces. Vetto uses Apple's native Seatbelt framework (`libsandbox.1.dylib`) to restrict filesystem write access and protect user credentials. When `--net=off` is set, network traffic and IPC to `mDNSResponder` are blocked. When `--net=allowlist` is set, Vetto runs an ephemeral loopback proxy on `127.0.0.1` and restricts outgoing TCP traffic to that port. Read restrictions on macOS are scoped broadly to account for system dyld cache behavior.
 
 ---
 
-## Multi-Agent Compatibility Roster
+## Supported AI agents
 
-Vetto includes dedicated out-of-the-box profiles (`profiles/agents/*.toml`), zero-config network allowlists, dynamic package manager cache mounts (`npm`, `uv`, `bun`), and Computer Use display pass-through for 28 leading agent runtimes:
+Vetto includes pre-configured profiles for more than 25 AI coding tools. Each profile scopes network egress to known provider endpoints and protects host credentials while keeping package caches available:
 
-| Agent | Binary / Preset | Automatic Network Presets | Custom Plugins & Caches |
+| Agent | Binary / Preset | Network endpoints | Protected configs and caches |
 | :--- | :--- | :--- | :--- |
 | **Claude Code** | `claude` | `api.anthropic.com`, `claude.ai` | `~/.claude`, `~/.config/claude`, plugins |
 | **OpenAI Codex** | `codex` | `api.openai.com`, ChatGPT OAuth | `~/.codex`, `~/.config/codex`, plugins |
-| **OpenCode** | `opencode` | Dynamic JSONC endpoints (AIHubMix, Nvidia) | `~/.local/share/opencode`, `~/.config/opencode` |
-| **Antigravity** | `agy`, `antigravity` | Google APIs, Google CDN, telemetry | `~/.gemini/antigravity`, plugins, skills |
-| **OMP** | `omp` | `omp.sh`, Anthropic, OpenAI, Google, OpenRouter | `~/.config/omp`, `~/.omp`, project local `.omp` |
-| **ZCode** | `zcode` | `z.ai`, `api.z.ai`, `glm.z.ai`, OpenAI | `~/.zcode`, `~/.config/zcode` |
-| **Kimi Code** | `kimi` | `code.kimi.com`, `api.moonshot.cn`, `api.moonshot.ai` | `~/.kimi`, `~/.config/kimi` |
-| **Grok Build** | `grok` | `x.ai`, `api.x.ai`, `grok.com` | `~/.grok`, `~/.config/grok` |
 | **Cursor** | `cursor` | Cursor backend, extension marketplace | VS Code IPC sockets, `~/.cursor` |
-| **Aider** | `aider` | Configured LLM provider endpoints | Git repo root, history caches |
-| **Cline** | `cline` | `api.cline.bot`, `data.cline.bot` | VS Code extension host, browser caches |
-| **Windsurf** | `windsurf` | `api.codeium.com`, `windsurf.codeium.com` | `~/.windsurf`, Cascade state |
-| **Goose** | `goose` | Block API, Anthropic, Databricks | `~/.config/goose`, extensions |
-| **OpenHands** | `openhands` | Configured model endpoints | Docker-less local execution |
-| **Devin** | `devin` | `api.devin.ai`, `cognition.ai` | `~/.devin`, `~/.config/devin` |
-| **GitHub Copilot** | `copilot` | `api.github.com`, Copilot endpoints | `~/.config/github-copilot` |
-| **Smolagents** | `smolagents` | `huggingface.co`, `hf.co` | `~/.cache/huggingface`, PyTorch caches |
-| **Hermes Agent** | `hermes` | `nousresearch.com`, Together, OpenAI, Anthropic | `~/.hermes`, `~/.config/hermes` |
-| **Kilo Code** | `kilo` | `api.kilo.ai`, OpenAI, Anthropic, OpenRouter | `~/.kilo`, `~/.config/kilo` |
-| **pi** | `pi` | `api.groq.com`, OpenAI, Anthropic, OpenRouter | `~/.pi`, `~/.config/pi` |
-| **Command Code** | `command_code` | `api.cohere.com`, Cohere AI, OpenAI, Anthropic | `~/.command-code`, `~/.config/command-code` |
-| **Freebuff** | `freebuff` | `api.deepseek.com`, OpenAI, Anthropic | `~/.freebuff`, `~/.config/freebuff` |
-| **DeepSeek Harness** | `deepseek_harness` | `api.deepseek.com`, OpenAI, Anthropic | `~/.deepseek`, `~/.config/deepseek` |
-| **Omnigent** | `omnigent` | `api.omnigent.ai`, OpenAI, Anthropic | `~/.omnigent`, `~/.config/omnigent` |
-| **CrewAI** | `crewai` | `app.crewai.com`, `telemetry.crewai.com`, OpenAI, Anthropic, Gemini, Groq | `~/.crewai`, `~/.config/crewai` |
-| **Microsoft AutoGen** | `autogen` | OpenAI, Anthropic, Gemini, Groq, Together, Mistral | `~/.autogen`, `~/.autogenstudio`, `~/.config/autogen` |
-| **Sourcegraph Amp** | `amp` | `ampcode.com`, `sourcegraph.com`, Anthropic, OpenAI | `~/.config/amp`, `~/.local/share/amp` |
+| **Aider** | `aider` | Configured LLM provider endpoints | Git repository root, history caches |
+
+For the complete list of supported agents, network scopes, and path rules, see the [Agent compatibility registry](docs/agents.md).
 
 ---
 
-## Native Framework SDKs
+## Python SDK (`vetto-python`)
 
-Vetto provides unprivileged process containment libraries for multi-agent workflows:
-
-### Python SDK (`vetto-python`)
-
-Drop-in execution wrapper in `sdk/python/`:
+The Python package in `sdk/python/` provides bindings to run sandboxed commands and isolate agent steps:
 
 ```python
 from vetto import VettoSandbox, VettoSecurityError, VettoTimeoutError
@@ -297,11 +240,13 @@ sandbox = VettoSandbox(
     timeout_secs=60,
 )
 
-# Run tool command fail-closed (raises VettoSecurityError on Exit 125)
+# Runs command inside the sandbox. Raises VettoSecurityError on policy violation (exit 125).
 result = sandbox.run(["pytest", "tests/"])
 ```
 
-Includes `VettoToolNode` for LangGraph agent graph isolation:
+### LangGraph integration
+
+The package includes `VettoToolNode` to isolate tool execution inside LangGraph workflows:
 
 ```python
 from vetto.langgraph import VettoToolNode
@@ -313,68 +258,52 @@ tool_node = VettoToolNode(
 )
 ```
 
-### TypeScript SDK (`@vetto/sdk`)
-
-Drop-in execution wrapper in `sdk/typescript/`:
-
-```typescript
-import { VettoSandbox, VettoSecurityError } from '@vetto/sdk';
-
-const sandbox = new VettoSandbox({
-  projectDir: process.cwd(),
-  network: 'allowlist:api.anthropic.com',
-  timeoutSecs: 30,
-});
-
-const result = await sandbox.run(['npm', 'test']);
-```
-
 ---
 
-## Active Upstream Integrations & Ecosystem PRs
+## Upstream integrations
 
-Vetto engineering maintains native upstream isolation adapters across open-source AI agent frameworks, replacing heavy Docker daemon dependencies and unprotected subprocesses with unprivileged kernel LSM fencing:
+Vetto provides containerless process isolation pull requests for several open-source agent frameworks:
 
-| Framework | Target Issue | Integration PR | Isolation Architecture |
+| Framework | Issue | Pull request | Details |
 | :--- | :--- | :--- | :--- |
-| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | `VettoExecTool` and `VettoPythonTool` unprivileged process isolation with workspace boundary fencing and fail-closed timeout cleanup. |
-| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `VettoCommandLineCodeExecutor` containerless sandbox in `autogen-ext` with automatic preference over unsandboxed local execution. |
-| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | Worker-safe memory containment and catalog heap threshold rotation under `--max-old-space-size`. |
-| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` with monotonic wall-clock timeout and process group extinction (`os.killpg(SIGKILL)`). |
-| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | Pre-flight DNS watchdog blocking loopback, RFC 1918, CGNAT, and AWS/GCP instance metadata. |
-| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` containerless backend with dynamic Linux Landlock ABI (1–6) detection and rootless path bounding. |
-| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` containerless process fencer with `PR_SET_PDEATHSIG`, subreaper, and namespace sandboxing. |
-| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | ACP local shell execution policy (`GOOSE_ACP_CLIENT_TERMINAL`) and automatic sandbox confinement detection. |
-| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Multi-tier terminal sandbox execution and secret masking (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
-| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | Credential egress scrubbing across 8 surfaces and workspace tombstones (`splitAuxModelSelector`). |
-| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | Session resume CLI flags and shell-metacharacter validation in Tauri backend. |
+| **CrewAI** | [#7830](https://github.com/crewAIInc/crewAI/issues/7830) | [PR #7831](https://github.com/crewAIInc/crewAI/pull/7831) | `VettoExecTool` and `VettoPythonTool` unprivileged process isolation with workspace boundary fencing and timeout handling. |
+| **Microsoft AutoGen** | [#8298](https://github.com/microsoft/autogen/issues/8298) | [PR #8299](https://github.com/microsoft/autogen/pull/8299) | `VettoCommandLineCodeExecutor` containerless sandbox in `autogen-ext`. |
+| **OpenClaw** | [#160522](https://github.com/openclaw/openclaw/issues/160522) | [PR #161125](https://github.com/openclaw/openclaw/pull/161125) | Memory containment and heap threshold controls under `--max-old-space-size`. |
+| **Hugging Face smolagents** | [#2845](https://github.com/huggingface/smolagents/issues/2845) | [PR #2860](https://github.com/huggingface/smolagents/pull/2860) | `ProcessIsolatedExecutor` with wall-clock timeout and process group termination. |
+| **browser-use** | [#5879](https://github.com/browser-use/browser-use/issues/5879) | [PR #5929](https://github.com/browser-use/browser-use/pull/5929) | DNS preflight check blocking loopback, RFC 1918, CGNAT, and cloud metadata addresses. |
+| **OpenHands** | [#4266](https://github.com/OpenHands/software-agent-sdk/issues/4266) | [PR #5344](https://github.com/OpenHands/software-agent-sdk/pull/5344) | `LandlockWorkspace` backend using Linux Landlock ABI 1 to 6 detection. |
+| **Block goose** | [#12522](https://github.com/aaif-goose/goose/issues/12522) | [PR #12545](https://github.com/aaif-goose/goose/pull/12545) | `SubprocessExt` containerless process fencer with subreaper tracking and namespace sandboxing. |
+| **Block goose (ACP)** | [#12513](https://github.com/aaif-goose/goose/issues/12513) | [PR #12563](https://github.com/aaif-goose/goose/pull/12563) | Shell execution policy (`GOOSE_ACP_CLIENT_TERMINAL`) with sandbox detection. |
+| **Cline** | [#14544](https://github.com/cline/cline/issues/14544) | [PR #14583](https://github.com/cline/cline/pull/14583) | Terminal sandbox execution and secret masking (`~/.ssh`, `.env`) in `ClineIgnoreController`. |
+| **Qwen Code** | [#12856](https://github.com/QwenLM/qwen-code/issues/12856) | [PR #12953](https://github.com/QwenLM/qwen-code/pull/12953) | Credential egress scrubbing and workspace protection. |
+| **Claude Code History Viewer** | [#509](https://github.com/jhlee0409/claude-code-history-viewer/issues/509) | [PR #595](https://github.com/jhlee0409/claude-code-history-viewer/pull/595) | Session resume flags and input validation. |
 
 ---
 
-## Binary Integrity & Attestation
+## Verification and integrity
 
 Releases are built via automated GitHub Actions workflows with public cryptographic verification:
 
-- **SLSA Level 3 Provenance**: In-toto build attestations generated for all release binaries.
+- **SLSA Level 3 Provenance**: In-toto build attestations generated for release binaries.
 - **Minisign Signatures**: Published with each release archive under public key `75ECEC9B5080C590`.
-- **Cryptographic Checksums**: Standalone SHA-256 hashes generated and verified during installation.
+- **SHA-256 Checksums**: Verified automatically by installation scripts.
 
 ---
 
 ## Documentation
 
-- [Platform Backends & Boundary Specs](docs/platform-backends.md)
-- [Agent Presets & Registry](docs/agents.md)
-- [Threat Model & Security Assumptions](docs/threat-model.md)
-- [Diagnostic Preflight Verification](docs/architecture/verify-ng.md)
-- [Exit Codes & Failure Modes](docs/exit-codes.md)
-- [Vulnerability Reporting (SECURITY.md)](SECURITY.md)
+- [Platform backends and isolation specs](docs/platform-backends.md)
+- [Agent presets and configuration](docs/agents.md)
+- [Threat model and security boundaries](docs/threat-model.md)
+- [Preflight diagnostic checks](docs/architecture/verify-ng.md)
+- [Exit codes and failure modes](docs/exit-codes.md)
+- [Security policy and vulnerability reporting](SECURITY.md)
 
 ---
 
 ## Contributing
 
-Contributions are welcome. Please branch from `main`. All boundary assertions must include corresponding kernel validation test cases. Pull requests are validated against Linux, macOS, and Windows kernel runners in GitHub Actions CI.
+Contributions are welcome. Please open pull requests against the `main` branch. All boundary assertions must include corresponding validation tests. Pull requests run against Linux, macOS, and Windows runners in GitHub Actions CI.
 
 ---
 

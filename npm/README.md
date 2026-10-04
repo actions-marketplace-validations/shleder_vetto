@@ -7,12 +7,12 @@ npm install --global @shledery/vetto
 vetto doctor
 ```
 
-The package includes multi-agent session rescue and repair:
+Transparent agent wrapping:
 
 ```bash
-vetto rescue --adapter claude --json scan
-vetto rescue --adapter codex diagnose ~/.codex/sessions/.../rollout.jsonl
-vetto rescue snapshot ~/.claude/projects/.../session.jsonl --output ./recovered.jsonl
+vetto enable claude    # wrap claude with kernel sandbox shims
+claude                # runs sandboxed under Landlock LSM policies
+vetto status          # inspect active shims and sessions
 ```
 
 `vetto` ships the native `vetto` executable in the package. It does
