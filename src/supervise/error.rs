@@ -70,10 +70,7 @@ impl SuperviseError {
 
 impl From<crate::sandbox::production::ProductionError> for SuperviseError {
     fn from(err: crate::sandbox::production::ProductionError) -> Self {
-        Self::ProcessSpawnFailed(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            err.to_string(),
-        ))
+        Self::ProcessSpawnFailed(std::io::Error::other(err.to_string()))
     }
 }
 
@@ -106,20 +103,14 @@ mod tests {
         );
 
         assert_eq!(
-            SuperviseError::StdioAllocationFailed(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "pty failure"
-            ))
-            .exit_code(),
+            SuperviseError::StdioAllocationFailed(std::io::Error::other("pty failure"))
+                .exit_code(),
             125
         );
 
         assert_eq!(
-            SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "spawn failed"
-            ))
-            .exit_code(),
+            SuperviseError::ProcessSpawnFailed(std::io::Error::other("spawn failed"))
+                .exit_code(),
             125
         );
 

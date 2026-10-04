@@ -267,12 +267,12 @@ pub fn preflight_boundary_checks(
     }
 
     // 2. Audit environment variables for leaks (INV-27)
-    for (key, _val) in env {
-        if crate::sandbox::envfilter::is_hard_denied(key) {
-            if !policy.environment.allows(std::ffi::OsStr::new(key)) {
-                eprintln!("vetto: preflight: detected leaked secret in environment: {key}");
-                leak_count += 1;
-            }
+    for key in env.keys() {
+        if crate::sandbox::envfilter::is_hard_denied(key)
+            && !policy.environment.allows(std::ffi::OsStr::new(key))
+        {
+            eprintln!("vetto: preflight: detected leaked secret in environment: {key}");
+            leak_count += 1;
         }
     }
 

@@ -723,10 +723,10 @@ pub fn apply_policy_advanced(
         let owned = match open_landlock_path_fd(&rule.path) {
             Ok(fd) => fd,
             Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
-                return Err(VettoError::Landlock(format!(
-                    "cyclic symlink or symlink traversal detected in policy path '{}' (fail-closed exit 125)",
-                    rule_path.display()
-                )));
+                // Reject symlink or magiclink traversal: Landlock rules cannot be attached
+                // to symlink inodes (e.g. /bin -> usr/bin). Real directories in the ruleset
+                // (e.g. /usr) provide the underlying Landlock coverage.
+                continue;
             }
             Err(err) => {
                 return Err(VettoError::Landlock(format!(

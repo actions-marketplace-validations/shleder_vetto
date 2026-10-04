@@ -38,7 +38,7 @@ fn normalize_path(raw_path: &str) -> String {
     } else {
         s
     };
-    let s = s.trim_start_matches(|c| c == '/' || c == '\\');
+    let s = s.trim_start_matches(['/', '\\']);
     let normalized = s.replace('\\', "/");
 
     if normalized.is_empty() {

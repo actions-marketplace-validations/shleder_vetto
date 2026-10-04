@@ -664,7 +664,7 @@ impl LayeredPolicyLoader {
             }
             merge_layer(
                 &base,
-                &base_profile,
+                base_profile,
                 &context,
                 &mut stack,
                 &mut merged,

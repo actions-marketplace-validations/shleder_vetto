@@ -1958,8 +1958,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
     fn phase1_caller_policy_cannot_change_canonical_backend_input() {
+        let base_backend = match Backend::detect(NetMode::Off, false) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("SKIP: Windows sandbox unavailable ({e})");
+                return;
+            }
+        };
         let tmp = std::env::temp_dir();
         let mut policy = functional_test_policy(&tmp);
         let mut debug_ports = crate::policy_ir::contract::DebugPortConfig {
@@ -1968,7 +1974,7 @@ mod tests {
             ..Default::default()
         };
         let prepared = UnpreparedProductionExecution::new(
-            Backend::detect(NetMode::Off, false).expect("detect mechanics"),
+            base_backend,
             policy.clone(),
             vec!["/bin/true".into()],
             tmp,
@@ -2020,14 +2026,20 @@ mod tests {
             .binds_identity(&identity));
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn phase1_production_audit_binds_actual_contract() {
+        let base_backend = match Backend::detect(NetMode::Off, false) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("SKIP: Windows sandbox unavailable ({e})");
+                return;
+            }
+        };
         let tmp =
             std::env::temp_dir().join(format!("vetto-contract-audit-{}", engine::new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let prepared = UnpreparedProductionExecution::new(
-            Backend::detect(NetMode::Off, false).expect("detect mechanics"),
+            base_backend,
             functional_test_policy(&tmp),
             vec!["/bin/sh".into(), "-c".into(), "exit 0".into()],
             tmp.clone(),

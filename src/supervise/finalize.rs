@@ -11,7 +11,6 @@ use crate::audit::{self, VerdictEngine, VerdictStatus};
 use crate::config::RunConfig;
 use crate::events::{self, Event};
 use crate::exit_codes;
-use crate::policy;
 use crate::proctree::{ExtinctionVerifier, PlatformExtinctionTier};
 use crate::report;
 use crate::rescue;
@@ -80,7 +79,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
     // 2. Mathematical Process Tree Extinction Theorem (§12.1, INV-27)
     #[cfg(target_os = "linux")]
     let extinction_platform = match ctx.session.tier {
-        Some(policy::Tier::Full) => PlatformExtinctionTier::LinuxTier1Proven,
+        Some(crate::policy::Tier::Full) => PlatformExtinctionTier::LinuxTier1Proven,
         _ => PlatformExtinctionTier::LinuxTier1Proven,
     };
     #[cfg(target_os = "macos")]
@@ -98,21 +97,21 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
 
     if let Some(ref prod_res) = ctx.lifecycle.production_result {
         if let Some(ref v) = prod_res.verdict {
-            if v.exit_code == exit_codes::EXIT_FAIL_CLOSED || v.status == VerdictStatus::Fail {
-                if v.reason.contains("extinction") || v.reason.contains("Lifecycle breach") {
-                    extinction_breach_detected = true;
-                    extinction_reason = v.reason.clone();
-                    if let Some(pos) = v.reason.find("Lifecycle breach: ") {
-                        let after = &v.reason[pos + "Lifecycle breach: ".len()..];
-                        if let Some(end) = after.find(" descendant") {
-                            if let Ok(count) = after[..end].trim().parse::<usize>() {
-                                surviving_processes = count;
-                            }
+            if (v.exit_code == exit_codes::EXIT_FAIL_CLOSED || v.status == VerdictStatus::Fail)
+                && (v.reason.contains("extinction") || v.reason.contains("Lifecycle breach"))
+            {
+                extinction_breach_detected = true;
+                extinction_reason = v.reason.clone();
+                if let Some(pos) = v.reason.find("Lifecycle breach: ") {
+                    let after = &v.reason[pos + "Lifecycle breach: ".len()..];
+                    if let Some(end) = after.find(" descendant") {
+                        if let Ok(count) = after[..end].trim().parse::<usize>() {
+                            surviving_processes = count;
                         }
                     }
-                    if surviving_processes == 0 {
-                        surviving_processes = 1;
-                    }
+                }
+                if surviving_processes == 0 {
+                    surviving_processes = 1;
                 }
             }
         }

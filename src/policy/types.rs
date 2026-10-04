@@ -126,11 +126,7 @@ pub fn parse_bytes_value(input: &str) -> Option<u64> {
 /// Parse byte amount supporting decimal suffixes (k/m/g/kb/mb/gb) and binary suffixes (kib/mib/gib).
 /// Returns None on unparseable input or u64 multiplication overflow.
 pub fn parse_byte_size(value: &str) -> Option<u64> {
-    crate::policy::units::parse_bytes_with_standard(
-        value,
-        crate::policy::units::UnitStandard::SiDecimal,
-    )
-    .ok()
+    crate::policy::units::parse_bytes(value).ok()
 }
 
 /// Format byte count into human-readable string representation (B, KiB, MiB, GiB).

@@ -106,7 +106,10 @@ fn detect_tier(binary: &Path) -> Option<Tier> {
 
 /// Run one sandbox session to completion and panic unless it succeeds.
 fn run_session(binary: &Path, tier: Tier) {
+    let bench_dir = std::env::temp_dir().join("vetto-e2e-bench-project");
+    let _ = std::fs::create_dir_all(&bench_dir);
     let output = Command::new(binary)
+        .current_dir(&bench_dir)
         .args(SESSION_ARGS)
         .env("VETTO_FORCE_TIER", tier.force_value())
         .env("VETTO_ALLOW_FORCE_TIER", "1")

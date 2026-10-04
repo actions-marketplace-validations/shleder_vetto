@@ -46,10 +46,12 @@ pub enum ParseBytesError {
 
 /// Parse a human-readable byte quantity string into an exact byte count (`u64`).
 ///
-/// Defaults to [`UnitStandard::IecBinary`], treating `kb`, `mb`, `gb`, `tb`
-/// as 1024-based binary multipliers in line with Linux cgroup conventions.
+/// Defaults to [`UnitStandard::SiDecimal`], treating two-letter suffixes
+/// `kb`, `mb`, `gb`, `tb` as decimal (1000-based) multipliers, three-letter
+/// suffixes `kib`, `mib`, `gib`, `tib` as binary (1024-based) multipliers,
+/// and single-letter suffixes `k`, `m`, `g`, `t` as binary (1024-based) multipliers.
 pub fn parse_bytes(input: &str) -> Result<u64, ParseBytesError> {
-    parse_bytes_with_standard(input, UnitStandard::IecBinary)
+    parse_bytes_with_standard(input, UnitStandard::SiDecimal)
 }
 
 /// Parse a byte quantity string into bytes using the specified unit standard.
@@ -163,13 +165,14 @@ pub fn parse_bytes_with_standard(
 /// Parse a cgroup memory specification (e.g. `memory.max` or `memory.swap.max`).
 ///
 /// Treats `"max"`, `"-1"`, and empty/whitespace inputs as unlimited (`Ok(None)`).
-/// All other values are delegated to [`parse_bytes`] and wrapped in `Ok(Some(bytes))`.
+/// All other values are interpreted using [`UnitStandard::IecBinary`] in line
+/// with Linux cgroup conventions (where `100MB` = 100 * 1024^2 bytes) and wrapped in `Ok(Some(bytes))`.
 pub fn parse_cgroup_memory(input: &str) -> Result<Option<u64>, ParseBytesError> {
     let s = input.trim();
     if s.is_empty() || s.eq_ignore_ascii_case("max") || s == "-1" {
         return Ok(None);
     }
-    parse_bytes(s).map(Some)
+    parse_bytes_with_standard(s, UnitStandard::IecBinary).map(Some)
 }
 
 /// Format a byte count into a human-readable string according to the requested unit standard.
@@ -214,25 +217,25 @@ mod tests {
 
     #[test]
     fn test_parse_bytes_si_decimal_suffixes() {
-        let p = |s| parse_bytes_with_standard(s, UnitStandard::SiDecimal).unwrap();
-        assert_eq!(p("1kb"), 1000);
-        assert_eq!(p("2KB"), 2000);
-        assert_eq!(p("500kb"), 500_000);
-        assert_eq!(p("1mb"), 1_000_000);
-        assert_eq!(p("10MB"), 10_000_000);
-        assert_eq!(p("100mb"), 100_000_000);
-        assert_eq!(p("1gb"), 1_000_000_000);
-        assert_eq!(p("2GB"), 2_000_000_000);
-        assert_eq!(p("1tb"), 1_000_000_000_000);
-        assert_eq!(p("2TB"), 2_000_000_000_000);
+        assert_eq!(parse_bytes("1kb").unwrap(), 1000);
+        assert_eq!(parse_bytes("2KB").unwrap(), 2000);
+        assert_eq!(parse_bytes("500kb").unwrap(), 500_000);
+        assert_eq!(parse_bytes("1mb").unwrap(), 1_000_000);
+        assert_eq!(parse_bytes("10MB").unwrap(), 10_000_000);
+        assert_eq!(parse_bytes("100mb").unwrap(), 100_000_000);
+        assert_eq!(parse_bytes("1gb").unwrap(), 1_000_000_000);
+        assert_eq!(parse_bytes("2GB").unwrap(), 2_000_000_000);
+        assert_eq!(parse_bytes("1tb").unwrap(), 1_000_000_000_000);
+        assert_eq!(parse_bytes("2TB").unwrap(), 2_000_000_000_000);
     }
 
     #[test]
-    fn test_parse_bytes_traditional_two_letter_binary_defaults() {
-        assert_eq!(parse_bytes("1kb").unwrap(), 1024);
-        assert_eq!(parse_bytes("100mb").unwrap(), 100 * 1024 * 1024);
-        assert_eq!(parse_bytes("1gb").unwrap(), 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes("2tb").unwrap(), 2 * 1024 * 1024 * 1024 * 1024);
+    fn test_parse_bytes_two_letter_with_iec_binary_standard() {
+        let p = |s| parse_bytes_with_standard(s, UnitStandard::IecBinary).unwrap();
+        assert_eq!(p("1kb"), 1024);
+        assert_eq!(p("100mb"), 100 * 1024 * 1024);
+        assert_eq!(p("1gb"), 1024 * 1024 * 1024);
+        assert_eq!(p("2tb"), 2 * 1024 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -267,18 +270,15 @@ mod tests {
     fn test_parse_bytes_fractional_values() {
         assert_eq!(parse_bytes("0.5kib").unwrap(), 512);
         assert_eq!(parse_bytes("1.5 KiB").unwrap(), 1536);
-        assert_eq!(parse_bytes("0.5mb").unwrap(), 512 * 1024);
+        assert_eq!(parse_bytes("0.5mb").unwrap(), 500_000);
         assert_eq!(
-            parse_bytes_with_standard("0.5mb", UnitStandard::SiDecimal).unwrap(),
-            500_000
+            parse_bytes_with_standard("0.5mb", UnitStandard::IecBinary).unwrap(),
+            512 * 1024
         );
+        assert_eq!(parse_bytes("1.5 MB").unwrap(), 1_500_000);
         assert_eq!(
-            parse_bytes("1.5 MB").unwrap(),
+            parse_bytes_with_standard("1.5 MB", UnitStandard::IecBinary).unwrap(),
             (1.5 * 1024.0 * 1024.0) as u64
-        );
-        assert_eq!(
-            parse_bytes_with_standard("1.5 MB", UnitStandard::SiDecimal).unwrap(),
-            1_500_000
         );
         assert_eq!(
             parse_bytes("1.5g").unwrap(),
@@ -288,9 +288,10 @@ mod tests {
             parse_bytes("2.5 GiB").unwrap(),
             (2.5 * 1024.0 * 1024.0 * 1024.0) as u64
         );
+        assert_eq!(parse_bytes("0.25tb").unwrap(), 250_000_000_000);
         assert_eq!(
-            parse_bytes_with_standard("0.25tb", UnitStandard::SiDecimal).unwrap(),
-            250_000_000_000
+            parse_bytes_with_standard("0.25tb", UnitStandard::IecBinary).unwrap(),
+            (0.25 * 1024.0 * 1024.0 * 1024.0 * 1024.0) as u64
         );
         assert_eq!(parse_bytes("0.5 TiB").unwrap(), 512 * 1024 * 1024 * 1024);
         assert_eq!(parse_bytes(".5m").unwrap(), 512 * 1024);
@@ -301,10 +302,7 @@ mod tests {
     fn test_parse_bytes_whitespace_handling() {
         assert_eq!(parse_bytes("  1024  ").unwrap(), 1024);
         assert_eq!(parse_bytes("  2  GiB  ").unwrap(), 2 * 1024 * 1024 * 1024);
-        assert_eq!(
-            parse_bytes_with_standard("\t512 MB\n", UnitStandard::SiDecimal).unwrap(),
-            512_000_000
-        );
+        assert_eq!(parse_bytes("\t512 MB\n").unwrap(), 512_000_000);
         assert_eq!(parse_bytes(" 100   k ").unwrap(), 100 * 1024);
         assert_eq!(parse_bytes("   0   B ").unwrap(), 0);
     }
@@ -403,6 +401,11 @@ mod tests {
         );
         assert_eq!(parse_cgroup_memory("0").unwrap(), Some(0));
         assert_eq!(parse_cgroup_memory("1024").unwrap(), Some(1024));
+        assert_eq!(
+            parse_cgroup_memory("100MB").unwrap(),
+            Some(100 * 1024 * 1024)
+        );
+        assert_eq!(parse_cgroup_memory("1kb").unwrap(), Some(1024));
 
         assert_eq!(
             parse_cgroup_memory("invalid"),
