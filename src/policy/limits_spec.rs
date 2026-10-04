@@ -245,15 +245,15 @@ mod tests {
     #[test]
     fn suffix_math_decimal_and_binary_case_insensitive() {
         let limits = parse_spec("as=2k").expect("2k");
-        assert_eq!(limits.address_space_bytes, Some(2048));
+        assert_eq!(limits.address_space_bytes, Some(2_000));
         let limits = parse_spec("as=2kb").expect("2kb");
         assert_eq!(limits.address_space_bytes, Some(2_000));
         let limits = parse_spec("as=3m").expect("3m");
-        assert_eq!(limits.address_space_bytes, Some(3 * 1024 * 1024));
+        assert_eq!(limits.address_space_bytes, Some(3_000_000));
         let limits = parse_spec("as=3mb").expect("3mb");
         assert_eq!(limits.address_space_bytes, Some(3_000_000));
         let limits = parse_spec("as=1g").expect("1g");
-        assert_eq!(limits.address_space_bytes, Some(1024 * 1024 * 1024));
+        assert_eq!(limits.address_space_bytes, Some(1_000_000_000));
         let limits = parse_spec("as=1gb").expect("1gb");
         assert_eq!(limits.address_space_bytes, Some(1_000_000_000));
         let limits = parse_spec("as=4096").expect("raw");
@@ -265,7 +265,7 @@ mod tests {
         let limits = parse_spec("as=2gib").expect("2gib");
         assert_eq!(limits.address_space_bytes, Some(2 * 1024 * 1024 * 1024));
         let limits = parse_spec("fsize=2M").expect("2M uppercase");
-        assert_eq!(limits.file_size_bytes, Some(2 * 1024 * 1024));
+        assert_eq!(limits.file_size_bytes, Some(2_000_000));
         let limits = parse_spec("fsize=2MB").expect("2MB uppercase");
         assert_eq!(limits.file_size_bytes, Some(2_000_000));
         let limits = parse_spec("as=4GiB").expect("4GiB mixed case");
@@ -351,7 +351,7 @@ mod tests {
     fn aliases_pids_and_mem_and_memory() {
         let limits = parse_spec("pids=64,mem=512m").expect("aliases");
         assert_eq!(limits.processes, Some(64));
-        assert_eq!(limits.address_space_bytes, Some(512 * 1024 * 1024));
+        assert_eq!(limits.address_space_bytes, Some(512_000_000));
 
         let limits = parse_spec("memory=2gib").expect("memory alias");
         assert_eq!(limits.address_space_bytes, Some(2 * 1024 * 1024 * 1024));

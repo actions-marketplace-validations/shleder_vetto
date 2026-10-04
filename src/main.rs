@@ -5,6 +5,8 @@
 //!   2. Backend::detect + spawn: EVERY fork happens here, single-threaded.
 //!   3. Only after a successful spawn: event bus consumers (broker, notifier,
 //!      audit reader, visibility poller, jsonl, stats) and the UI loop.
+//!
+//! Contract boundary: UnpreparedProductionExecution::new -> .prepare() -> .spawn() in src/supervise/spawn.rs
 
 use std::path::{Path, PathBuf};
 

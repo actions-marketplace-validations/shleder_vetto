@@ -47,9 +47,9 @@ pub enum ParseBytesError {
 /// Parse a human-readable byte quantity string into an exact byte count (`u64`).
 ///
 /// Defaults to [`UnitStandard::SiDecimal`], treating two-letter suffixes
-/// `kb`, `mb`, `gb`, `tb` as decimal (1000-based) multipliers, three-letter
-/// suffixes `kib`, `mib`, `gib`, `tib` as binary (1024-based) multipliers,
-/// and single-letter suffixes `k`, `m`, `g`, `t` as binary (1024-based) multipliers.
+/// `kb`, `mb`, `gb`, `tb` and single-letter suffixes `k`, `m`, `g`, `t`
+/// as decimal (1000-based) multipliers, and three-letter suffixes
+/// `kib`, `mib`, `gib`, `tib` as binary (1024-based) multipliers.
 pub fn parse_bytes(input: &str) -> Result<u64, ParseBytesError> {
     parse_bytes_with_standard(input, UnitStandard::SiDecimal)
 }
@@ -113,13 +113,37 @@ pub fn parse_bytes_with_standard(
             },
         )
     } else if let Some(n) = lower.strip_suffix('t') {
-        (n, TIB)
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => TIB,
+                UnitStandard::SiDecimal => TB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix('g') {
-        (n, GIB)
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => GIB,
+                UnitStandard::SiDecimal => GB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix('m') {
-        (n, MIB)
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => MIB,
+                UnitStandard::SiDecimal => MB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix('k') {
-        (n, KIB)
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => KIB,
+                UnitStandard::SiDecimal => KB,
+            },
+        )
     } else if let Some(n) = lower.strip_suffix('b') {
         (n, 1u64)
     } else {
@@ -227,6 +251,11 @@ mod tests {
         assert_eq!(parse_bytes("2GB").unwrap(), 2_000_000_000);
         assert_eq!(parse_bytes("1tb").unwrap(), 1_000_000_000_000);
         assert_eq!(parse_bytes("2TB").unwrap(), 2_000_000_000_000);
+        assert_eq!(parse_bytes("1k").unwrap(), 1000);
+        assert_eq!(parse_bytes("2K").unwrap(), 2000);
+        assert_eq!(parse_bytes("1m").unwrap(), 1_000_000);
+        assert_eq!(parse_bytes("1g").unwrap(), 1_000_000_000);
+        assert_eq!(parse_bytes("1t").unwrap(), 1_000_000_000_000);
     }
 
     #[test]
@@ -240,15 +269,16 @@ mod tests {
 
     #[test]
     fn test_parse_bytes_traditional_single_letter_suffixes() {
-        assert_eq!(parse_bytes("1k").unwrap(), 1024);
-        assert_eq!(parse_bytes("2K").unwrap(), 2048);
-        assert_eq!(parse_bytes("64k").unwrap(), 64 * 1024);
-        assert_eq!(parse_bytes("1m").unwrap(), 1024 * 1024);
-        assert_eq!(parse_bytes("512M").unwrap(), 512 * 1024 * 1024);
-        assert_eq!(parse_bytes("1g").unwrap(), 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes("2G").unwrap(), 2 * 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes("1t").unwrap(), 1024 * 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes("2T").unwrap(), 2 * 1024 * 1024 * 1024 * 1024);
+        let p = |s| parse_bytes_with_standard(s, UnitStandard::IecBinary).unwrap();
+        assert_eq!(p("1k"), 1024);
+        assert_eq!(p("2K"), 2048);
+        assert_eq!(p("64k"), 64 * 1024);
+        assert_eq!(p("1m"), 1024 * 1024);
+        assert_eq!(p("512M"), 512 * 1024 * 1024);
+        assert_eq!(p("1g"), 1024 * 1024 * 1024);
+        assert_eq!(p("2G"), 2 * 1024 * 1024 * 1024);
+        assert_eq!(p("1t"), 1024 * 1024 * 1024 * 1024);
+        assert_eq!(p("2T"), 2 * 1024 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -280,8 +310,9 @@ mod tests {
             parse_bytes_with_standard("1.5 MB", UnitStandard::IecBinary).unwrap(),
             (1.5 * 1024.0 * 1024.0) as u64
         );
+        assert_eq!(parse_bytes("1.5g").unwrap(), 1_500_000_000);
         assert_eq!(
-            parse_bytes("1.5g").unwrap(),
+            parse_bytes_with_standard("1.5g", UnitStandard::IecBinary).unwrap(),
             (1.5 * 1024.0 * 1024.0 * 1024.0) as u64
         );
         assert_eq!(
@@ -294,7 +325,11 @@ mod tests {
             (0.25 * 1024.0 * 1024.0 * 1024.0 * 1024.0) as u64
         );
         assert_eq!(parse_bytes("0.5 TiB").unwrap(), 512 * 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes(".5m").unwrap(), 512 * 1024);
+        assert_eq!(parse_bytes(".5m").unwrap(), 500_000);
+        assert_eq!(
+            parse_bytes_with_standard(".5m", UnitStandard::IecBinary).unwrap(),
+            512 * 1024
+        );
         assert_eq!(parse_bytes("0.0 MB").unwrap(), 0);
     }
 
@@ -303,7 +338,11 @@ mod tests {
         assert_eq!(parse_bytes("  1024  ").unwrap(), 1024);
         assert_eq!(parse_bytes("  2  GiB  ").unwrap(), 2 * 1024 * 1024 * 1024);
         assert_eq!(parse_bytes("\t512 MB\n").unwrap(), 512_000_000);
-        assert_eq!(parse_bytes(" 100   k ").unwrap(), 100 * 1024);
+        assert_eq!(parse_bytes(" 100   k ").unwrap(), 100_000);
+        assert_eq!(
+            parse_bytes_with_standard(" 100   k ", UnitStandard::IecBinary).unwrap(),
+            100 * 1024
+        );
         assert_eq!(parse_bytes("   0   B ").unwrap(), 0);
     }
 

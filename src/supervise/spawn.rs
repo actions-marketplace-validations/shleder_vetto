@@ -707,9 +707,9 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         stdio,
         PROD_SCENARIO_ID.to_string(),
     );
-    let prepared = unprepared.prepare().map_err(|e| {
-        SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
-    })?;
+    let prepared = unprepared
+        .prepare()
+        .map_err(|e| SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string())))?;
 
     // 14. Contract validation & Preflight boundary checks
     let contract = prepared.contract().clone();
@@ -725,9 +725,9 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     // 15. Spawn the sandbox process
     let started = Instant::now();
     #[allow(unused_mut)]
-    let mut spawned = prepared.spawn().map_err(|e| {
-        SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
-    })?;
+    let mut spawned = prepared
+        .spawn()
+        .map_err(|e| SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string())))?;
 
     // 16. Drop parent-side write/slave descriptors to ensure clean EOF
     #[cfg(unix)]
@@ -1040,7 +1040,18 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
 
     let backend_res =
         Backend::detect_with_backend(cfg.net.clone(), cfg.observe_seccomp, cfg.backend.as_deref());
-    let tier = backend_res.ok().and_then(|b| b.tier());
+    let tier = match backend_res {
+        Ok(b) => b.tier(),
+        Err(e) => {
+            if cfg.backend.as_deref().unwrap_or("auto") == "auto" {
+                None
+            } else {
+                return Err(SuperviseError::ProcessSpawnFailed(std::io::Error::other(
+                    e.to_string(),
+                )));
+            }
+        }
+    };
 
     let project = std::env::current_dir()
         .map_err(|e| SuperviseError::Fatal(anyhow::anyhow!("getcwd failed: {e}")))?;
@@ -1088,6 +1099,17 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
         &policy_options,
     )
     .map_err(SuperviseError::PolicyLoadFailed)?;
+
+    // Git-guard verification on protected branches
+    if (pol.git_guard || cfg.git_guard) && !pol.allow_write.is_empty() {
+        if let Some(branch) = policy::conditions::detect_git_branch(&project) {
+            if branch == "main" || branch == "master" {
+                return Err(SuperviseError::Fatal(anyhow::anyhow!(
+                    "git_guard: working copy is on branch '{branch}'; refusing to run with write permissions (create a feature branch, e.g. 'git checkout -b feature/...')"
+                )));
+            }
+        }
+    }
 
     let label = match tier {
         Some(_) => tier_label(tier),
