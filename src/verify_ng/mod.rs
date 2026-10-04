@@ -119,7 +119,7 @@ pub fn run_verify_ng(json: bool, lint: bool) -> anyhow::Result<()> {
         }
         println!("{}", report::render_text(&report));
     }
-    Err(crate::error::VettoError::HarnessUnavailable(
+    Err(crate::error::VettoError::Sandbox(
         "verify-ng suite execution needs the spawn runner".to_string(),
     )
     .into())
