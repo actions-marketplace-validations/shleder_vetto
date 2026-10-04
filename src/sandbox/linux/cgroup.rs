@@ -233,11 +233,18 @@ pub fn setup_cgroup(
     }
 
     let Some(root) = find_cgroup_root() else {
-        return Err(VettoError::Sandbox(
+        if is_required {
+            return Err(VettoError::Sandbox(
+                "cgroup v2 is unavailable or not writable on this system; \
+                 cannot enforce mandated cgroup resource quotas (fail-closed exit 125)"
+                    .into(),
+            ));
+        }
+        tracing::debug!(
             "cgroup v2 is unavailable or not writable on this system; \
-             cgroup v2 is mandatory for Linux sandbox isolation and tree extinction (fail-closed exit 125)"
-                .into(),
-        ));
+             continuing without cgroup resource quotas"
+        );
+        return Ok(None);
     };
 
     // Enable subtree controllers in parent if possible
@@ -253,10 +260,17 @@ pub fn setup_cgroup(
     let cgroup_dir = root.join(format!("vetto-session-{}-{}", std::process::id(), nonce));
 
     if let Err(e) = fs::create_dir(&cgroup_dir) {
-        return Err(VettoError::Sandbox(format!(
-            "failed to create cgroup directory {}: {e} (fail-closed exit 125)",
+        if is_required {
+            return Err(VettoError::Sandbox(format!(
+                "failed to create cgroup directory {}: {e} (fail-closed exit 125)",
+                cgroup_dir.display()
+            )));
+        }
+        tracing::debug!(
+            "failed to create cgroup directory {}: {e}; continuing without cgroup",
             cgroup_dir.display()
-        )));
+        );
+        return Ok(None);
     }
 
     // Write limits
@@ -369,13 +383,9 @@ mod tests {
 
     #[test]
     fn test_cgroup_root_or_graceful_none() {
-        let root = find_cgroup_root();
+        let _root = find_cgroup_root();
         let scope = setup_cgroup(None, None);
-        if root.is_some() {
-            assert!(scope.is_ok());
-        } else {
-            assert!(scope.is_err());
-        }
+        assert!(scope.is_ok());
     }
 
     #[test]

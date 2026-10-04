@@ -88,9 +88,9 @@ impl StdioPump {
     /// Non-Unix stub constructor.
     #[cfg(not(unix))]
     pub fn start(
-        _pty_master: Option<OwnedFd>,
-        _stdout_r: Option<OwnedFd>,
-        _stderr_r: Option<OwnedFd>,
+        _pty_master: Option<()>,
+        _stdout_r: Option<()>,
+        _stderr_r: Option<()>,
         mask_secrets: bool,
     ) -> Result<Self, SuperviseError> {
         Ok(Self { mask_secrets })

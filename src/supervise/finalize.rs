@@ -92,7 +92,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
 
     // Extract real extinction outcome and residual process metrics from production execution
     let mut surviving_processes = 0usize;
-    let mut surviving_resources = 0usize;
+    let surviving_resources = 0usize;
     let mut extinction_breach_detected = false;
     let mut extinction_reason = String::new();
 

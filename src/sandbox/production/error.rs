@@ -1,6 +1,7 @@
 //! Typed errors and exit code mapping for production execution.
 
 use std::path::PathBuf;
+
 use crate::policy_ir::ExecutionState;
 
 #[derive(thiserror::Error, Debug)]
@@ -8,7 +9,9 @@ pub enum ProductionError {
     #[error("Execution timed out after {0:?} (Process tree extinction verified)")]
     TimedOut(std::time::Duration),
 
-    #[error("invalid production contract digest: Contract BLAKE3/SHA256 digest verification failed")]
+    #[error(
+        "invalid production contract digest: Contract BLAKE3/SHA256 digest verification failed"
+    )]
     ContractDigestMismatch,
 
     #[error("Lifecycle state mismatch: expected {expected:?}, got {actual:?}")]

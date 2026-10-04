@@ -7,6 +7,7 @@
 //! - 1 (`EXIT_AGENT_ERROR`): Generic operational or agent error
 
 use thiserror::Error;
+
 use crate::exit_codes;
 
 #[derive(Error, Debug)]
@@ -21,7 +22,9 @@ pub enum SuperviseError {
         source: std::io::Error,
     },
 
-    #[error("Network relay requires Tier FULL: tier '{tier}' does not support unprivileged userns")]
+    #[error(
+        "Network relay requires Tier FULL: tier '{tier}' does not support unprivileged userns"
+    )]
     NetworkRelayTierMismatch { tier: String },
 
     #[error("Security policy load failure: {0}")]
@@ -59,8 +62,8 @@ impl SuperviseError {
             | Self::PolicyLoadFailed(_)
             | Self::StdioAllocationFailed(_)
             | Self::ProcessSpawnFailed(_) => exit_codes::EXIT_FAIL_CLOSED, // 125 (INV-01)
-            Self::EmptyAgentCommand => exit_codes::EXIT_INVALID_USAGE,      // 2
-            _ => exit_codes::EXIT_AGENT_ERROR,                             // 1
+            Self::EmptyAgentCommand => exit_codes::EXIT_INVALID_USAGE,             // 2
+            _ => exit_codes::EXIT_AGENT_ERROR,                                     // 1
         }
     }
 }

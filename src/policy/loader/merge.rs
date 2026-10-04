@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 
 use super::resolve;
-use super::schema::{
-    expand_net_preset, parse_layer, parse_quota_bytes, RawLayer, RawStringList,
-};
+use super::schema::{expand_net_preset, parse_layer, parse_quota_bytes, RawLayer, RawStringList};
 use crate::error::VettoError;
 use crate::policy::conditions::{self, ConditionContext};
 use crate::policy::defaults;

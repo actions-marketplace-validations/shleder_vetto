@@ -264,6 +264,8 @@ pub fn manage_session_lifecycle(
     pump: &mut StdioPump,
     cfg: &crate::config::RunConfig,
 ) -> Result<LifecycleOutcome, SuperviseError> {
+    let _ = pump;
+
     // 1. Install RAII signal controller
     let _sig_ctrl = SignalController::install(session.root_pid, session.tier)?;
 

@@ -26,8 +26,7 @@ use crate::policy::{self, Policy, Tier};
 use crate::policy_ir::contract::SecurityContract;
 use crate::report::diff_project::ProjectManifest;
 use crate::sandbox::production::{
-    PreparedProductionExecution, SpawnedProductionExecution, UnpreparedProductionExecution,
-    PROD_SCENARIO_ID,
+    SpawnedProductionExecution, UnpreparedProductionExecution, PROD_SCENARIO_ID,
 };
 use crate::sandbox::{self, Backend, StdioMode};
 use crate::verify::VerifyReport;
@@ -937,7 +936,11 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             broker_config.quotas = pol.net_quota.clone();
             broker_config.policy_path = cfg.policy_path.clone();
             broker_config.block_doh = cfg.block_doh;
-            sandbox::linux::net_relay::spawn_broker(fd.into_raw_fd(), broker_config, (*bus).clone());
+            sandbox::linux::net_relay::spawn_broker(
+                fd.into_raw_fd(),
+                broker_config,
+                (*bus).clone(),
+            );
         }
         let _ = relay_port;
         if let Some(fd) = spawned.take_notif_listener() {
@@ -1053,29 +1056,22 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
         return Err(SuperviseError::EmptyAgentCommand);
     }
     let mut agent_cmd = cfg.agent.clone();
-    agent_cmd[0] = resolve_in_path(&agent_cmd[0]).map_err(|source| {
-        SuperviseError::ExecutableNotFound {
+    agent_cmd[0] =
+        resolve_in_path(&agent_cmd[0]).map_err(|source| SuperviseError::ExecutableNotFound {
             cmd: agent_cmd[0].clone(),
             source,
-        }
-    })?;
+        })?;
 
-    let backend_res = Backend::detect_with_backend(
-        cfg.net.clone(),
-        cfg.observe_seccomp,
-        cfg.backend.as_deref(),
-    );
+    let backend_res =
+        Backend::detect_with_backend(cfg.net.clone(), cfg.observe_seccomp, cfg.backend.as_deref());
     let tier = backend_res.ok().and_then(|b| b.tier());
 
-    let project = std::env::current_dir().map_err(|e| {
-        SuperviseError::Fatal(anyhow::anyhow!("getcwd failed: {e}"))
-    })?;
+    let project = std::env::current_dir()
+        .map_err(|e| SuperviseError::Fatal(anyhow::anyhow!("getcwd failed: {e}")))?;
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .ok_or_else(|| {
-            SuperviseError::Fatal(anyhow::anyhow!("HOME not set"))
-        })?;
+        .ok_or_else(|| SuperviseError::Fatal(anyhow::anyhow!("HOME not set")))?;
 
     let tier_for_policy = tier.unwrap_or(Tier::Full);
     let policy_options = policy::loader::PolicyLoadOptions {
@@ -1085,9 +1081,21 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
         overrides: policy::loader::PolicyOverrides {
             deny_glob: cfg.deny_glob.clone(),
             git_guard: if cfg.git_guard { Some(true) } else { None },
-            snapshot: if cfg.snapshot || cfg.ephemeral { Some(true) } else { None },
-            auto_deny_secrets: if cfg.auto_deny_secrets { Some(true) } else { None },
-            read_only_caches: if cfg.read_only_caches { Some(true) } else { None },
+            snapshot: if cfg.snapshot || cfg.ephemeral {
+                Some(true)
+            } else {
+                None
+            },
+            auto_deny_secrets: if cfg.auto_deny_secrets {
+                Some(true)
+            } else {
+                None
+            },
+            read_only_caches: if cfg.read_only_caches {
+                Some(true)
+            } else {
+                None
+            },
             shadow: if cfg.shadow { Some(true) } else { None },
             tmpfs_tmp: if cfg.tmpfs_tmp { Some(true) } else { None },
             net_quota: cfg.net_quota.clone(),

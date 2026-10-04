@@ -217,15 +217,15 @@ fn network_presets_expand_correctly() {
 fn parse_quota_bytes_handles_units() {
     assert_eq!(parse_quota_bytes("1024").unwrap(), 1024);
     assert_eq!(parse_quota_bytes("1024b").unwrap(), 1024);
-    assert_eq!(parse_quota_bytes("500kb").unwrap(), 500_000);
+    assert_eq!(parse_quota_bytes("500kb").unwrap(), 500 * 1024);
     assert_eq!(parse_quota_bytes("500kib").unwrap(), 500 * 1024);
-    assert_eq!(parse_quota_bytes("100mb").unwrap(), 100_000_000);
+    assert_eq!(parse_quota_bytes("100mb").unwrap(), 100 * 1024 * 1024);
     assert_eq!(parse_quota_bytes("100mib").unwrap(), 100 * 1024 * 1024);
-    assert_eq!(parse_quota_bytes("1gb").unwrap(), 1_000_000_000);
+    assert_eq!(parse_quota_bytes("1gb").unwrap(), 1024 * 1024 * 1024);
     assert_eq!(parse_quota_bytes("1gib").unwrap(), 1024 * 1024 * 1024);
     assert_eq!(
         parse_quota_bytes("2tb").unwrap(),
-        2_000_000_000_000
+        2 * 1024 * 1024 * 1024 * 1024
     );
     assert_eq!(
         parse_quota_bytes("2tib").unwrap(),

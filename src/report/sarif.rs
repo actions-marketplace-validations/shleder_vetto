@@ -9,7 +9,7 @@ use super::{clean, stats::SessionStats};
 /// Normalizes an artifact file path for GitHub Code Scanning:
 /// Converts absolute host paths to clean relative paths anchored to `%SRCROOT%`.
 fn normalize_path(raw_path: &str) -> String {
-    let cleaned = clean(raw_path);
+    let cleaned = clean(raw_path).replace(['\r', '\n'], " ");
     let p = std::path::Path::new(&cleaned);
 
     // If path is inside current working directory, strip prefix to get repo-relative path

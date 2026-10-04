@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -24,11 +24,10 @@ use crate::proctree::{
 use crate::sandbox::{Backend, SandboxHandle, SpawnOptions, StdioMode};
 use crate::verify_ng::engine;
 use crate::verify_ng::evidence::ExecutionIdentity;
-use crate::verify_ng::frozen::{self, FrozenSpec};
+use crate::verify_ng::frozen;
 use crate::verify_ng::killer::{self, KillOutcome};
 use crate::verify_ng::sandbox_backend::{
-    select_backend, BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState,
-    PrepareContext, SandboxBackend, SecurityCapability,
+    select_backend, BackendKind, CanonicalPolicy, EnforcementReport, PrepareContext, SandboxBackend,
 };
 
 use super::context::ProductionSessionContext;
@@ -1165,6 +1164,7 @@ pub fn wait_for_exit(handle: &mut SandboxHandle, timeout: Option<Duration>) -> (
 mod tests {
     use super::*;
     use crate::sandbox::production::{execute_with_backend, prod_tier_mapping, ProdSpawnLog, PROD_SCENARIO_ID};
+    use crate::verify_ng::sandbox_backend::{EnforcementState, SecurityCapability};
 
     fn test_policy() -> Policy {
         Policy::default()

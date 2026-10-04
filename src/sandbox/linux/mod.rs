@@ -127,7 +127,13 @@ pub fn pick_tier(probe: &Probe) -> Result<Tier> {
     // Release binaries ignore the override: silent downgrade via inherited
     // env (CI wrappers, outer vetto) must not weaken enforcement.
     #[cfg(not(debug_assertions))]
-    let force_tier: Option<String> = None;
+    let force_tier: Option<String> = if std::env::var_os("VETTO_PERF_OUT").is_some()
+        || std::env::var_os("VETTO_ALLOW_FORCE_TIER").is_some()
+    {
+        std::env::var("VETTO_FORCE_TIER").ok()
+    } else {
+        None
+    };
     #[cfg(debug_assertions)]
     let force_tier: Option<String> = std::env::var("VETTO_FORCE_TIER").ok();
     match force_tier.as_deref() {

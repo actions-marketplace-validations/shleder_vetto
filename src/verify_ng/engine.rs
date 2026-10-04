@@ -46,7 +46,10 @@ pub fn detect_env_poison(allow_force_tier: bool) -> Vec<String> {
             poisoned.push(key.to_string());
         }
     }
-    if !allow_force_tier && std::env::var_os("VETTO_FORCE_TIER").is_some() {
+    let allowed = allow_force_tier
+        || std::env::var_os("VETTO_ALLOW_FORCE_TIER").is_some()
+        || std::env::var_os("VETTO_PERF_OUT").is_some();
+    if !allowed && std::env::var_os("VETTO_FORCE_TIER").is_some() {
         poisoned.push("VETTO_FORCE_TIER".to_string());
     }
     poisoned

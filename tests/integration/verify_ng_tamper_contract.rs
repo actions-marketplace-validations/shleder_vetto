@@ -518,7 +518,10 @@ fn test_tamper_production_spawn_ledger_and_marker_guarantee() {
 
     // Attempt spawn: must fail closed before mechanics.spawn
     let spawn_result = prepared.spawn();
-    let spawn_err = spawn_result.expect_err("in-flight tampered contract must fail spawn");
+    let spawn_err = match spawn_result {
+        Err(e) => e,
+        Ok(_) => panic!("in-flight tampered contract must fail spawn"),
+    };
     assert!(
         matches!(
             spawn_err,

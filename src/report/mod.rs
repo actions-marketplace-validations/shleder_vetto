@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 #[cfg(unix)]
 use std::ffi::{CString, OsStr};

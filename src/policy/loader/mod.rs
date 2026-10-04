@@ -24,6 +24,8 @@ use std::path::Path;
 
 use anyhow::Result;
 
+pub use crate::policy::types::parse_byte_size as parse_bandwidth_str;
+use crate::policy::types::{Policy, Tier};
 pub use merge::{
     apply_overrides, LayeredPolicyLoader, MergedPolicy, PolicyLoadOptions, PolicyOverrides,
 };
@@ -37,8 +39,6 @@ pub use schema::{
     RawObservability, RawPlatform, RawSeccompNotify, RawSecrets, RawSecurity, RawStringList,
     RawUnixSockets, RawValueOrString,
 };
-pub use crate::policy::types::parse_byte_size as parse_bandwidth_str;
-use crate::policy::types::{Policy, Tier};
 
 /// Load a policy either from a built-in profile name or a custom TOML path,
 /// resolved for the given tier.

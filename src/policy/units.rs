@@ -46,16 +46,17 @@ pub enum ParseBytesError {
 
 /// Parse a human-readable byte quantity string into an exact byte count (`u64`).
 ///
-/// Supported suffixes (case-insensitive):
-/// - IEC Binary (1024-based): `kib`, `mib`, `gib`, `tib`
-/// - SI Decimal (1000-based): `kb`, `mb`, `gb`, `tb`
-/// - Traditional Unix / cgroup binary (1024-based): `k`, `m`, `g`, `t`
-/// - Single byte: `b`
-/// - Plain integer without suffix: interpreted as raw bytes
-///
-/// Fractional values (e.g. `1.5 GiB`, `0.5 mb`) are rounded to the nearest integer byte.
-/// Overflow during multiplication or conversion is rejected with [`ParseBytesError::Overflow`].
+/// Defaults to [`UnitStandard::IecBinary`], treating `kb`, `mb`, `gb`, `tb`
+/// as 1024-based binary multipliers in line with Linux cgroup conventions.
 pub fn parse_bytes(input: &str) -> Result<u64, ParseBytesError> {
+    parse_bytes_with_standard(input, UnitStandard::IecBinary)
+}
+
+/// Parse a byte quantity string into bytes using the specified unit standard.
+pub fn parse_bytes_with_standard(
+    input: &str,
+    standard: UnitStandard,
+) -> Result<u64, ParseBytesError> {
     let s = input.trim();
     if s.is_empty() {
         return Err(ParseBytesError::Empty);
@@ -78,13 +79,13 @@ pub fn parse_bytes(input: &str) -> Result<u64, ParseBytesError> {
     } else if let Some(n) = lower.strip_suffix("kib") {
         (n, KIB)
     } else if let Some(n) = lower.strip_suffix("tb") {
-        (n, TB)
+        (n, match standard { UnitStandard::IecBinary => TIB, UnitStandard::SiDecimal => TB })
     } else if let Some(n) = lower.strip_suffix("gb") {
-        (n, GB)
+        (n, match standard { UnitStandard::IecBinary => GIB, UnitStandard::SiDecimal => GB })
     } else if let Some(n) = lower.strip_suffix("mb") {
-        (n, MB)
+        (n, match standard { UnitStandard::IecBinary => MIB, UnitStandard::SiDecimal => MB })
     } else if let Some(n) = lower.strip_suffix("kb") {
-        (n, KB)
+        (n, match standard { UnitStandard::IecBinary => KIB, UnitStandard::SiDecimal => KB })
     } else if let Some(n) = lower.strip_suffix('t') {
         (n, TIB)
     } else if let Some(n) = lower.strip_suffix('g') {
@@ -189,16 +190,25 @@ mod tests {
 
     #[test]
     fn test_parse_bytes_si_decimal_suffixes() {
-        assert_eq!(parse_bytes("1kb").unwrap(), 1000);
-        assert_eq!(parse_bytes("2KB").unwrap(), 2000);
-        assert_eq!(parse_bytes("500kb").unwrap(), 500_000);
-        assert_eq!(parse_bytes("1mb").unwrap(), 1_000_000);
-        assert_eq!(parse_bytes("10MB").unwrap(), 10_000_000);
-        assert_eq!(parse_bytes("100mb").unwrap(), 100_000_000);
-        assert_eq!(parse_bytes("1gb").unwrap(), 1_000_000_000);
-        assert_eq!(parse_bytes("2GB").unwrap(), 2_000_000_000);
-        assert_eq!(parse_bytes("1tb").unwrap(), 1_000_000_000_000);
-        assert_eq!(parse_bytes("2TB").unwrap(), 2_000_000_000_000);
+        let p = |s| parse_bytes_with_standard(s, UnitStandard::SiDecimal).unwrap();
+        assert_eq!(p("1kb"), 1000);
+        assert_eq!(p("2KB"), 2000);
+        assert_eq!(p("500kb"), 500_000);
+        assert_eq!(p("1mb"), 1_000_000);
+        assert_eq!(p("10MB"), 10_000_000);
+        assert_eq!(p("100mb"), 100_000_000);
+        assert_eq!(p("1gb"), 1_000_000_000);
+        assert_eq!(p("2GB"), 2_000_000_000);
+        assert_eq!(p("1tb"), 1_000_000_000_000);
+        assert_eq!(p("2TB"), 2_000_000_000_000);
+    }
+
+    #[test]
+    fn test_parse_bytes_traditional_two_letter_binary_defaults() {
+        assert_eq!(parse_bytes("1kb").unwrap(), 1024);
+        assert_eq!(parse_bytes("100mb").unwrap(), 100 * 1024 * 1024);
+        assert_eq!(parse_bytes("1gb").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_bytes("2tb").unwrap(), 2 * 1024 * 1024 * 1024 * 1024);
     }
 
     #[test]
@@ -233,8 +243,16 @@ mod tests {
     fn test_parse_bytes_fractional_values() {
         assert_eq!(parse_bytes("0.5kib").unwrap(), 512);
         assert_eq!(parse_bytes("1.5 KiB").unwrap(), 1536);
-        assert_eq!(parse_bytes("0.5mb").unwrap(), 500_000);
-        assert_eq!(parse_bytes("1.5 MB").unwrap(), 1_500_000);
+        assert_eq!(parse_bytes("0.5mb").unwrap(), 512 * 1024);
+        assert_eq!(
+            parse_bytes_with_standard("0.5mb", UnitStandard::SiDecimal).unwrap(),
+            500_000
+        );
+        assert_eq!(parse_bytes("1.5 MB").unwrap(), (1.5 * 1024.0 * 1024.0) as u64);
+        assert_eq!(
+            parse_bytes_with_standard("1.5 MB", UnitStandard::SiDecimal).unwrap(),
+            1_500_000
+        );
         assert_eq!(
             parse_bytes("1.5g").unwrap(),
             (1.5 * 1024.0 * 1024.0 * 1024.0) as u64
@@ -243,7 +261,10 @@ mod tests {
             parse_bytes("2.5 GiB").unwrap(),
             (2.5 * 1024.0 * 1024.0 * 1024.0) as u64
         );
-        assert_eq!(parse_bytes("0.25tb").unwrap(), 250_000_000_000);
+        assert_eq!(
+            parse_bytes_with_standard("0.25tb", UnitStandard::SiDecimal).unwrap(),
+            250_000_000_000
+        );
         assert_eq!(parse_bytes("0.5 TiB").unwrap(), 512 * 1024 * 1024 * 1024);
         assert_eq!(parse_bytes(".5m").unwrap(), 512 * 1024);
         assert_eq!(parse_bytes("0.0 MB").unwrap(), 0);
@@ -253,7 +274,10 @@ mod tests {
     fn test_parse_bytes_whitespace_handling() {
         assert_eq!(parse_bytes("  1024  ").unwrap(), 1024);
         assert_eq!(parse_bytes("  2  GiB  ").unwrap(), 2 * 1024 * 1024 * 1024);
-        assert_eq!(parse_bytes("\t512 MB\n").unwrap(), 512_000_000);
+        assert_eq!(
+            parse_bytes_with_standard("\t512 MB\n", UnitStandard::SiDecimal).unwrap(),
+            512_000_000
+        );
         assert_eq!(parse_bytes(" 100   k ").unwrap(), 100 * 1024);
         assert_eq!(parse_bytes("   0   B ").unwrap(), 0);
     }
