@@ -350,8 +350,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             (Some(Box::new(b)), t)
         }
         Err(e) => {
-            return Err(SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(SuperviseError::ProcessSpawnFailed(std::io::Error::other(
                 e.to_string(),
             )));
         }
@@ -438,10 +437,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                     cfg.backend.as_deref(),
                 )
                 .map_err(|e| {
-                    SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        e.to_string(),
-                    ))
+                    SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
                 })?,
             ));
         }
@@ -560,10 +556,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
                 cfg.backend.as_deref(),
             )
             .map_err(|e| {
-                SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    e.to_string(),
-                ))
+                SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
             })?,
         ),
     };
@@ -715,10 +708,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         PROD_SCENARIO_ID.to_string(),
     );
     let prepared = unprepared.prepare().map_err(|e| {
-        SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            e.to_string(),
-        ))
+        SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
     })?;
 
     // 14. Contract validation & Preflight boundary checks
@@ -736,10 +726,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     let started = Instant::now();
     #[allow(unused_mut)]
     let mut spawned = prepared.spawn().map_err(|e| {
-        SuperviseError::ProcessSpawnFailed(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            e.to_string(),
-        ))
+        SuperviseError::ProcessSpawnFailed(std::io::Error::other(e.to_string()))
     })?;
 
     // 16. Drop parent-side write/slave descriptors to ensure clean EOF
