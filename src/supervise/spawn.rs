@@ -192,14 +192,7 @@ pub fn stage_update_if_available(user_config: &crate::version::UserConfig) {
 pub fn resolve_in_path(cmd: &str) -> std::io::Result<String> {
     let command_path = Path::new(cmd);
     if command_path.is_absolute() || command_path.components().count() > 1 {
-        if command_path.exists() {
-            return Ok(cmd.to_string());
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("agent binary '{cmd}' does not exist"),
-            ));
-        }
+        return Ok(cmd.to_string());
     }
     if let Ok(real) = crate::shim::find_real_binary(cmd) {
         return Ok(real.to_string_lossy().into_owned());

@@ -103,14 +103,12 @@ mod tests {
         );
 
         assert_eq!(
-            SuperviseError::StdioAllocationFailed(std::io::Error::other("pty failure"))
-                .exit_code(),
+            SuperviseError::StdioAllocationFailed(std::io::Error::other("pty failure")).exit_code(),
             125
         );
 
         assert_eq!(
-            SuperviseError::ProcessSpawnFailed(std::io::Error::other("spawn failed"))
-                .exit_code(),
+            SuperviseError::ProcessSpawnFailed(std::io::Error::other("spawn failed")).exit_code(),
             125
         );
 
