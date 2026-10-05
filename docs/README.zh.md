@@ -1,12 +1,26 @@
-![vetto - AI Agent 与操作系统之间的内核隔离墙](../assets/readme/hero.png)
+<div align="center">
+
+```text
+██╗   ██╗███████╗████████╗████████╗ ██████╗ 
+██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝██╔═══██╗
+██║   ██║█████╗     ██║      ██║   ██║   ██║
+╚██╗ ██╔╝██╔══╝     ██║      ██║   ██║   ██║
+ ╚████╔╝ ███████╗   ██║      ██║   ╚██████╔╝
+  ╚═══╝  ╚══════╝   ╚═╝      ╚═╝    ╚═════╝ 
+```
+
+# VETTO
 
 <p align="center">
-  <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.6.0-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.6.0-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
-  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
+  <b>面向 AI 编程 CLI Agent 的亚毫秒级 Linux 内核沙箱</b>
 </p>
+
+[![CI](https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/shleder/vetto/actions)
+[![Release](https://img.shields.io/github/v/release/shleder/vetto?label=release&color=blue&style=flat-square)](https://github.com/shleder/vetto/releases)
+[![npm version](https://img.shields.io/badge/npm-v0.6.0-CB3837?logo=npm&logoColor=white&style=flat-square)](https://www.npmjs.com/package/@shledery/vetto)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.6.0-orange?logo=rust&logoColor=white&style=flat-square)](https://crates.io/crates/vetto)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/shleder/vetto)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](../LICENSE)
 
 <p align="center">
   <a href="../README.md">English</a> |
@@ -16,6 +30,8 @@
   <a href="README.es.md">Español</a> |
   <a href="README.de.md">Deutsch</a>
 </p>
+
+</div>
 
 Vetto 是专为 Claude Code、OpenAI Codex、Cursor、OpenCode、Aider 等 AI 编码 CLI 代理设计的无特权沙箱。它在 `fork()` 与 `execve()` 之间利用 Linux 和 macOS 的原生内核机制隔离文件系统访问、网络套接字及子进程，无需后台守护进程或 root 权限。
 

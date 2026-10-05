@@ -1,12 +1,26 @@
-![vetto - un muro en el kernel entre el agente de IA y su máquina](../assets/readme/hero.png)
+<div align="center">
+
+```text
+██╗   ██╗███████╗████████╗████████╗ ██████╗ 
+██║   ██║██╔════╝╚══██╔══╝╚══██╔══╝██╔═══██╗
+██║   ██║█████╗     ██║      ██║   ██║   ██║
+╚██╗ ██╔╝██╔══╝     ██║      ██║   ██║   ██║
+ ╚████╔╝ ███████╗   ██║      ██║   ╚██████╔╝
+  ╚═══╝  ╚══════╝   ╚═╝      ╚═╝    ╚═════╝ 
+```
+
+# VETTO
 
 <p align="center">
-  <a href="https://github.com/shleder/vetto/actions"><img src="https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square" alt="CI"></a>
-  <a href="https://github.com/shleder/vetto/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/version-0.6.0-blue?style=flat-square" alt="Version"></a>
-  <a href="https://www.npmjs.com/package/@shledery/vetto"><img src="https://img.shields.io/badge/npm-v0.6.0-CB3837?logo=npm&logoColor=white&style=flat-square" alt="npm"></a>
-  <a href="https://crates.io/crates/vetto"><img src="https://img.shields.io/badge/crates.io-v0.6.0-orange?logo=rust&logoColor=white&style=flat-square" alt="crates.io"></a>
-  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square" alt="License"></a>
+  <b>Sandbox a nivel de kernel de Linux de sub-milisegundo para agentes CLI de IA</b>
 </p>
+
+[![CI](https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/shleder/vetto/actions)
+[![Release](https://img.shields.io/github/v/release/shleder/vetto?label=release&color=blue&style=flat-square)](https://github.com/shleder/vetto/releases)
+[![npm version](https://img.shields.io/badge/npm-v0.6.0-CB3837?logo=npm&logoColor=white&style=flat-square)](https://www.npmjs.com/package/@shledery/vetto)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.6.0-orange?logo=rust&logoColor=white&style=flat-square)](https://crates.io/crates/vetto)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/shleder/vetto)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](../LICENSE)
 
 <p align="center">
   <a href="../README.md">English</a> |
@@ -16,6 +30,8 @@
   <a href="README.es.md"><b>Español</b></a> |
   <a href="README.de.md">Deutsch</a>
 </p>
+
+</div>
 
 Vetto es un sandbox no privilegiado para agentes CLI de programación con IA como Claude Code, OpenAI Codex, Cursor, OpenCode y Aider. Aísla el acceso al sistema de archivos, sockets de red y procesos secundarios entre `fork()` y `execve()` usando mecanismos nativos del kernel en Linux y macOS sin requerir un demonio en segundo plano ni privilegios de root.
 
