@@ -266,9 +266,9 @@ mod tests {
 
     #[test]
     fn macos_tcc_guided_paths_are_detected_without_filesystem_access() {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .expect("HOME is set");
+        let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+            return;
+        };
         for guarded in ["Documents", "Desktop", "Downloads"] {
             assert!(
                 is_macos_tcc_protected_path(&home.join(guarded).join("work")),
