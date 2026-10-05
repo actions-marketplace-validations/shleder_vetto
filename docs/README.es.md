@@ -113,6 +113,8 @@ Los agentes de código necesitan compiladores locales, cachés de paquetes exist
 | Cachés de paquetes | Montajes de volumen o descargas repetidas | Reutiliza directamente las cachés de paquetes del host |
 | Limpieza de procesos | Puede dejar contenedores huérfanos | Terminación sincrónica del árbol de procesos mediante `cgroup.kill` de cgroups v2 |
 
+Para mediciones detalladas de rendimiento y guías para bancos de pruebas de evaluación, consulte el [Benchmark SWE-bench vs Docker](benchmarks/swe-bench.md).
+
 ### 3. Ejecución directa
 
 Ejecute comandos o scripts arbitrarios dentro del sandbox:
@@ -216,6 +218,7 @@ Las versiones se compilan mediante flujos de trabajo automatizados de GitHub Act
 
 - [Backends de plataformas y especificaciones de aislamiento](platform-backends.md)
 - [Preajustes de agentes y configuración](agents.md)
+- [Benchmark SWE-bench vs Docker](benchmarks/swe-bench.md)
 - [Modelo de amenazas y límites de seguridad](threat-model.md)
 - [Integración con CI/CD y GitHub Actions](ci-cd.md)
 - [Códigos de salida y modos de falla](exit-codes.md)

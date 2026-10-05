@@ -113,6 +113,8 @@ KI-Coding-Agenten benötigen lokale Compiler, vorhandene Paket-Caches und ein in
 | Paket-Caches | Volume Mounts oder wiederholte Downloads | Direkte Wiederverwendung lokaler Paket-Caches |
 | Prozessbereinigung | Kann verwaiste Container hinterlassen | Synchrone Prozessbaum-Terminierung via cgroups v2 `cgroup.kill` |
 
+Detaillierte Leistungsmessungen und Integrationsanleitungen für Benchmark-Harnesses finden Sie unter [SWE-bench vs Docker Benchmark](benchmarks/swe-bench.md).
+
 ### 3. Direkte Ausführung
 
 Beliebige Befehle oder Skripte in der Sandbox ausführen:
@@ -216,6 +218,7 @@ Releases werden über automatisierte GitHub-Actions-Workflows erstellt und sind 
 
 - [Plattform-Backends und Isolationsspezifikation](platform-backends.md)
 - [Agent-Presets und Konfiguration](agents.md)
+- [SWE-bench vs Docker Benchmark](benchmarks/swe-bench.md)
 - [Bedrohungsmodell und Sicherheitsgrenzen](threat-model.md)
 - [CI/CD-Integration und GitHub Actions](ci-cd.md)
 - [Exit-Codes und Fehlermodi](exit-codes.md)

@@ -113,6 +113,8 @@ AI coding agents need local compilers, existing package caches, and interactive 
 | Package caches | Volume mounts or repeated downloads | Reuses host package caches directly |
 | Process cleanup | Can leave orphaned containers | Synchronous process tree termination via cgroups v2 `cgroup.kill` |
 
+For empirical performance measurements and adapter setup, see the [SWE-bench vs Docker Benchmark](docs/benchmarks/swe-bench.md).
+
 ### 3. Direct execution
 
 Run arbitrary commands or scripts inside the sandbox:
@@ -216,6 +218,7 @@ Releases are built via automated GitHub Actions workflows with public cryptograp
 
 - [Platform backends and isolation specs](docs/platform-backends.md)
 - [Agent presets and configuration](docs/agents.md)
+- [SWE-bench vs Docker runtime benchmark](docs/benchmarks/swe-bench.md)
 - [Threat model and security boundaries](docs/threat-model.md)
 - [CI/CD integration and GitHub Actions](docs/ci-cd.md)
 - [Exit codes and failure modes](docs/exit-codes.md)

@@ -113,6 +113,8 @@ AI 编码代理依赖本地编译器、现有的软件包缓存以及交互式�
 | 包管理器缓存 | Volume 挂载或重复下载依赖 | 直接复用宿主机的包缓存 |
 | 进程生命周期清理 | 容易遗留孤儿容器或脱管进程 | 通过 cgroups v2 `cgroup.kill` 彻底同步终止进程树 |
 
+详细性能基准测试与评估适配器指南请参阅 [SWE-bench vs Docker 性能基准](benchmarks/swe-bench.md)。
+
 ### 3. 直接执行
 
 在沙箱内运行任意命令或脚本：
@@ -216,6 +218,7 @@ Vetto 为 25 种以上的 AI 编码工具提供了预置策略文件。每个配
 
 - [平台后端与隔离规范](platform-backends.md)
 - [代理预设与配置参考](agents.md)
+- [SWE-bench 对比 Docker 性能基准](benchmarks/swe-bench.md)
 - [威胁模型与安全边界](threat-model.md)
 - [CI/CD 集成与 GitHub Actions](ci-cd.md)
 - [退出代码与故障模式](exit-codes.md)
