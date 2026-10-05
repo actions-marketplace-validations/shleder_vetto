@@ -218,7 +218,6 @@ Vetto には、25 種類以上の AI コーディングツール用の事前設�
 - [エージェントプリセットと設定](agents.md)
 - [脅威モデルとセキュリティ境界](threat-model.md)
 - [CI/CD 連携と GitHub Actions](ci-cd.md)
-- [Python SDK バインディング](../sdk/python/)
 - [終了コードと失敗モード](exit-codes.md)
 - [セキュリティポリシーと脆弱性報告](../SECURITY.md)
 

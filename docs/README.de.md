@@ -218,7 +218,6 @@ Releases werden über automatisierte GitHub-Actions-Workflows erstellt und sind 
 - [Agent-Presets und Konfiguration](agents.md)
 - [Bedrohungsmodell und Sicherheitsgrenzen](threat-model.md)
 - [CI/CD-Integration und GitHub Actions](ci-cd.md)
-- [Python SDK Anbindungen](../sdk/python/)
 - [Exit-Codes und Fehlermodi](exit-codes.md)
 - [Sicherheitsrichtlinie und Schwachstellenmeldung](../SECURITY.md)
 

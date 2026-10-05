@@ -218,7 +218,6 @@ Vetto 为 25 种以上的 AI 编码工具提供了预置策略文件。每个配
 - [代理预设与配置参考](agents.md)
 - [威胁模型与安全边界](threat-model.md)
 - [CI/CD 集成与 GitHub Actions](ci-cd.md)
-- [Python SDK 绑定](../sdk/python/)
 - [退出代码与故障模式](exit-codes.md)
 - [安全政策与漏洞提报](../SECURITY.md)
 

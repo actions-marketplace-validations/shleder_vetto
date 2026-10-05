@@ -218,7 +218,6 @@ Las versiones se compilan mediante flujos de trabajo automatizados de GitHub Act
 - [Preajustes de agentes y configuración](agents.md)
 - [Modelo de amenazas y límites de seguridad](threat-model.md)
 - [Integración con CI/CD y GitHub Actions](ci-cd.md)
-- [Enlaces del SDK de Python](../sdk/python/)
 - [Códigos de salida y modos de falla](exit-codes.md)
 - [Política de seguridad y reporte de vulnerabilidades](../SECURITY.md)
 

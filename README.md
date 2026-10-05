@@ -218,7 +218,6 @@ Releases are built via automated GitHub Actions workflows with public cryptograp
 - [Agent presets and configuration](docs/agents.md)
 - [Threat model and security boundaries](docs/threat-model.md)
 - [CI/CD integration and GitHub Actions](docs/ci-cd.md)
-- [Python SDK bindings](sdk/python/)
 - [Exit codes and failure modes](docs/exit-codes.md)
 - [Security policy and vulnerability reporting](SECURITY.md)
 
