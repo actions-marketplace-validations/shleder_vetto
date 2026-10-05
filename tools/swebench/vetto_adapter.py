@@ -337,6 +337,8 @@ def main() -> None:
     parser.add_argument("--timeout", "-t", type=int, default=180, help="Timeout in seconds")
     parser.add_argument("--memory", "-m", type=int, default=4096, help="Memory limit in MB")
     parser.add_argument("--instance-id", type=str, default=None, help="SWE-bench instance ID")
+    parser.add_argument("--profile", type=str, default="swebench", help="Security policy profile to use")
+    parser.add_argument("--net", type=str, default="off", help="Network mode (off, allowlist, strict)")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to run")
 
     args = parser.parse_args()
@@ -352,6 +354,8 @@ def main() -> None:
         workspace=args.workspace,
         timeout=args.timeout,
         memory_limit_mb=args.memory,
+        profile=args.profile,
+        net=args.net,
     )
     result = runner.run_command(cmd, instance_id=args.instance_id)
     print(json.dumps(result.to_dict(), indent=2))
