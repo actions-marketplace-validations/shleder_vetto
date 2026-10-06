@@ -51,6 +51,7 @@ pub struct StdioPump {
     out_reader: Option<crate::sandbox::production::AsyncPipeReader>,
     #[cfg(unix)]
     err_reader: Option<crate::sandbox::production::AsyncPipeReader>,
+    #[cfg_attr(not(unix), allow(dead_code))]
     mask_secrets: bool,
 }
 

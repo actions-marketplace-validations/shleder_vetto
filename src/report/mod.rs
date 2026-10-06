@@ -81,6 +81,7 @@ fn new_records(
         .collect()
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) fn sanitize_json_strings(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::String(text) => *text = clean(text),
