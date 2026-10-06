@@ -5,6 +5,25 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-06
+
+### Added
+- **Zero-Argument Runtime Status (`src/main.rs:print_zero_arg_summary`)**:
+  - Running `vetto` with no arguments in a terminal displays an interactive environment health summary (kernel isolation Tier, Landlock LSM ABI level, and active PATH shims) with clean exit code 0.
+- **Dedicated Built-in Agent Profiles & Expansion (`profiles/agents/`, `src/policy/defaults.rs`, `src/onboard.rs`)**:
+  - Integrated 4 built-in agent profiles (`swebench`, `qwen_code`, `roo_code`, `browser_use`), expanding the core agent roster to 32 supported profiles.
+  - Added dedicated domain allowlists in `src/policy/presets.rs` and candidate binaries/markers in `src/onboard.rs`.
+- **Batch PATH Shim Management (`src/cli/enable.rs:enable_all`)**:
+  - Added `vetto enable --all` to automatically discover installed AI agent binaries in `$PATH` and generate protective shims in `~/.vetto/shims/` in a single command.
+- **Terminal Session Security Recap (`src/supervise/finalize.rs`)**:
+  - Emits a clean stderr recap upon sandboxed session completion summarizing protected host secrets.
+
+### Fixed
+- **SWE-bench Built-in Profile Resolution (`src/cli/bench.rs`)**:
+  - Eliminated the special-case `swebench` string workaround; SWE-bench profile is now resolved through standard core defaults.
+- **Compiler Lint Cleanliness (`Cargo.toml`)**:
+  - Removed global `dead_code = "allow"` crate lint; localized suppressions to Windows capability modules.
+
 ## [0.5.15] - 2026-10-02
 
 ### Added

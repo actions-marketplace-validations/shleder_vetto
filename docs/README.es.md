@@ -17,8 +17,8 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/shleder/vetto/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/shleder/vetto/actions)
 [![Release](https://img.shields.io/github/v/release/shleder/vetto?label=release&color=blue&style=flat-square)](https://github.com/shleder/vetto/releases)
-[![npm version](https://img.shields.io/badge/npm-v0.6.0-CB3837?logo=npm&logoColor=white&style=flat-square)](https://www.npmjs.com/package/@shledery/vetto)
-[![crates.io](https://img.shields.io/badge/crates.io-v0.6.0-orange?logo=rust&logoColor=white&style=flat-square)](https://crates.io/crates/vetto)
+[![npm version](https://img.shields.io/badge/npm-v0.6.1-CB3837?logo=npm&logoColor=white&style=flat-square)](https://www.npmjs.com/package/@shledery/vetto)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.6.1-orange?logo=rust&logoColor=white&style=flat-square)](https://crates.io/crates/vetto)
 [![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/shleder/vetto)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](../LICENSE)
 
@@ -150,7 +150,7 @@ Ejecute agentes de IA de forma segura en sus pipelines de CI sin Docker ni privi
 
 ```yaml
 - name: Run Sandboxed Agent
-  uses: shleder/vetto@v0.6.0
+  uses: shleder/vetto@v0.6.1
   with:
     command: 'npx @anthropic-ai/claude-code -p "Fix linter errors"'
     agent: 'claude'

@@ -23,7 +23,7 @@ jobs:
           node-version: '20'
 
       - name: Execute Claude Code in Vetto Sandbox
-        uses: shleder/vetto@v0.6.0
+        uses: shleder/vetto@v0.6.1
         with:
           command: 'npx @anthropic-ai/claude-code -p "Analyze pull request for security vulnerabilities and code style regressions"'
           agent: 'claude'
