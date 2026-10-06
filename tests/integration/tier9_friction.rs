@@ -396,3 +396,44 @@ fn test_cli_allow_respects_existing_dot_vetto_policy() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_zero_arg_cli_summary() {
+    let output = vetto_cmd()
+        .output()
+        .expect("vetto zero-arg");
+
+    assert!(output.status.success(), "zero-arg invocation must exit 0: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("vetto v"), "stdout must contain vetto version: {stdout}");
+    assert!(stdout.contains("environment:"), "stdout must contain environment info: {stdout}");
+    assert!(stdout.contains("active sessions:"), "stdout must contain active sessions: {stdout}");
+    assert!(stdout.contains("Get started:"), "stdout must contain quickstart guidance: {stdout}");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_protected_session_security_badge() {
+    let output = vetto_cmd()
+        .args(["--tui=none", "--", "true"])
+        .output()
+        .expect("vetto protected session");
+
+    assert!(output.status.success(), "session must exit 0");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("[vetto] protected session completed: 0 secrets leaked, host secrets masked."),
+        "stderr must contain session security badge: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_preset_swebench_cli_run() {
+    let output = vetto_cmd()
+        .args(["--preset", "swebench", "--tui=none", "--", "true"])
+        .output()
+        .expect("vetto run with swebench preset");
+
+    assert!(output.status.success(), "swebench preset session must exit 0: {}", String::from_utf8_lossy(&output.stderr));
+}
