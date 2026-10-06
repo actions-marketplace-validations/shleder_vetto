@@ -122,6 +122,10 @@ fn command_for_agent(agent: &str) -> Option<String> {
         "omnigent" => Some("omnigent".to_string()),
         "crewai" => Some("crewai".to_string()),
         "autogen" => Some("autogen".to_string()),
+        "swebench" => Some("swebench".to_string()),
+        "qwen_code" => Some("qwen-code".to_string()),
+        "roo_code" => Some("roo-code".to_string()),
+        "browser_use" => Some("browser-use".to_string()),
         // A custom executable cannot be safely inferred from an agent name.
         _ => None,
     }

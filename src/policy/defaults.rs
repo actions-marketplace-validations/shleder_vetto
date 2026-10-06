@@ -36,8 +36,12 @@ pub const CREWAI_AGENT_TOML: &str = include_str!("../../profiles/agents/crewai.t
 pub const AUTOGEN_AGENT_TOML: &str = include_str!("../../profiles/agents/autogen.toml");
 pub const AMP_AGENT_TOML: &str = include_str!("../../profiles/agents/amp.toml");
 pub const CUSTOM_AGENT_TOML: &str = include_str!("../../profiles/agents/custom.toml");
+pub const SWEBENCH_AGENT_TOML: &str = include_str!("../../profiles/agents/swebench.toml");
+pub const QWEN_CODE_AGENT_TOML: &str = include_str!("../../profiles/agents/qwen_code.toml");
+pub const ROO_CODE_AGENT_TOML: &str = include_str!("../../profiles/agents/roo_code.toml");
+pub const BROWSER_USE_AGENT_TOML: &str = include_str!("../../profiles/agents/browser_use.toml");
 
-pub const AGENT_PROFILE_NAMES: [&str; 28] = [
+pub const AGENT_PROFILE_NAMES: [&str; 32] = [
     "codex",
     "claude",
     "antigravity",
@@ -66,6 +70,10 @@ pub const AGENT_PROFILE_NAMES: [&str; 28] = [
     "autogen",
     "amp",
     "custom",
+    "swebench",
+    "qwen_code",
+    "roo_code",
+    "browser_use",
 ];
 
 /// Environment variables that are safe and useful for an agent session.
@@ -169,6 +177,10 @@ pub fn canonical_agent_name(name: &str) -> Option<&'static str> {
         "autogen" | "autogen-studio" | "autogenstudio" => Some("autogen"),
         "amp" | "amp-cli" => Some("amp"),
         "custom" => Some("custom"),
+        "swebench" => Some("swebench"),
+        "qwen-code" | "qwen_code" | "qwencode" | "qwen" => Some("qwen_code"),
+        "roo-code" | "roo_code" | "roocode" | "roo" => Some("roo_code"),
+        "browser-use" | "browser_use" | "browseruse" => Some("browser_use"),
         _ => None,
     }
 }
@@ -203,6 +215,10 @@ pub fn agent_builtin(name: &str) -> Option<&'static str> {
         "autogen" => Some(AUTOGEN_AGENT_TOML),
         "amp" => Some(AMP_AGENT_TOML),
         "custom" => Some(CUSTOM_AGENT_TOML),
+        "swebench" => Some(SWEBENCH_AGENT_TOML),
+        "qwen_code" => Some(QWEN_CODE_AGENT_TOML),
+        "roo_code" => Some(ROO_CODE_AGENT_TOML),
+        "browser_use" => Some(BROWSER_USE_AGENT_TOML),
         _ => None,
     }
 }

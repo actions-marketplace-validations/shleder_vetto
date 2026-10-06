@@ -1,0 +1,74 @@
+[metadata]
+name = "qwen_code"
+description = "Hardened compatibility profile for Qwen Code CLI agent."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.qwen",
+    "$HOME/.qwen-code",
+    "$HOME/.config/qwen-code",
+    "$HOME/.local/share/qwen-code",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "$HOME/.cache",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "/tmp",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.qwen",
+    "$HOME/.qwen-code",
+    "$HOME/.config/qwen-code",
+    "$HOME/.local/share/qwen-code",
+    "$HOME/.cache",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "/tmp",
+]
+
+[environment]
+pass_through = [
+    "QWEN_*",
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "OPENROUTER_API_KEY",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "dashscope.aliyuncs.com",
+    "api.openai.com",
+    "api.anthropic.com",
+    "api.deepseek.com",
+    "openrouter.ai",
+    "huggingface.co",
+    "hf.co",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "api.github.com",
+]

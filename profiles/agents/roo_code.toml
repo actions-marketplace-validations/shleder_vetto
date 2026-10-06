@@ -1,0 +1,70 @@
+[metadata]
+name = "roo_code"
+description = "Hardened compatibility profile for Roo Code (Roo Cline) autonomous agent."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.roo",
+    "$HOME/.roo-code",
+    "$HOME/.config/roo-code",
+    "$HOME/.config/Code/User/globalStorage/roovetgit.roo-cline",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "$HOME/.cache",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "/tmp",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.roo",
+    "$HOME/.roo-code",
+    "$HOME/.config/roo-code",
+    "$HOME/.config/Code/User/globalStorage/roovetgit.roo-cline",
+    "$HOME/.cache",
+    "$HOME/.npm",
+    "$HOME/.npm/_npx",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "$HOME/.bun",
+    "/tmp",
+]
+
+[environment]
+pass_through = [
+    "ROO_*",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "GEMINI_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "api.anthropic.com",
+    "api.openai.com",
+    "openrouter.ai",
+    "api.deepseek.com",
+    "generativelanguage.googleapis.com",
+    "api.groq.com",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "api.github.com",
+]
