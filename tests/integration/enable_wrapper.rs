@@ -262,7 +262,10 @@ fn test_enable_all_multi_binary_aliases() {
     #[cfg(windows)]
     {
         write_file(&bin_dir.join("claude.cmd"), "@echo off\r\necho claude\r\n");
-        write_file(&bin_dir.join("claude-code.cmd"), "@echo off\r\necho claude-code\r\n");
+        write_file(
+            &bin_dir.join("claude-code.cmd"),
+            "@echo off\r\necho claude-code\r\n",
+        );
         write_file(&bin_dir.join("qwen-code.cmd"), "@echo off\r\necho qwen\r\n");
         write_file(&bin_dir.join("roo-code.cmd"), "@echo off\r\necho roo\r\n");
     }
@@ -297,7 +300,16 @@ fn test_enable_all_multi_binary_aliases() {
 
     let shims_dir = proj_dir.join(".vetto").join("shims");
     assert!(shims_dir.join("claude").exists(), "claude shim must exist");
-    assert!(shims_dir.join("claude-code").exists(), "claude-code alias shim must exist");
-    assert!(shims_dir.join("qwen-code").exists(), "qwen-code shim must exist");
-    assert!(shims_dir.join("roo-code").exists(), "roo-code shim must exist");
+    assert!(
+        shims_dir.join("claude-code").exists(),
+        "claude-code alias shim must exist"
+    );
+    assert!(
+        shims_dir.join("qwen-code").exists(),
+        "qwen-code shim must exist"
+    );
+    assert!(
+        shims_dir.join("roo-code").exists(),
+        "roo-code shim must exist"
+    );
 }

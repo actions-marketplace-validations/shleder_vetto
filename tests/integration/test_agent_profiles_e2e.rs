@@ -838,14 +838,13 @@ fn test_qwen_code_profile_consistency() {
         "~/.qwen must be writable"
     );
     assert!(
-        pol.environment
-            .pass_through
-            .iter()
-            .any(|v| v == "QWEN_*"),
+        pol.environment.pass_through.iter().any(|v| v == "QWEN_*"),
         "QWEN_* env vars must be allowed in pass_through"
     );
     assert!(
-        pol.network_allow.iter().any(|d| d == "dashscope.aliyuncs.com"),
+        pol.network_allow
+            .iter()
+            .any(|d| d == "dashscope.aliyuncs.com"),
         "dashscope.aliyuncs.com must be allowed in network_allow"
     );
 }
@@ -871,10 +870,7 @@ fn test_roo_code_profile_consistency() {
         "~/.roo must be writable"
     );
     assert!(
-        pol.environment
-            .pass_through
-            .iter()
-            .any(|v| v == "ROO_*"),
+        pol.environment.pass_through.iter().any(|v| v == "ROO_*"),
         "ROO_* env vars must be allowed in pass_through"
     );
     assert!(
@@ -904,10 +900,7 @@ fn test_browser_use_profile_consistency() {
         "~/.browser-use must be writable"
     );
     assert!(
-        pol.environment
-            .pass_through
-            .iter()
-            .any(|v| v == "BROWSER_USE_*"),
+        pol.environment.pass_through.iter().any(|v| v == "BROWSER_USE_*"),
         "BROWSER_USE_* env vars must be allowed in pass_through"
     );
     assert!(

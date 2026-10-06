@@ -175,7 +175,8 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
 
     // Fallback: write embedded profile to a disposable location
     let temp_path = std::env::temp_dir().join(format!("vetto-profile-{profile_name}.toml"));
-    let content = if let Some(builtin_agent) = crate::policy::defaults::agent_builtin(profile_name) {
+    let content = if let Some(builtin_agent) = crate::policy::defaults::agent_builtin(profile_name)
+    {
         builtin_agent
     } else if let Some(builtin_pol) = crate::policy::defaults::builtin(profile_name) {
         builtin_pol
