@@ -58,8 +58,7 @@ fn print_zero_arg_summary() -> Result<()> {
         let active = registry.list_active().unwrap_or_default();
         println!("active sessions:  {}", active.len());
     }
-    let wrapped =
-        cli::enable::get_wrapped_agents(cli::hook::HookScope::Global).unwrap_or_default();
+    let wrapped = cli::enable::get_wrapped_agents(cli::hook::HookScope::Global).unwrap_or_default();
     println!(
         "enabled agents:   {}",
         if wrapped.is_empty() {

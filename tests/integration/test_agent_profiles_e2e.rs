@@ -900,7 +900,10 @@ fn test_browser_use_profile_consistency() {
         "~/.browser-use must be writable"
     );
     assert!(
-        pol.environment.pass_through.iter().any(|v| v == "BROWSER_USE_*"),
+        pol.environment
+            .pass_through
+            .iter()
+            .any(|v| v == "BROWSER_USE_*"),
         "BROWSER_USE_* env vars must be allowed in pass_through"
     );
     assert!(
