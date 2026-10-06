@@ -447,7 +447,7 @@ fn test_protected_session_security_badge() {
 #[test]
 fn test_preset_swebench_cli_run() {
     let output = vetto_cmd()
-        .args(["--preset", "swebench", "--tui=none", "--", "true"])
+        .args(["--preset", "swebench", "--dry-run", "--tui=none", "--", "true"])
         .output()
         .expect("vetto run with swebench preset");
 
