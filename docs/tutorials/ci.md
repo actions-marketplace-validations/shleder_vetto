@@ -49,7 +49,7 @@ jobs:
         run: pip install --upgrade aider-chat
 
       - name: Run Aider under Vetto Sandbox
-        uses: shleder/vetto@v0.6.0
+        uses: shleder/vetto@v0.6.1
         with:
           command: 'aider --yes-always --no-git --message "Review diff for obvious bugs"'
           agent: 'aider'
@@ -76,7 +76,7 @@ To verify that the security boundary actively blocks unauthorized actions, test 
 ```yaml
       - name: Malicious Agent Simulation
         id: attack_test
-        uses: shleder/vetto@v0.6.0
+        uses: shleder/vetto@v0.6.1
         continue-on-error: true
         with:
           command: 'cat ~/.ssh/id_rsa || cat /etc/shadow'
@@ -123,7 +123,7 @@ If you require multiple sandbox commands within a single job, use Setup Mode:
 
 ```yaml
       - name: Setup Vetto
-        uses: shleder/vetto@v0.6.0
+        uses: shleder/vetto@v0.6.1
         with:
           version: 'latest'
 
