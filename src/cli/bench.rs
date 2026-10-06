@@ -27,7 +27,7 @@ use crate::sandbox::production::UnpreparedProductionExecution;
 use crate::sandbox::StdioMode;
 
 /// Built-in SWE-bench hermetic agent profile content.
-pub const SWEBENCH_PROFILE_TOML: &str = include_str!("../../profiles/agents/swebench.toml");
+pub const SWEBENCH_PROFILE_TOML: &str = crate::policy::defaults::SWEBENCH_AGENT_TOML;
 
 /// Arguments for `vetto bench`.
 #[derive(clap::Args, Debug, Clone)]
@@ -175,14 +175,12 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
 
     // Fallback: write embedded profile to a disposable location
     let temp_path = std::env::temp_dir().join(format!("vetto-profile-{profile_name}.toml"));
-    let content = if profile_name == "swebench" {
-        SWEBENCH_PROFILE_TOML
-    } else if let Some(builtin_agent) = crate::policy::defaults::agent_builtin(profile_name) {
+    let content = if let Some(builtin_agent) = crate::policy::defaults::agent_builtin(profile_name) {
         builtin_agent
     } else if let Some(builtin_pol) = crate::policy::defaults::builtin(profile_name) {
         builtin_pol
     } else {
-        SWEBENCH_PROFILE_TOML
+        bail!("unknown profile '{profile_name}'");
     };
     let _ = std::fs::write(&temp_path, content);
     Ok(temp_path)

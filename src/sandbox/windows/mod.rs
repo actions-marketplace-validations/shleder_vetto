@@ -18,6 +18,7 @@
 //! a restricted token alone is never treated as filesystem/network enforcement.
 
 #![allow(clashing_extern_declarations)]
+#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, c_void};

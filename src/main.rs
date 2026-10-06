@@ -49,6 +49,27 @@ fn fast_tier_detect() -> &'static str {
     }
 }
 
+fn print_zero_arg_summary() -> Result<()> {
+    let env_info = vetto::doctor::detect_environment();
+    let tier = fast_tier_detect();
+    println!("vetto v{} ({tier})", env!("CARGO_PKG_VERSION"));
+    println!("environment:      {}", env_info.summary);
+    if let Ok(registry) = cli::status::SessionRegistry::new() {
+        let active = registry.list_active().unwrap_or_default();
+        println!("active sessions:  {}", active.len());
+    }
+    let wrapped = cli::enable::get_wrapped_agents(cli::hook::HookScope::Global).unwrap_or_default();
+    println!("enabled agents:   {}", if wrapped.is_empty() { "none".to_string() } else {
+        wrapped.iter().map(|w| w.name.as_str()).collect::<Vec<_>>().join(", ")
+    });
+    println!();
+    println!("Get started:");
+    println!("  vetto enable <agent>    wrap installed agent (e.g. vetto enable claude)");
+    println!("  vetto run <command>     run binary inside sandbox");
+    println!("  vetto doctor            inspect host kernel isolation features");
+    Ok(())
+}
+
 fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
     if raw_args.iter().any(|a| a == "--") {
         return Ok(raw_args.to_vec());
@@ -719,6 +740,9 @@ fn run() -> Result<()> {
             }
         }
         None => {
+            if raw_args.len() <= 1 {
+                return print_zero_arg_summary();
+            }
             let mut cfg = RunConfig::from_cli(&args)?;
             let mut profile_loaded = false;
             if cfg.agent.is_empty() && args.profile != "default" {

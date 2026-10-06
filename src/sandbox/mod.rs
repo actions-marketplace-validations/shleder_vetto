@@ -19,6 +19,7 @@ pub mod macos;
 pub use macos::net_proxy as macos_net_proxy;
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 pub mod windows;
 
 #[cfg(unix)]

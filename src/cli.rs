@@ -808,8 +808,22 @@ impl Cli {
         global: &crate::config::GlobalConfig,
     ) -> anyhow::Result<crate::config::RunConfig> {
         let cli = self;
+        let preset_str = cli.preset.as_deref().or(global.preset.as_deref());
+        let (preset, preset_agent) = match preset_str {
+            Some(p) => {
+                if let Ok(parsed) = crate::policy::presets::Preset::parse(p) {
+                    (Some(parsed), None)
+                } else if let Some(canon) = crate::policy::defaults::canonical_agent_name(p) {
+                    (None, Some(canon.to_string()))
+                } else {
+                    (Some(crate::policy::presets::Preset::parse(p)?), None)
+                }
+            }
+            None => (None, None),
+        };
+
         let agent_preset = match cli.agents.as_slice() {
-            [] => crate::config::detect_agent_preset(&cli.agent),
+            [] => preset_agent.or_else(|| crate::config::detect_agent_preset(&cli.agent)),
             [agent] if !agent.contains('=') && !agent.trim().is_empty() => Some(
                 crate::policy::defaults::canonical_agent_name(agent)
                     .map(|s| s.to_string())
@@ -861,12 +875,6 @@ impl Cli {
             .or(global.report_retention)
             .or(Some(50));
         let report_max_age_secs = cli.report_max_age_secs.or(global.report_max_age_secs);
-
-        let preset_str = cli.preset.as_deref().or(global.preset.as_deref());
-        let preset = match preset_str {
-            Some(p) => Some(crate::policy::presets::Preset::parse(p)?),
-            None => None,
-        };
 
         let profile = if cli.profile != "default" {
             cli.profile.clone()

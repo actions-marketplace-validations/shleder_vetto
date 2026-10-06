@@ -4,6 +4,8 @@
 //! injection (Deny ACEs before Allow ACEs), `STARTUPINFOEXW` security capabilities
 //! configuration, and RAII profile/DACL cleanup guards.
 
+#![allow(dead_code)]
+
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
