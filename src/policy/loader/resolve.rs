@@ -69,6 +69,10 @@ pub fn agent_root(home: &Path, agent: &str) -> Result<PathBuf> {
         "crewai" => PathBuf::from(".crewai"),
         "autogen" => PathBuf::from(".autogen"),
         "custom" => PathBuf::from(".config/vetto/agents/custom"),
+        "swebench" => PathBuf::from(".swebench"),
+        "qwen_code" => PathBuf::from(".qwen"),
+        "roo_code" => PathBuf::from(".roo"),
+        "browser_use" => PathBuf::from(".browser-use"),
         _ => bail!(
             "unknown agent '{}'; known agents: {}",
             agent,

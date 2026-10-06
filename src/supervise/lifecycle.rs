@@ -40,6 +40,7 @@ pub struct SignalController {
     #[allow(dead_code)]
     target: i32,
     #[cfg(unix)]
+    #[allow(dead_code)]
     pipe_read: OwnedFd,
     #[cfg(unix)]
     pipe_write: OwnedFd,

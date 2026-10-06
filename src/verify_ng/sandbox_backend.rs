@@ -1582,6 +1582,7 @@ impl WindowsBackend {
     /// Prepare against explicit probe facts. Thin wrapper over the pure
     /// [`super::windows_enforce::states_for_facts`] mapping so the state
     /// table stays unit-testable without a Windows host.
+    #[allow(dead_code)]
     fn prepare_with_facts(
         &mut self,
         policy: &CanonicalPolicy,

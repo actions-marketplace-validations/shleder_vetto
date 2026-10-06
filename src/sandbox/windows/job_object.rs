@@ -3,6 +3,8 @@
 //! Enforces `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and strictly prevents
 //! child processes from breaking away from the containment boundary.
 
+#![allow(dead_code)]
+
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};

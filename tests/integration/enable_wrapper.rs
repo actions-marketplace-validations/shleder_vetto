@@ -242,3 +242,74 @@ fn test_enable_all_command() {
     assert!(shims_dir.join("claude").exists(), "claude shim must exist");
     assert!(shims_dir.join("agy").exists(), "agy shim must exist");
 }
+
+#[test]
+fn test_enable_all_multi_binary_aliases() {
+    let project = TempProject::new("enable-all-aliases");
+    let proj_dir = project.path();
+
+    let bin_dir = proj_dir.join("host_bin");
+    std::fs::create_dir_all(&bin_dir).expect("create bin dir");
+    let mock_claude = bin_dir.join("claude");
+    write_file(&mock_claude, "#!/bin/sh\necho \"claude\"\n");
+    let mock_claude_code = bin_dir.join("claude-code");
+    write_file(&mock_claude_code, "#!/bin/sh\necho \"claude-code\"\n");
+    let mock_qwen = bin_dir.join("qwen-code");
+    write_file(&mock_qwen, "#!/bin/sh\necho \"qwen-code\"\n");
+    let mock_roo = bin_dir.join("roo-code");
+    write_file(&mock_roo, "#!/bin/sh\necho \"roo-code\"\n");
+
+    #[cfg(windows)]
+    {
+        write_file(&bin_dir.join("claude.cmd"), "@echo off\r\necho claude\r\n");
+        write_file(
+            &bin_dir.join("claude-code.cmd"),
+            "@echo off\r\necho claude-code\r\n",
+        );
+        write_file(&bin_dir.join("qwen-code.cmd"), "@echo off\r\necho qwen\r\n");
+        write_file(&bin_dir.join("roo-code.cmd"), "@echo off\r\necho roo\r\n");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for p in [&mock_claude, &mock_claude_code, &mock_qwen, &mock_roo] {
+            let mut perms = std::fs::metadata(p).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(p, perms).unwrap();
+        }
+    }
+
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = std::env::split_paths(&original_path).collect::<Vec<_>>();
+    paths.insert(0, bin_dir.clone());
+    let custom_path = std::env::join_paths(paths).unwrap();
+
+    let out = Command::new(vetto_bin())
+        .args(["enable", "--all", "--scope", "local"])
+        .current_dir(proj_dir)
+        .env("PATH", &custom_path)
+        .env("HOME", test_home())
+        .output()
+        .expect("exec enable --all");
+
+    assert!(
+        out.status.success(),
+        "vetto enable --all failed: {}",
+        stderr(&out)
+    );
+
+    let shims_dir = proj_dir.join(".vetto").join("shims");
+    assert!(shims_dir.join("claude").exists(), "claude shim must exist");
+    assert!(
+        shims_dir.join("claude-code").exists(),
+        "claude-code alias shim must exist"
+    );
+    assert!(
+        shims_dir.join("qwen-code").exists(),
+        "qwen-code shim must exist"
+    );
+    assert!(
+        shims_dir.join("roo-code").exists(),
+        "roo-code shim must exist"
+    );
+}

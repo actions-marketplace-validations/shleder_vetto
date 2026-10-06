@@ -1,0 +1,65 @@
+[metadata]
+name = "browser_use"
+description = "Hardened compatibility profile for Browser Use web agent runtime."
+
+[filesystem]
+allow_read = [
+    "$AGENT",
+    "$HOME/.browser-use",
+    "$HOME/.config/browser-use",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.local/bin",
+    "$HOME/.cargo/bin",
+    "$HOME/.cache",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "/tmp",
+]
+allow_write = [
+    "$AGENT",
+    "$HOME/.browser-use",
+    "$HOME/.config/browser-use",
+    "$HOME/.cache/ms-playwright",
+    "$HOME/.cache/puppeteer",
+    "$HOME/.cache",
+    "$HOME/.cache/uv",
+    "$HOME/.local/share/uv",
+    "/tmp",
+]
+
+[environment]
+pass_through = [
+    "BROWSER_USE_*",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY",
+    "PLAYWRIGHT_*",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "XDG_SESSION_DESKTOP",
+    "XAUTHORITY",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "BROWSER",
+    "XDG_RUNTIME_DIR",
+]
+
+[network]
+allow = [
+    "api.openai.com",
+    "api.anthropic.com",
+    "openrouter.ai",
+    "api.deepseek.com",
+    "generativelanguage.googleapis.com",
+    "playwright.dev",
+    "registry.npmjs.org",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "github.com",
+    "api.github.com",
+]

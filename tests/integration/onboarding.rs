@@ -215,7 +215,7 @@ sandbox_write_roots = ["/tmp/build"]
 #[test]
 fn zero_config_fails_cleanly_with_agent_guidance_when_no_agent_found() {
     let project = TempProject::new("zero-config-empty");
-    let out = run_vetto_in(project.path(), &[]);
+    let out = run_vetto_in(project.path(), &["--dry-run"]);
     assert!(
         !out.status.success(),
         "vetto with no agent and no markers must fail"

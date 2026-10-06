@@ -14,7 +14,7 @@ use anyhow::{bail, Result};
 use crate::policy::loader::RawLayer;
 use crate::policy::presets::{agent_network_allowlist, preset_layer, Preset};
 
-pub const SUPPORTED_AGENTS: [&str; 28] = [
+pub const SUPPORTED_AGENTS: [&str; 32] = [
     "claude",
     "codex",
     "opencode",
@@ -43,6 +43,10 @@ pub const SUPPORTED_AGENTS: [&str; 28] = [
     "crewai",
     "autogen",
     "amp",
+    "swebench",
+    "qwen_code",
+    "roo_code",
+    "browser_use",
 ];
 
 struct AgentSpec {
@@ -186,6 +190,26 @@ const AGENT_SPECS: &[AgentSpec] = &[
         name: "amp",
         binaries: &["amp", "amp-cli"],
         markers: &[".amp", "amp.json", "amp.yaml"],
+    },
+    AgentSpec {
+        name: "swebench",
+        binaries: &["swebench"],
+        markers: &[".swebench"],
+    },
+    AgentSpec {
+        name: "qwen_code",
+        binaries: &["qwen-code", "qwen_code", "qwen"],
+        markers: &[".qwen", ".qwen-code", "qwen.json", "qwen-code.json"],
+    },
+    AgentSpec {
+        name: "roo_code",
+        binaries: &["roo-code", "roo_code", "roo"],
+        markers: &[".roomodes", ".roo", "roo.json"],
+    },
+    AgentSpec {
+        name: "browser_use",
+        binaries: &["browser-use", "browser_use"],
+        markers: &[".browser-use", "browser-use.json", "browser_use.json"],
     },
 ];
 

@@ -4,6 +4,7 @@
 //! unsupported environments is part of the spec, not a failure.
 
 #![allow(clippy::all)]
+#![allow(dead_code)]
 
 mod common;
 

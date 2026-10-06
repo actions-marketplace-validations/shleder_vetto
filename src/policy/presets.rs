@@ -291,6 +291,31 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "api.anthropic.com".into(),
             "api.openai.com".into(),
         ],
+        "swebench" => vec![],
+        "qwen_code" => vec![
+            "dashscope.aliyuncs.com".into(),
+            "api.deepseek.com".into(),
+            "api.openai.com".into(),
+            "openrouter.ai".into(),
+            "huggingface.co".into(),
+            "hf.co".into(),
+        ],
+        "roo_code" => vec![
+            "api.anthropic.com".into(),
+            "api.openai.com".into(),
+            "openrouter.ai".into(),
+            "api.deepseek.com".into(),
+            "generativelanguage.googleapis.com".into(),
+            "api.groq.com".into(),
+        ],
+        "browser_use" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+            "api.deepseek.com".into(),
+            "generativelanguage.googleapis.com".into(),
+            "playwright.dev".into(),
+        ],
         _ => Vec::new(),
     };
 

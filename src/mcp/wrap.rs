@@ -205,7 +205,7 @@ where
 
 /// Resolves a Windows SystemRoot from an optional raw environment value,
 /// falling back to canonical `C:\Windows` if validation fails.
-#[cfg(any(windows, test))]
+#[cfg(test)]
 fn resolve_windows_system_root_from<F>(raw_env: Option<&str>, check_sys32: F) -> PathBuf
 where
     F: Fn(&Path) -> bool,

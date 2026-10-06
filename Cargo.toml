@@ -77,10 +77,5 @@ harness = false
 lto = true
 strip = true
 
-[lints.rust]
-# Unwired Windows capability/library surfaces (minifilter, restricted token)
-# are dead code by design and stay allowed.
-dead_code = "allow"
-
 [lints.clippy]
 all = { level = "deny", priority = -1 }

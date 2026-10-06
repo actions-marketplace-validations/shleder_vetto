@@ -104,7 +104,12 @@ fn test_all_agent_profiles_load_successfully() {
         "omnigent",
         "crewai",
         "autogen",
+        "amp",
         "custom",
+        "swebench",
+        "qwen_code",
+        "roo_code",
+        "browser_use",
     ];
 
     for agent in all_agents {
@@ -809,5 +814,126 @@ fn test_autogen_profile_consistency() {
     assert!(
         pol.network_allow.iter().any(|d| d == "api.openai.com"),
         "api.openai.com must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_qwen_code_profile_consistency() {
+    let temp = TempProject::new("qwen-code-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("qwen_code".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load qwen_code policy");
+    let qwen_home = home.join(".qwen");
+    assert!(
+        pol.allow_write.contains(&qwen_home),
+        "~/.qwen must be writable"
+    );
+    assert!(
+        pol.environment.pass_through.iter().any(|v| v == "QWEN_*"),
+        "QWEN_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow
+            .iter()
+            .any(|d| d == "dashscope.aliyuncs.com"),
+        "dashscope.aliyuncs.com must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_roo_code_profile_consistency() {
+    let temp = TempProject::new("roo-code-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("roo_code".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load roo_code policy");
+    let roo_home = home.join(".roo");
+    assert!(
+        pol.allow_write.contains(&roo_home),
+        "~/.roo must be writable"
+    );
+    assert!(
+        pol.environment.pass_through.iter().any(|v| v == "ROO_*"),
+        "ROO_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow.iter().any(|d| d == "api.anthropic.com"),
+        "api.anthropic.com must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_browser_use_profile_consistency() {
+    let temp = TempProject::new("browser-use-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("browser_use".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load browser_use policy");
+    let browser_use_home = home.join(".browser-use");
+    assert!(
+        pol.allow_write.contains(&browser_use_home),
+        "~/.browser-use must be writable"
+    );
+    assert!(
+        pol.environment
+            .pass_through
+            .iter()
+            .any(|v| v == "BROWSER_USE_*"),
+        "BROWSER_USE_* env vars must be allowed in pass_through"
+    );
+    assert!(
+        pol.network_allow.iter().any(|d| d == "playwright.dev"),
+        "playwright.dev must be allowed in network_allow"
+    );
+}
+
+#[test]
+fn test_swebench_profile_consistency() {
+    let temp = TempProject::new("swebench-profile-creds");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    let opts = PolicyLoadOptions {
+        agent: Some("swebench".to_string()),
+        include_project_policy: false,
+        ..Default::default()
+    };
+    let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+        .expect("load swebench policy");
+    let swebench_home = home.join(".swebench");
+    assert!(
+        pol.allow_write.contains(&project),
+        "$PROJECT must be writable in swebench"
+    );
+    assert!(
+        pol.allow_read.contains(&swebench_home),
+        "~/.swebench must be in allow_read as agent root"
     );
 }
