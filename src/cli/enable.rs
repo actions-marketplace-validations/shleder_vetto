@@ -79,7 +79,7 @@ pub fn run_enable(args: &EnableArgs) -> Result<()> {
         None => list_agents(args.scope),
         Some(agent_raw) => {
             let agent_name = agent_raw.trim().to_lowercase();
-            enable_agent_internal(&agent_name, args.force, args.fix, args.scope, false)
+            enable_agent_internal(&agent_name, args.force, args.fix, args.scope, false, true)
         }
     }
 }
@@ -116,7 +116,7 @@ pub fn enable_all(force: bool, fix: bool, scope: HookScope) -> Result<()> {
     let mut failed = Vec::new();
 
     for &(agent, ref real_bin) in &installed_agents {
-        match enable_agent_internal(agent, force, fix, scope, true) {
+        match enable_agent_internal(agent, force, fix, scope, true, false) {
             Ok(()) => {
                 let net_allowlist = agent_network_allowlist(agent);
                 let net_desc = if net_allowlist.is_empty() {
@@ -128,6 +128,21 @@ pub fn enable_all(force: bool, fix: bool, scope: HookScope) -> Result<()> {
             }
             Err(err) => {
                 failed.push((agent, err.to_string()));
+            }
+        }
+    }
+
+    if !newly_wrapped.is_empty() {
+        let home_dir = get_home_dir()?;
+        if fix {
+            let _ = shell_env::repair_shell_profiles(&shims_dir, &home_dir);
+        } else {
+            let shells = shell_env::detect_available_shells(&home_dir);
+            for &shell in &shells {
+                let status = shell_env::check_shell_hook_status(shell, &home_dir, &shims_dir);
+                if !status.is_installed || force || !status.is_indestructible() {
+                    let _ = shell_env::install_shell_hook(shell, &shims_dir, &home_dir, force);
+                }
             }
         }
     }
@@ -184,7 +199,7 @@ pub fn run_disable(args: &DisableArgs) -> Result<()> {
 
 /// Enables transparent sandbox wrapping for a specific agent without banner output.
 pub fn enable_agent_silent(agent: &str, force: bool, scope: HookScope) -> Result<()> {
-    enable_agent_internal(agent, force, false, scope, true)
+    enable_agent_internal(agent, force, false, scope, true, true)
 }
 
 fn enable_agent_internal(
@@ -193,6 +208,7 @@ fn enable_agent_internal(
     fix: bool,
     scope: HookScope,
     silent: bool,
+    install_hooks: bool,
 ) -> Result<()> {
     // 1. Resolve the real host binary FIRST to verify it is installed and in PATH
     let (real_bin_name, real_bin) = crate::onboard::find_real_agent_binary(agent)?;
@@ -210,6 +226,11 @@ fn enable_agent_internal(
     }
     if !shim_names.contains(&real_bin_name) {
         shim_names.push(real_bin_name.clone());
+    }
+    for &cand in crate::onboard::agent_candidate_binaries(canon) {
+        if crate::shim::find_real_binary(cand).is_ok() && !shim_names.contains(&cand.to_string()) {
+            shim_names.push(cand.to_string());
+        }
     }
 
     // 3. Collision check: if a non-Vetto file already exists at any target location
@@ -232,15 +253,17 @@ fn enable_agent_internal(
     ShimRegistry::create_shims(&shims_dir, &shim_names, current_exe.as_deref())?;
 
     // 5. Ensure shell environment integration is installed and up to date
-    let home_dir = get_home_dir()?;
-    if fix {
-        let _ = shell_env::repair_shell_profiles(&shims_dir, &home_dir);
-    } else {
-        let shells = shell_env::detect_available_shells(&home_dir);
-        for &shell in &shells {
-            let status = shell_env::check_shell_hook_status(shell, &home_dir, &shims_dir);
-            if !status.is_installed || force || !status.is_indestructible() {
-                let _ = shell_env::install_shell_hook(shell, &shims_dir, &home_dir, force);
+    if install_hooks {
+        let home_dir = get_home_dir()?;
+        if fix {
+            let _ = shell_env::repair_shell_profiles(&shims_dir, &home_dir);
+        } else {
+            let shells = shell_env::detect_available_shells(&home_dir);
+            for &shell in &shells {
+                let status = shell_env::check_shell_hook_status(shell, &home_dir, &shims_dir);
+                if !status.is_installed || force || !status.is_indestructible() {
+                    let _ = shell_env::install_shell_hook(shell, &shims_dir, &home_dir, force);
+                }
             }
         }
     }

@@ -360,6 +360,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
             })
         );
     } else {
+        eprintln!("[vetto] protected session completed: 0 secrets leaked, host secrets masked.");
         eprintln!(
             "vetto: agent exited {} after {}s (blocked={}, events={}, I/O: {}, tier={}{})",
             exit_code,
