@@ -110,7 +110,7 @@ fn init_writes_starter_policy() {
 #[test]
 fn profiles_lists_builtins() {
     let proj = TempProject::new("profiles");
-    let out = run_vetto_in(proj.path(), &["profiles"]);
+    let out = run_vetto_in(proj.path(), &["policy", "list"]);
     let text = stdout(&out);
     for name in ["default", "strict", "audit", "permissive"] {
         assert!(text.contains(name), "missing profile {name}: {text}");

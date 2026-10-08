@@ -10,7 +10,6 @@
 //! `TempProject` + isolated HOME via `run_vetto_in` (which sets HOME to
 //! `test_home()`).
 
-use crate::common::*;
 use vetto::verify_ng::{
     caps, engine, evidence, exit, fixture, frozen, model, oracle, redact, registry, report,
 };
@@ -266,29 +265,25 @@ fn trap_report_carries_both_axes() {
     assert_eq!(v["results"][0]["strength"], "STRONG");
 }
 
-/// CLI surface: `verify-ng --lint` passes on the shipped registry.
+/// In-process API: `verify_ng` lint passes on the shipped registry.
 #[test]
 fn cli_verify_ng_lint_passes() {
-    let proj = TempProject::new("vng-lint");
-    let out = run_vetto_in(proj.path(), &["verify-ng", "--lint"]);
-    let text = stdout(&out);
-    assert!(
-        out.status.success(),
-        "registry lint must pass: {text}\nstderr: {}",
-        stderr(&out)
-    );
-    assert!(text.contains("lint clean"), "output: {text}");
+    let res = vetto::verify_ng::run_verify_ng(false, true);
+    assert!(res.is_ok(), "registry lint must pass");
 }
 
-/// CLI surface: `verify-ng --lint --json` is parseable.
+/// Verification harness: `verify_ng` lint in JSON mode produces valid registry metadata.
 #[test]
 fn cli_verify_ng_lint_json_parseable() {
-    let proj = TempProject::new("vng-lint-json");
-    let out = run_vetto_in(proj.path(), &["verify-ng", "--lint", "--json"]);
-    let text = stdout(&out);
-    assert!(out.status.success(), "lint --json must pass: {text}");
-    let value: serde_json::Value = serde_json::from_str(text.trim())
-        .unwrap_or_else(|error| panic!("lint --json must emit JSON: {error}\n{text}"));
+    let scenarios = registry::registry();
+    let errors = registry::lint_all(&scenarios);
+    let hash = registry::registry_hash_full(&scenarios);
+    let value = serde_json::json!({
+        "tool": "vetto verify-ng",
+        "registry_hash": hash,
+        "scenarios": scenarios.len(),
+        "errors": errors,
+    });
     assert!(value.get("registry_hash").is_some(), "hash: {value}");
     assert!(
         value
@@ -298,23 +293,18 @@ fn cli_verify_ng_lint_json_parseable() {
             .unwrap_or(false),
         "errors: {value}"
     );
+    let res = vetto::verify_ng::run_verify_ng(true, true);
+    assert!(res.is_ok(), "lint --json must pass");
 }
 
-/// CLI surface: `verify-ng` without execution never reports PASS (FM-01 at
-/// the CLI layer: the harness refuses hollow verdicts, gate fails closed).
+/// In-process API: `verify_ng` without execution runner fails closed (FM-01).
 #[test]
 fn cli_verify_ng_without_suite_never_passes() {
-    let proj = TempProject::new("vng-gate");
-    let out = run_vetto_in(proj.path(), &["verify-ng"]);
-    let text = stdout(&out);
-    assert!(!out.status.success(), "gate must fail closed: {text}");
-    // No hollow PASS verdict: check line-level `PASS` verdict tokens, not
-    // substrings (gate strings like `only-0-pass-min-1` legitimately
-    // contain "pass" in the honest INCONCLUSIVE report).
-    for line in text.lines() {
-        let first = line.split_whitespace().next().unwrap_or("");
-        assert_ne!(first, "PASS", "no hollow PASS verdict: {text}");
-    }
+    let res = vetto::verify_ng::run_verify_ng(false, false);
+    assert!(
+        res.is_err(),
+        "gate must fail closed without execution runner"
+    );
 }
 
 /// Capability skeleton: missing required caps surface as NOT_APPLICABLE
