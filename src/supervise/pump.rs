@@ -310,4 +310,3 @@ fn safe_flush_output(fd: libc::c_int, data: &[u8]) {
         }
     }
 }
-

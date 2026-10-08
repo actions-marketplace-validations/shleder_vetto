@@ -126,7 +126,9 @@ impl SignalController {
 
             #[cfg(target_os = "linux")]
             let pinned = if target > 0 {
-                Some(crate::sandbox::linux::proctrack::PinnedProcess::open(target))
+                Some(crate::sandbox::linux::proctrack::PinnedProcess::open(
+                    target,
+                ))
             } else {
                 None
             };
