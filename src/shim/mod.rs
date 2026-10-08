@@ -491,10 +491,23 @@ pub fn ensure_session_branch(
 /// by strictly filtering out `.vetto/shims`, `is_vetto_shim_content`, and `current_exe`.
 pub fn resolve_executable(cmd: &str) -> std::io::Result<PathBuf> {
     let command_path = Path::new(cmd);
-    if command_path.is_absolute() || command_path.components().count() > 1 {
+    if (command_path.is_absolute() || command_path.components().count() > 1)
+        && !is_shim_path(command_path)
+        && !is_vetto_shim_content(command_path)
+    {
         return Ok(command_path.to_path_buf());
     }
-    find_real_binary(cmd).map_err(|e| {
+
+    let lookup_name = if command_path.is_absolute() || command_path.components().count() > 1 {
+        command_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(cmd)
+    } else {
+        cmd
+    };
+
+    find_real_binary(lookup_name).map_err(|e| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("command '{cmd}' not found in PATH: {e}"),
@@ -835,10 +848,43 @@ mod tests {
         let err = resolve_executable("non_existent_binary_xyz_987654321").unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
+        // Empty string returns NotFound error
+        assert!(resolve_executable("").is_err());
+
         // Real binary on path
         #[cfg(unix)]
         assert!(resolve_executable("sh").is_ok());
         #[cfg(windows)]
         assert!(resolve_executable("cmd").is_ok());
+    }
+
+    #[test]
+    fn test_resolve_executable_shim_defense() {
+        let temp_dir = std::env::temp_dir().join(format!("vetto-shim-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let shim_path = temp_dir.join("sh");
+        std::fs::write(
+            &shim_path,
+            "#!/bin/sh\n# Vetto transparent binary shim\nexec vetto __shim sh \"$@\"\n",
+        )
+        .unwrap();
+
+        // Resolving the shim file must NEVER return the shim itself
+        let resolved = resolve_executable(&shim_path.to_string_lossy()).unwrap();
+        assert_ne!(resolved, shim_path);
+        #[cfg(unix)]
+        assert!(resolved.ends_with("sh"));
+
+        // If the shim target does not exist on PATH, it must fail closed with NotFound
+        let fake_shim = temp_dir.join("non_existent_tool_xyz_987");
+        std::fs::write(
+            &fake_shim,
+            "#!/bin/sh\n# Vetto transparent binary shim\nexec vetto __shim nonexistent \"$@\"\n",
+        )
+        .unwrap();
+        let err = resolve_executable(&fake_shim.to_string_lossy()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
