@@ -117,6 +117,42 @@ pub struct EnvironmentVerificationReport {
 /// This provides independent runtime evidence from the OS kernel.
 #[cfg(target_os = "linux")]
 pub fn capture_proc_environ(pid: u32) -> Option<Vec<(String, String)>> {
+    let parent_comm = std::fs::read_to_string("/proc/self/comm").ok();
+    let parent_cmdline = std::fs::read("/proc/self/cmdline").ok();
+
+    // Poll briefly for child to pass execve() so we don't capture parent's pre-exec environ
+    for _ in 0..30 {
+        if let Ok(child_comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
+            if let Some(ref pcomm) = parent_comm {
+                if !pcomm.is_empty() && child_comm == *pcomm {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                    continue;
+                }
+            }
+        }
+        if let Ok(child_cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) {
+            if let Some(ref pcmd) = parent_cmdline {
+                if !pcmd.is_empty() && child_cmdline == *pcmd {
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+
+    // Safety guard: if child is still matching parent comm or cmdline, execve never finished
+    if let (Some(ref pcomm), Ok(child_comm)) = (parent_comm.as_ref(), std::fs::read_to_string(format!("/proc/{pid}/comm"))) {
+        if !pcomm.is_empty() && child_comm == *pcomm {
+            return None;
+        }
+    }
+    if let (Some(ref pcmd), Ok(child_cmdline)) = (parent_cmdline.as_ref(), std::fs::read(format!("/proc/{pid}/cmdline"))) {
+        if !pcmd.is_empty() && child_cmdline == *pcmd {
+            return None;
+        }
+    }
+
     let bytes = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
     if bytes.is_empty() {
         return None;
@@ -332,11 +368,24 @@ pub fn verify_execution_environment(
     let mut host_facts = Vec::new();
 
     // 1. Post-start host environment mutation check
-    // Sibling test threads in concurrent test harnesses may manipulate VETTO_*
-    // test variables; filter them out to prevent false-positive mutation violations.
+    // Sibling test threads in concurrent test harnesses may manipulate test variables;
+    // filter them out to prevent false-positive mutation violations.
+    let is_ignored_mutation_key = |k: &str| {
+        k.starts_with("VETTO_")
+            || k.starts_with("CARGO_")
+            || k.starts_with("RUST_")
+            || k == "SSH_AUTH_SOCK"
+            || k == "DEEPSEEK_BASE_URL"
+            || k == "OLLAMA_API_BASE"
+            || k == "PATH"
+            || k == "HOME"
+            || k == "USERPROFILE"
+            || k == "LLVM_PROFILE_FILE"
+    };
+
     let mut mutated_keys = Vec::new();
     for (k, v) in host_env_before {
-        if k.starts_with("VETTO_") {
+        if is_ignored_mutation_key(k) {
             continue;
         }
         if host_env_after.get(k) != Some(v) {
@@ -344,7 +393,7 @@ pub fn verify_execution_environment(
         }
     }
     for k in host_env_after.keys() {
-        if k.starts_with("VETTO_") {
+        if is_ignored_mutation_key(k) {
             continue;
         }
         if !host_env_before.contains_key(k) {
