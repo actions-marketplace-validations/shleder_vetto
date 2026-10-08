@@ -75,6 +75,9 @@ extern "system" {
 }
 
 /// Host-observed verification of a live confined Windows child.
+///
+/// # Safety
+/// The caller must ensure that `process` and `job` are valid Windows handles or null.
 #[cfg(target_os = "windows")]
 pub unsafe fn verify_production_child(process: RawHandle, job: RawHandle) -> HostVerification {
     let mut out = HostVerification::none();
@@ -98,6 +101,10 @@ pub unsafe fn verify_production_child(process: RawHandle, job: RawHandle) -> Hos
     out
 }
 
+/// Host-observed verification placeholder off Windows.
+///
+/// # Safety
+/// No invariants required.
 #[cfg(not(target_os = "windows"))]
 pub unsafe fn verify_production_child(_process: RawHandle, _job: RawHandle) -> HostVerification {
     HostVerification::none()
@@ -185,6 +192,10 @@ unsafe fn integrity_rid(token: RawHandle) -> Option<u32> {
     Some(unsafe { *last_sub_auth })
 }
 
+/// Query the assigned process IDs for a Job Object.
+///
+/// # Safety
+/// The caller must ensure that `job` is a valid Windows Job Object handle or null.
 #[cfg(target_os = "windows")]
 pub unsafe fn job_assigned_pids(job: RawHandle) -> Vec<u32> {
     let mut capacity: usize = 64;
@@ -216,6 +227,10 @@ pub unsafe fn job_assigned_pids(job: RawHandle) -> Vec<u32> {
     Vec::new()
 }
 
+/// Query the assigned process IDs placeholder off Windows.
+///
+/// # Safety
+/// No invariants required.
 #[cfg(not(target_os = "windows"))]
 pub unsafe fn job_assigned_pids(_job: RawHandle) -> Vec<u32> {
     Vec::new()

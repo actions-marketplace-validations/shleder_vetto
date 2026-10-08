@@ -976,54 +976,46 @@ impl SandboxBackend for LinuxBackend {
     }
 
     fn note_host_verified(&mut self, verification: &HostVerification) {
-        if let Some(r) = self.report.as_mut() {
-            for rec in &mut r.records {
-                if rec.capability == SecurityCapability::ProcessIsolation
-                    && verification.no_new_privs
-                {
-                    if rec.state == EnforcementState::Enforced {
-                        rec.state = EnforcementState::Verified;
-                    }
-                }
-                if rec.capability == SecurityCapability::SyscallRestriction
-                    && verification.seccomp_filter
-                {
-                    if rec.state == EnforcementState::Enforced {
-                        rec.state = EnforcementState::Verified;
-                    }
-                }
-                if rec.capability == SecurityCapability::NetworkIsolation
-                    && (verification.netns_isolated
-                        || (verification.seccomp_filter
-                            && self.plan.as_ref().is_some_and(|p| p.net_deny)))
-                {
-                    if rec.state == EnforcementState::Enforced {
-                        rec.state = EnforcementState::Verified;
-                    }
-                }
-                if rec.capability == SecurityCapability::ProcessTreeContainment
-                    && (verification.subreaper_ok || verification.win_in_job)
-                {
-                    if rec.state == EnforcementState::Enforced {
-                        rec.state = EnforcementState::Verified;
-                    }
-                }
-                if rec.capability == SecurityCapability::ResourceLimits
-                    && (verification.rlimit_as_ok
-                        || verification.rlimit_cpu_ok
-                        || verification.rlimit_fsize_ok
-                        || verification.rlimit_nproc_ok
-                        || verification.win_job_ceiling
-                        || verification.cgroup_memory_ok
-                        || verification.cgroup_cpu_ok
-                        || verification.cgroup_pids_ok)
-                {
-                    if rec.state == EnforcementState::Enforced {
-                        rec.state = EnforcementState::Verified;
+        let Some(report) = self.report.as_mut() else {
+            return;
+        };
+        let mut verified = |cap: SecurityCapability, observed: bool| {
+            if observed {
+                if let Some(record) = report.records.iter_mut().find(|r| r.capability == cap) {
+                    if record.state == EnforcementState::Enforced {
+                        record.state = EnforcementState::Verified;
                     }
                 }
             }
-        }
+        };
+        verified(
+            SecurityCapability::ProcessIsolation,
+            verification.no_new_privs,
+        );
+        verified(
+            SecurityCapability::SyscallRestriction,
+            verification.seccomp_filter,
+        );
+        verified(
+            SecurityCapability::NetworkIsolation,
+            verification.netns_isolated
+                || (verification.seccomp_filter && self.plan.as_ref().is_some_and(|p| p.net_deny)),
+        );
+        verified(
+            SecurityCapability::ProcessTreeContainment,
+            verification.subreaper_ok || verification.win_in_job,
+        );
+        verified(
+            SecurityCapability::ResourceLimits,
+            verification.rlimit_as_ok
+                || verification.rlimit_cpu_ok
+                || verification.rlimit_fsize_ok
+                || verification.rlimit_nproc_ok
+                || verification.win_job_ceiling
+                || verification.cgroup_memory_ok
+                || verification.cgroup_cpu_ok
+                || verification.cgroup_pids_ok,
+        );
     }
 
     fn note_failed(&mut self, kind: PreparationFailureKind) {
@@ -1380,10 +1372,11 @@ impl SandboxBackend for WindowsBackend {
         {
             let caps = crate::sandbox::windows::probe();
             if !caps.enforcement_ready() {
-                let states: BTreeMap<SecurityCapability, EnforcementState> = SecurityCapability::all()
-                    .into_iter()
-                    .map(|c| (c, EnforcementState::Failed))
-                    .collect();
+                let states: BTreeMap<SecurityCapability, EnforcementState> =
+                    SecurityCapability::all()
+                        .into_iter()
+                        .map(|c| (c, EnforcementState::Failed))
+                        .collect();
                 let failures: BTreeMap<SecurityCapability, PreparationFailureKind> =
                     SecurityCapability::all()
                         .into_iter()
