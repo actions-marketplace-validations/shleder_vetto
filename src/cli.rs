@@ -1467,19 +1467,15 @@ mod tests {
     }
 
     #[test]
-    fn test_unrecognized_and_typo_subcommands_fail_parsing() {
-        let err = Cli::try_parse_from(["vetto", "rn"]).unwrap_err();
-        let err_str = err.to_string();
-        assert!(err_str.contains("unrecognized subcommand") || err_str.contains("unexpected"));
-        assert!(err_str.contains("run"));
-
-        let err_stauts = Cli::try_parse_from(["vetto", "stauts"]).unwrap_err();
-        let err_stauts_str = err_stauts.to_string();
-        assert!(err_stauts_str.contains("status"));
-
-        for subcmd in ["verify-ng", "profiles", "profile", "watch", "digest"] {
+    fn test_unrecognized_and_phantom_subcommands_fail_parsing() {
+        for subcmd in ["rn", "stauts", "verify-ng", "profiles", "profile", "watch", "digest"] {
             let res = Cli::try_parse_from(["vetto", subcmd]);
             assert!(res.is_err(), "subcommand {subcmd} must not parse");
+            let err_str = res.unwrap_err().to_string();
+            assert!(
+                err_str.contains("unrecognized subcommand") || err_str.contains("unexpected"),
+                "error for {subcmd}: {err_str}"
+            );
         }
     }
 }

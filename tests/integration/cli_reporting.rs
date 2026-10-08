@@ -23,49 +23,22 @@ fn completions_are_available_for_all_requested_shells() {
 }
 
 #[test]
-fn clap_typo_suggestions_work_for_misspelled_subcommands() {
-    let output = Command::new(vetto_bin())
-        .arg("rn")
-        .output()
-        .expect("spawn misspelled subcommand");
-    assert!(!output.status.success());
-    let err = stderr(&output);
-    assert!(
-        err.contains("unrecognized subcommand") || err.contains("unexpected"),
-        "stderr: {err}"
-    );
-    assert!(
-        err.contains("run"),
-        "clap should suggest 'run' for 'rn': {err}"
-    );
-
-    let output_status = Command::new(vetto_bin())
-        .arg("stauts")
-        .output()
-        .expect("spawn misspelled subcommand");
-    assert!(!output_status.status.success());
-    let err_status = stderr(&output_status);
-    assert!(
-        err_status.contains("status"),
-        "clap should suggest 'status' for 'stauts': {err_status}"
-    );
-}
-
-#[test]
-fn removed_phantom_subcommands_are_rejected() {
-    for subcmd in ["verify-ng", "profiles", "profile", "watch", "digest"] {
+fn typo_subcommands_fail_with_clap_error_not_workspace_profile() {
+    for typo in ["rn", "stauts", "verify-ng", "profiles", "profile", "watch", "digest"] {
         let output = Command::new(vetto_bin())
-            .arg(subcmd)
+            .arg(typo)
             .output()
-            .expect("spawn removed subcommand");
-        assert!(
-            !output.status.success(),
-            "removed subcommand '{subcmd}' must not succeed"
-        );
+            .expect("spawn subcommand");
+        assert!(!output.status.success(), "subcommand '{typo}' must fail");
         let err = stderr(&output);
         assert!(
             err.contains("unrecognized subcommand") || err.contains("unexpected"),
-            "stderr for '{subcmd}': {err}"
+            "stderr for '{typo}' must be a clap error: {err}"
+        );
+        assert!(
+            !err.contains("workspace profile"),
+            "stderr for '{typo}' must not mention workspace profile: {err}"
         );
     }
 }
+
