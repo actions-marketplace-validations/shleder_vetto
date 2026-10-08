@@ -486,8 +486,23 @@ pub fn ensure_session_branch(
     }
     Ok(None)
 }
+/// Resolves an executable binary candidate from PATH or absolute/relative path.
+/// Direct delegation to `find_real_binary` guarantees zero circular shim recursion
+/// by strictly filtering out `.vetto/shims`, `is_vetto_shim_content`, and `current_exe`.
+pub fn resolve_executable(cmd: &str) -> std::io::Result<PathBuf> {
+    let command_path = Path::new(cmd);
+    if command_path.is_absolute() || command_path.components().count() > 1 {
+        return Ok(command_path.to_path_buf());
+    }
+    find_real_binary(cmd).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("command '{cmd}' not found in PATH: {e}"),
+        )
+    })
+}
 
-fn is_executable_file(p: &Path) -> bool {
+pub fn is_executable_file(p: &Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -808,5 +823,22 @@ mod tests {
         let (_, _, timeout_eq, clean_eq) = parse_shim_args(&args_eq);
         assert_eq!(timeout_eq, Some(std::time::Duration::from_secs(120)));
         assert_eq!(clean_eq, vec!["commit".to_string()]);
+    }
+
+    #[test]
+    fn test_resolve_executable() {
+        // Direct relative / absolute path resolution
+        let direct = Path::new("tests/fixtures");
+        assert_eq!(resolve_executable("tests/fixtures").unwrap(), direct);
+
+        // Non-existent binary returns NotFound error
+        let err = resolve_executable("non_existent_binary_xyz_987654321").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+        // Real binary on path
+        #[cfg(unix)]
+        assert!(resolve_executable("sh").is_ok());
+        #[cfg(windows)]
+        assert!(resolve_executable("cmd").is_ok());
     }
 }

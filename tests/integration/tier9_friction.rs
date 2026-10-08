@@ -133,30 +133,6 @@ fn test_feature_94_auto_timeout_calculation() {
     let _ = fs::remove_dir_all(&temp);
 }
 
-#[test]
-fn test_feature_95_workspace_profiles() {
-    let temp_prof_dir = std::env::temp_dir().join(format!("vetto-t9-prof-{}", std::process::id()));
-    let storage = vetto::profile::ProfileStorage::with_dir(temp_prof_dir.clone());
-
-    let prof = vetto::profile::WorkspaceProfile {
-        name: "test-proj".into(),
-        cwd: std::env::current_dir().unwrap(),
-        agent: vec!["true".into()],
-        policy_path: None,
-        net: "off".into(),
-        profile: "default".into(),
-        created_at: 12345,
-    };
-
-    storage.save(&prof).unwrap();
-    assert_eq!(storage.load("test-proj").unwrap(), prof);
-    assert_eq!(storage.list().unwrap().len(), 1);
-
-    storage.delete("test-proj").unwrap();
-    assert!(storage.load("test-proj").is_err());
-
-    let _ = fs::remove_dir_all(&temp_prof_dir);
-}
 
 #[test]
 fn test_feature_97_gen_sbom_script() {

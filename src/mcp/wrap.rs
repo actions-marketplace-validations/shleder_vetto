@@ -18,9 +18,7 @@ use crate::sandbox::{self, StdioMode};
 
 /// Resolves an executable binary candidate from PATH or a relative/absolute path.
 pub fn resolve_in_path(cmd: &str) -> Result<PathBuf> {
-    let resolved =
-        crate::supervise::spawn::resolve_in_path(cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok(PathBuf::from(resolved))
+    crate::shim::resolve_executable(cmd).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// Parses the network mode for MCP wrapping.

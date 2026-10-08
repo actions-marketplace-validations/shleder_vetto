@@ -15,7 +15,7 @@ use clap::Parser;
 
 use vetto::config::{NetMode, RunConfig, TuiMode};
 use vetto::{
-    cli, doctor, events, exit_codes, logger, mcp, policy, profile, sandbox, shim, watchdog,
+    cli, doctor, events, exit_codes, logger, mcp, policy, sandbox, shim, watchdog,
 };
 
 fn main() {
@@ -94,7 +94,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "status",
         "kill",
         "verify",
-        "verify-ng",
         "run",
         "exec",
         "undo",
@@ -103,7 +102,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "diff",
         "watchdog",
         "init",
-        "profiles",
         "hook",
         "mcp",
         "shim",
@@ -112,12 +110,9 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "completions",
         "man",
         "shell-env",
-        "profile",
         "scan-secrets",
-        "watch",
         "events",
         "audit",
-        "digest",
         "diff-sessions",
         "replay",
         "ssh-proxy",
@@ -404,7 +399,6 @@ fn run() -> Result<()> {
         Some(cli::Command::Diff(args)) => cli::diff::run_diff(args),
         Some(cli::Command::Watchdog(args)) => watchdog::run_cli(args),
         Some(cli::Command::Init { force }) => init(*force),
-        Some(cli::Command::Profiles) => profiles(),
         Some(cli::Command::Hook { command }) => cli::hook::run_cli(command),
         Some(cli::Command::Mcp { command }) => match command {
             None | Some(cli::McpCommand::Serve) => mcp::run_stdio_server(),
@@ -422,26 +416,6 @@ fn run() -> Result<()> {
         ),
         Some(cli::Command::Status { json }) => cli::status::run_cli(*json),
         Some(cli::Command::Kill(kill_args)) => cli::kill::run_cli(kill_args),
-        Some(cli::Command::Profile { command }) => match command {
-            cli::ProfileCommand::Save {
-                name,
-                agent,
-                policy,
-                net,
-                profile,
-            } => {
-                let agent_vec = agent.as_ref().map(|a| vec![a.clone()]).unwrap_or_default();
-                profile::save_profile(
-                    name,
-                    agent_vec,
-                    policy.clone(),
-                    net.clone(),
-                    profile.clone(),
-                )
-            }
-            cli::ProfileCommand::List { json } => profile::list_profiles(*json),
-            cli::ProfileCommand::Rm { name } => profile::remove_profile(name),
-        },
         Some(cli::Command::Allow {
             target,
             preset,
@@ -505,7 +479,6 @@ fn run() -> Result<()> {
                 )
             }
         }
-        Some(cli::Command::Digest { since, json }) => vetto::audit::run_digest(Some(since), *json),
         Some(cli::Command::DiffSessions {
             session_a,
             session_b,
@@ -538,9 +511,6 @@ fn run() -> Result<()> {
                 args.policy.as_deref().map(PathBuf::from).as_deref(),
                 &net,
             )
-        }
-        Some(cli::Command::VerifyNg { json, lint }) => {
-            vetto::verify_ng::run_verify_ng(*json, *lint)
         }
         Some(cli::Command::Redteam { json }) => {
             let report = vetto::redteam::run_redteam_battery();
@@ -678,6 +648,17 @@ fn run() -> Result<()> {
                 Ok(())
             }
             cli::PolicyCommand::List => {
+                println!("built-in profiles:");
+                for name in policy::defaults::PROFILE_NAMES {
+                    let desc = match name {
+                        "default" => "project+tmp write, toolchain caches read-only, secrets masked",
+                        "strict" => "minimal: project write only, no caches, no git identity",
+                        "audit" => "same fs as default; pair with --observe-seccomp/--jsonl/--report",
+                        "permissive" => "wide toolchain read surface; secrets still denied",
+                        _ => "",
+                    };
+                    println!("  {name:<12} {desc}");
+                }
                 println!("Available community policies in registry:");
                 for (name, desc) in policy::community::list_community_policies() {
                     println!("  {:16} {}", name, desc);
@@ -693,9 +674,6 @@ fn run() -> Result<()> {
             max_size,
             max_files,
         }) => scan_secrets_cli(path.as_deref(), *json, *max_size, *max_files),
-        Some(cli::Command::Watch { target, path, json }) => {
-            vetto::watch::run_watch(target, path.as_deref(), *json)
-        }
         Some(cli::Command::SshProxy { host, port }) => {
             #[cfg(target_os = "linux")]
             {
@@ -707,44 +685,12 @@ fn run() -> Result<()> {
                 bail!("the SSH proxy helper is available on Linux only")
             }
         }
-        Some(cli::Command::External(ext_args)) => {
-            if let Some(prof_name) = ext_args.first() {
-                let storage = profile::ProfileStorage::new()?;
-                let prof = storage.load(prof_name)?;
-                let mut cfg = RunConfig::from_cli(&args)?;
-                cfg.agent = prof.agent;
-                cfg.net = vetto::config::parse_net_mode(&prof.net)?;
-                if cfg.policy_path.is_none() {
-                    cfg.policy_path = prof.policy_path;
-                }
-                let _ = std::env::set_current_dir(&prof.cwd);
-                supervise(cfg)
-            } else {
-                bail!("no command provided");
-            }
-        }
         None => {
             if raw_args.len() <= 1 {
                 return print_zero_arg_summary();
             }
             let mut cfg = RunConfig::from_cli(&args)?;
-            let mut profile_loaded = false;
-            if cfg.agent.is_empty() && args.profile != "default" {
-                if let Ok(storage) = profile::ProfileStorage::new() {
-                    if let Ok(prof) = storage.load(&args.profile) {
-                        cfg.agent = prof.agent;
-                        cfg.net = vetto::config::parse_net_mode(&prof.net)?;
-                        if cfg.policy_path.is_none() {
-                            cfg.policy_path = prof.policy_path;
-                        }
-                        let _ = std::env::set_current_dir(&prof.cwd);
-                        profile_loaded = true;
-                    }
-                }
-            }
-            if !profile_loaded {
-                resolve_target_agent(&mut cfg, &args, &[], false)?;
-            }
+            resolve_target_agent(&mut cfg, &args, &[], false)?;
             if args.tui.is_none()
                 && cfg.tui == TuiMode::Statusline
                 && vetto::config::should_default_to_no_tui(cfg.agent_preset.as_deref(), &cfg.agent)
@@ -943,24 +889,9 @@ fn supervise(cfg: RunConfig) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// init / profiles
+// init
 // ---------------------------------------------------------------------------
 
 fn init(force: bool) -> Result<()> {
     vetto::init::run_init(Path::new("."), force)
-}
-
-fn profiles() -> Result<()> {
-    println!("built-in profiles:");
-    for name in policy::defaults::PROFILE_NAMES {
-        let desc = match name {
-            "default" => "project+tmp write, toolchain caches read-only, secrets masked",
-            "strict" => "minimal: project write only, no caches, no git identity",
-            "audit" => "same fs as default; pair with --observe-seccomp/--jsonl/--report",
-            "permissive" => "wide toolchain read surface; secrets still denied",
-            _ => "",
-        };
-        println!("  {name:<12} {desc}");
-    }
-    Ok(())
 }

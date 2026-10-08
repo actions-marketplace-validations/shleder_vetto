@@ -364,18 +364,6 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Adversarial verification harness: runs the frozen scenario registry
-    /// through host-fact-only oracle judging (measurement only, not part of
-    /// the security boundary).
-    #[command(name = "verify-ng")]
-    VerifyNg {
-        /// Emit machine-readable JSON.
-        #[arg(long)]
-        json: bool,
-        /// Lint the frozen scenario registry without executing anything.
-        #[arg(long)]
-        lint: bool,
-    },
     /// Run an agent command under the Vetto sandbox supervisor
     #[command(alias = "exec")]
     Run {
@@ -412,9 +400,6 @@ pub enum Command {
         #[arg(long, short = 'f')]
         force: bool,
     },
-    /// List built-in policy profiles
-    #[command(hide = true)]
-    Profiles,
     /// Manage transparent developer shims and shell hooks
     #[command(hide = true)]
     Hook {
@@ -473,12 +458,6 @@ pub enum Command {
         #[arg(long)]
         profile: Option<String>,
     },
-    /// Manage persistent workspace profiles (cwd, agent, policy).
-    #[command(hide = true)]
-    Profile {
-        #[command(subcommand)]
-        command: ProfileCommand,
-    },
     /// Scan project directory for exposed secrets and credentials
     #[command(hide = true)]
     ScanSecrets {
@@ -494,19 +473,6 @@ pub enum Command {
         /// Maximum number of files to scan (default: 5000)
         #[arg(long, value_name = "COUNT")]
         max_files: Option<usize>,
-    },
-    /// Live-tail session events from JSONL log with optional path filtering
-    #[command(hide = true)]
-    Watch {
-        /// Session PID or path to JSONL log file
-        #[arg(value_name = "SESSION_OR_LOG")]
-        target: String,
-        /// Optional path filter
-        #[arg(long, value_name = "PATTERN")]
-        path: Option<String>,
-        /// Emit raw JSON lines instead of formatted output
-        #[arg(long)]
-        json: bool,
     },
     /// Tail and filter JSONL session event logs.
     #[command(hide = true)]
@@ -557,16 +523,6 @@ pub enum Command {
         #[arg(long)]
         digest: bool,
     },
-    /// Generate an aggregated daily audit digest from session history.
-    #[command(hide = true)]
-    Digest {
-        /// Window duration to aggregate (e.g. 24h, 7d, 30m; default 24h)
-        #[arg(long, value_name = "DURATION", default_value = "24h")]
-        since: String,
-        /// Emit machine-readable JSON summary
-        #[arg(long)]
-        json: bool,
-    },
     /// Compare two session JSON audit reports (metric deltas and violation diffs).
     #[command(name = "diff-sessions", hide = true)]
     DiffSessions {
@@ -601,9 +557,6 @@ pub enum Command {
         /// Port token supplied by OpenSSH (%p).
         port: u16,
     },
-    /// Stored workspace profile invocation by name.
-    #[command(external_subcommand)]
-    External(Vec<String>),
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -734,37 +687,6 @@ pub enum PolicyCommand {
     List,
 }
 
-#[derive(Subcommand, Debug)]
-pub enum ProfileCommand {
-    /// Save current working directory and settings as a named workspace profile.
-    Save {
-        /// Name of the profile.
-        name: String,
-        /// Agent command or preset.
-        #[arg(long)]
-        agent: Option<String>,
-        /// Explicit policy path.
-        #[arg(long)]
-        policy: Option<PathBuf>,
-        /// Network mode.
-        #[arg(long)]
-        net: Option<String>,
-        /// Built-in profile layer name.
-        #[arg(long)]
-        profile: Option<String>,
-    },
-    /// List all saved workspace profiles.
-    List {
-        /// Emit machine-readable JSON.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Remove a saved workspace profile.
-    Rm {
-        /// Name of the profile to remove.
-        name: String,
-    },
-}
 
 /// Render completions to stdout without starting a sandbox session.
 pub fn print_completions(shell: Shell) -> anyhow::Result<()> {
@@ -1435,16 +1357,6 @@ mod tests {
                 recap: true,
                 ..
             })
-        ));
-
-        let digest_cli = Cli::try_parse_from(["vetto", "digest", "--since", "7d", "--json"])
-            .expect("digest parsing");
-        assert!(matches!(
-            digest_cli.command,
-            Some(Command::Digest {
-                ref since,
-                json: true,
-            }) if since == "7d"
         ));
 
         let diff_cli =
