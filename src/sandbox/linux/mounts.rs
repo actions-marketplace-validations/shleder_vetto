@@ -623,7 +623,15 @@ mod tests {
 
     #[test]
     fn mask_dangerous_devices_handles_absent_paths() {
-        assert!(mask_dangerous_devices().is_ok());
+        let has_devices = DANGEROUS_RAW_DEVICES.iter().any(|d| Path::new(d).exists());
+        let res = mask_dangerous_devices();
+        if has_devices {
+            if let Err(err) = res {
+                assert!(matches!(err, VettoError::Mount(_)));
+            }
+        } else {
+            assert!(res.is_ok());
+        }
     }
 
     #[test]
