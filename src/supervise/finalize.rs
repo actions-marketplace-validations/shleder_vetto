@@ -15,11 +15,11 @@ use crate::proctree::{ExtinctionVerifier, PlatformExtinctionTier};
 use crate::report;
 use crate::rescue;
 use crate::sandbox;
+use crate::sandbox::capability::{EnforcementState, SecurityCapability};
 use crate::supervise::error::SuperviseError;
 use crate::supervise::lifecycle::LifecycleOutcome;
 use crate::supervise::pump::PumpData;
 use crate::supervise::spawn::SupervisedSession;
-use crate::sandbox::capability::{EnforcementState, SecurityCapability};
 
 /// Result and authoritative security verdict of a finalized supervised session.
 #[derive(Debug, Clone)]

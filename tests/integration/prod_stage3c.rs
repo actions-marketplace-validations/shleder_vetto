@@ -13,9 +13,9 @@ use std::time::Duration;
 
 use vetto::config::NetMode;
 use vetto::policy::Policy;
-use vetto::sandbox::capability::SecurityCapability;
 #[cfg(unix)]
 use vetto::sandbox::capability::ExecutionIdentity;
+use vetto::sandbox::capability::SecurityCapability;
 #[cfg(unix)]
 use vetto::sandbox::capability::{
     BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, SandboxBackend,

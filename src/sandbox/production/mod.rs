@@ -11,11 +11,11 @@ use crate::audit::verdict::FinalVerdict;
 use crate::config::NetMode;
 use crate::policy::{Policy, Tier};
 use crate::policy_ir::ExecutionState;
-use crate::sandbox::StdioMode;
 use crate::sandbox::capability::{
     BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, ExecutionIdentity,
     FrozenSpec, SandboxBackend, SecurityCapability,
 };
+use crate::sandbox::StdioMode;
 
 pub mod context;
 pub mod drain;

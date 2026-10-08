@@ -23,7 +23,7 @@ use crate::proctree::{
 };
 use crate::sandbox::capability::{
     select_backend, BackendKind, CanonicalPolicy, EnforcementReport, ExecutionIdentity,
-    FrozenSpec, HostVerification, PrepareContext, SandboxBackend,
+    PrepareContext, SandboxBackend,
 };
 use crate::sandbox::killer::{self, KillOutcome};
 use crate::sandbox::{Backend, SandboxHandle, SpawnOptions, StdioMode};
@@ -1180,10 +1180,10 @@ pub fn wait_for_exit(handle: &mut SandboxHandle, timeout: Option<Duration>) -> (
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::capability::{EnforcementState, SecurityCapability};
     use crate::sandbox::production::{
         execute_with_backend, prod_tier_mapping, ProdSpawnLog, PROD_SCENARIO_ID,
     };
-    use crate::sandbox::capability::{EnforcementState, SecurityCapability};
 
     fn test_policy() -> Policy {
         Policy::default()

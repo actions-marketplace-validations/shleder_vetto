@@ -499,7 +499,12 @@ fn parse_jsonl_log(path: &Path, session_hint: &str) -> Result<SessionAuditDetail
         if let Ok(ev) = ev_res {
             events_total += 1;
 
-            if let crate::events::Event::BlockedAttempt { ref path, ref source, .. } = ev {
+            if let crate::events::Event::BlockedAttempt {
+                ref path,
+                ref source,
+                ..
+            } = ev
+            {
                 let key = (
                     "blocked".to_string(),
                     "warning".to_string(),

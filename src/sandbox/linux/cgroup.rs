@@ -94,8 +94,8 @@ impl Drop for CgroupHandle {
     }
 }
 
-pub use crate::policy::types::{parse_cpu_max, parse_memory_bytes};
 use crate::policy::types::parse_cgroup_memory;
+pub use crate::policy::types::{parse_cpu_max, parse_memory_bytes};
 
 /// Read available cgroup v2 controllers from the cgroup root if mounted.
 pub fn available_controllers() -> Vec<String> {

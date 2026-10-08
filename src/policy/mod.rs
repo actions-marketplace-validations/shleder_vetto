@@ -18,6 +18,6 @@ pub use loader::{
 pub use types::{
     analyze_deny_overlap, format_bytes as format_bytes_typed, parse_bytes, parse_cgroup_memory,
     CgroupConfig, DenyEntry, DenyOverlapReport, EnvironmentPolicy, NetMode, NetRule,
-    ParseBytesError, Policy, PolicyMetadata, PolicySourceKind, ResourceLimits,
-    SeccompNotifyConfig, SeccompProfile, SubtractiveRules, Tier, UnitStandard,
+    ParseBytesError, Policy, PolicyMetadata, PolicySourceKind, ResourceLimits, SeccompNotifyConfig,
+    SeccompProfile, SubtractiveRules, Tier, UnitStandard,
 };

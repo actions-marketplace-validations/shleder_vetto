@@ -327,7 +327,9 @@ pub fn contains_slice(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || needle.len() > haystack.len() {
         return false;
     }
-    haystack.windows(needle.len()).any(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }
 
 /// Outcome of one nonce-targeted tree sweep.
@@ -418,7 +420,8 @@ fn sweep_tree_by_nonce_linux(nonce: &str, root_pid: u32) -> SweepOutcome {
     let me = unsafe { libc::getpid() } as u32;
     let me_uid = unsafe { libc::geteuid() };
     let needle = nonce.as_bytes();
-    let deadline = Instant::now() + Duration::from_millis(crate::proctree::MAX_EXTINCTION_DEADLINE_MS);
+    let deadline =
+        Instant::now() + Duration::from_millis(crate::proctree::MAX_EXTINCTION_DEADLINE_MS);
     loop {
         let (matched, blind) = scan_nonce_pids(needle, root_pid, me, me_uid);
         if blind {

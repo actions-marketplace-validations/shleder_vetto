@@ -234,7 +234,12 @@ fn collect_loop(mut rx: broadcast::Receiver<Event>, inner: Arc<Mutex<Inner>>) {
 }
 
 fn ingest(inner: &mut Inner, ev: Event) {
-    if let Event::BlockedAttempt { ref path, ref source, .. } = ev {
+    if let Event::BlockedAttempt {
+        ref path,
+        ref source,
+        ..
+    } = ev
+    {
         let key = (
             "blocked".to_string(),
             "warning".to_string(),

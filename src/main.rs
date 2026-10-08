@@ -859,7 +859,7 @@ fn scan_secrets_cli(
     max_files: Option<usize>,
 ) -> Result<()> {
     let target = path.unwrap_or(Path::new("."));
-    let mut options = crate::fs::SecretScanOptions::default();
+    let mut options = vetto::fs::SecretScanOptions::default();
     if let Some(ms) = max_size {
         options.max_file_size_bytes = ms;
     }
@@ -868,16 +868,16 @@ fn scan_secrets_cli(
     }
 
     let result = if target.is_file() {
-        let findings = crate::fs::scan_file(target, options.max_file_size_bytes);
+        let findings = vetto::fs::scan_file(target, options.max_file_size_bytes);
         let bytes_scanned = std::fs::metadata(target).map(|m| m.len()).unwrap_or(0);
-        crate::fs::SecretScanResult {
+        vetto::fs::SecretScanResult {
             findings,
             files_scanned: 1,
             bytes_scanned,
             timed_out: false,
         }
     } else {
-        crate::fs::scan_directory(target, &options)
+        vetto::fs::scan_directory(target, &options)
     };
 
     if json {

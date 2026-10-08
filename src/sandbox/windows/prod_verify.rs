@@ -1,7 +1,7 @@
 //! Windows production execution verification: host-side observation of Job Object and child token.
 
-use std::time::Duration;
 use crate::sandbox::capability::HostVerification;
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::io::RawHandle;

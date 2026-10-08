@@ -104,7 +104,9 @@ impl PreparationFailureKind {
 }
 
 /// Backend implementation kinds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum BackendKind {
     #[default]
@@ -467,13 +469,29 @@ pub fn freeze_spec(
     cwd: &std::path::Path,
     nonce: &str,
 ) -> FrozenSpec {
-    let mut allow_read: Vec<String> = policy.allow_read.iter().map(|p| p.display().to_string()).collect();
+    let mut allow_read: Vec<String> = policy
+        .allow_read
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
     allow_read.sort();
-    let mut allow_write: Vec<String> = policy.allow_write.iter().map(|p| p.display().to_string()).collect();
+    let mut allow_write: Vec<String> = policy
+        .allow_write
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
     allow_write.sort();
-    let mut deny_read: Vec<String> = policy.deny_read.iter().map(|p| p.display().to_string()).collect();
+    let mut deny_read: Vec<String> = policy
+        .deny_read
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
     deny_read.sort();
-    let mut deny_write: Vec<String> = policy.deny_write.iter().map(|p| p.display().to_string()).collect();
+    let mut deny_write: Vec<String> = policy
+        .deny_write
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
     deny_write.sort();
     let mut deny_resolved: Vec<String> = policy
         .deny_resolved
@@ -516,6 +534,7 @@ pub struct ChildEnforcementPlan {
 
 #[derive(Debug, Clone, Default)]
 pub struct PrepareContext {
+    #[cfg(target_os = "linux")]
     pub expected_limits: Option<crate::sandbox::linux::proctrack::ExpectedLimits>,
 }
 
@@ -524,15 +543,21 @@ pub trait SandboxBackend: Send {
     fn kind(&self) -> BackendKind;
     fn name(&self) -> &'static str;
     fn supports(&self, capability: SecurityCapability) -> bool;
-    fn prepare(&mut self, policy: &CanonicalPolicy, identity: &ExecutionIdentity) -> EnforcementReport {
+    fn prepare(
+        &mut self,
+        policy: &CanonicalPolicy,
+        identity: &ExecutionIdentity,
+    ) -> EnforcementReport {
         self.prepare_with_context(policy, identity, &PrepareContext::default())
     }
     fn prepare_with_context(
         &mut self,
         policy: &CanonicalPolicy,
         identity: &ExecutionIdentity,
-        ctx: &PrepareContext,
-    ) -> EnforcementReport;
+        _ctx: &PrepareContext,
+    ) -> EnforcementReport {
+        self.prepare(policy, identity)
+    }
     fn pre_exec_plan(&self) -> Option<ChildEnforcementPlan> {
         None
     }
@@ -671,14 +696,8 @@ impl SandboxBackend for GenericPlatformBackend {
             };
             states.insert(cap, state);
         }
-        let report = EnforcementReport::build(
-            self.kind,
-            policy,
-            identity,
-            &states,
-            &BTreeMap::new(),
-            true,
-        );
+        let report =
+            EnforcementReport::build(self.kind, policy, identity, &states, &BTreeMap::new(), true);
         self.plan = Some(ChildEnforcementPlan {
             net_deny: policy.net_mode == "off",
             new_pgroup: true,
@@ -705,13 +724,19 @@ impl SandboxBackend for GenericPlatformBackend {
     fn note_host_verified(&mut self, verification: &HostVerification) {
         if let Some(r) = self.report.as_mut() {
             for rec in &mut r.records {
-                if rec.capability == SecurityCapability::ProcessIsolation && verification.no_new_privs {
+                if rec.capability == SecurityCapability::ProcessIsolation
+                    && verification.no_new_privs
+                {
                     rec.state = EnforcementState::Verified;
                 }
-                if rec.capability == SecurityCapability::SyscallRestriction && verification.seccomp_filter {
+                if rec.capability == SecurityCapability::SyscallRestriction
+                    && verification.seccomp_filter
+                {
                     rec.state = EnforcementState::Verified;
                 }
-                if rec.capability == SecurityCapability::ProcessTreeContainment && (verification.subreaper_ok || verification.win_in_job) {
+                if rec.capability == SecurityCapability::ProcessTreeContainment
+                    && (verification.subreaper_ok || verification.win_in_job)
+                {
                     rec.state = EnforcementState::Verified;
                 }
                 if rec.capability == SecurityCapability::ResourceLimits
@@ -798,7 +823,11 @@ impl SandboxBackend for LinuxBackend {
     fn supports(&self, capability: SecurityCapability) -> bool {
         self.inner.supports(capability)
     }
-    fn prepare(&mut self, policy: &CanonicalPolicy, identity: &ExecutionIdentity) -> EnforcementReport {
+    fn prepare(
+        &mut self,
+        policy: &CanonicalPolicy,
+        identity: &ExecutionIdentity,
+    ) -> EnforcementReport {
         self.inner.prepare(policy, identity)
     }
     fn prepare_with_context(
@@ -923,20 +952,57 @@ pub enum Category {
     Secrets,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum Severity {
+    Blocker,
+    High,
+    #[default]
+    Medium,
+    Low,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Scenario {
     pub id: String,
     pub category: Category,
-    pub description: String,
+    pub severity: Severity,
+    pub required_caps: Vec<String>,
+    pub strength: BTreeMap<String, ClaimStrength>,
+    pub quorum: usize,
+    pub known_limitation: String,
+    #[serde(default)]
+    pub residual_risk: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Severity {
-    Low,
-    Medium,
-    High,
-    Critical,
+impl Scenario {
+    pub fn strength_for(&self, target: Target) -> ClaimStrength {
+        self.strength
+            .get(target.label())
+            .copied()
+            .unwrap_or(ClaimStrength::Unsupported)
+    }
+
+    pub fn lint(&self) -> Result<(), String> {
+        if self.id.trim().is_empty() {
+            return Err("scenario id is empty".to_string());
+        }
+        if self.quorum < 1 {
+            return Err(format!("{}: quorum must be >= 1", self.id));
+        }
+        if self.known_limitation.trim().is_empty() {
+            return Err(format!("{}: known_limitation must be non-empty", self.id));
+        }
+        if self.strength.values().any(|s| *s == ClaimStrength::Partial)
+            && self.residual_risk.trim().is_empty()
+        {
+            return Err(format!(
+                "{}: PARTIAL target requires residual_risk",
+                self.id
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub fn required_capabilities(scenario: &Scenario) -> Vec<SecurityCapability> {
@@ -1049,7 +1115,8 @@ pub fn eval_is_loopback_host(host: &str) -> bool {
                     && octets[11] == 0xff;
                 let is_v4_compat = octets[..12].iter().all(|&b| b == 0);
                 if is_v4_mapped || is_v4_compat {
-                    std::net::Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15]).is_loopback()
+                    std::net::Ipv4Addr::new(octets[12], octets[13], octets[14], octets[15])
+                        .is_loopback()
                 } else {
                     false
                 }
@@ -1059,4 +1126,3 @@ pub fn eval_is_loopback_host(host: &str) -> bool {
         false
     }
 }
-

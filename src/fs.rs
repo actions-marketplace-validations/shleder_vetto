@@ -1,8 +1,8 @@
 //! Filesystem helpers and lightweight credential scanning.
 
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 /// Determines if a directory name should be skipped during recursive traversal.
 pub fn is_ignored_directory(name: &str) -> bool {
@@ -74,7 +74,10 @@ fn check_line_for_secret(line: &str) -> Option<(&'static str, String)> {
         return Some(("AWS Access Key ID", "AKIA***".to_string()));
     }
     if trimmed.contains("-----BEGIN") && trimmed.contains("PRIVATE KEY") {
-        return Some(("Private Key Header", "-----BEGIN...PRIVATE KEY-----".to_string()));
+        return Some((
+            "Private Key Header",
+            "-----BEGIN...PRIVATE KEY-----".to_string(),
+        ));
     }
     if trimmed.contains("ghp_") || trimmed.contains("github_pat_") {
         return Some(("GitHub Token", "ghp_***".to_string()));
@@ -140,7 +143,9 @@ pub fn scan_directory(root: &Path, options: &SecretScanOptions) -> SecretScanRes
                 if let Ok(m) = entry.metadata() {
                     result.bytes_scanned += m.len();
                 }
-                result.findings.extend(scan_file(&path, options.max_file_size_bytes));
+                result
+                    .findings
+                    .extend(scan_file(&path, options.max_file_size_bytes));
                 if result.files_scanned >= options.max_files {
                     result.timed_out = true;
                     return result;

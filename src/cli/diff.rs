@@ -178,8 +178,7 @@ pub fn run_diff(args: &DiffArgs) -> Result<()> {
 
     let Some(snapshot_meta) = snapshot_opt else {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let in_git = cwd.join(".git").exists()
-            || crate::git::detect_git_branch(&cwd).is_some();
+        let in_git = cwd.join(".git").exists() || crate::git::detect_git_branch(&cwd).is_some();
 
         if args.json {
             let empty_review = DiffReviewJson {
