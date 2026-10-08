@@ -479,22 +479,6 @@ pub enum Command {
         #[command(subcommand)]
         command: ProfileCommand,
     },
-    /// Self-upgrade vetto via npm, cargo, homebrew, or direct binary
-    #[command(hide = true)]
-    Upgrade {
-        /// Channel to upgrade from (stable or alpha)
-        #[arg(long, value_name = "CHANNEL")]
-        channel: Option<String>,
-        /// Check for updates without applying
-        #[arg(long)]
-        check: bool,
-        /// Simulate upgrade command without running
-        #[arg(long)]
-        dry_run: bool,
-        /// Restore the last-good binary saved by the previous upgrade
-        #[arg(long)]
-        rollback: bool,
-    },
     /// Scan project directory for exposed secrets and credentials
     #[command(hide = true)]
     ScanSecrets {
@@ -1305,27 +1289,6 @@ mod tests {
                 json: true,
                 ..
             })
-        ));
-    }
-
-    #[test]
-    fn upgrade_subcommand_parses_channel_and_flags() {
-        let cli = Cli::try_parse_from(["vetto", "upgrade", "--channel", "alpha", "--check"])
-            .expect("upgrade parsing");
-        assert!(matches!(
-            cli.command,
-            Some(Command::Upgrade {
-                channel: Some(ref ch),
-                check: true,
-                dry_run: false,
-                rollback: false,
-            }) if ch == "alpha"
-        ));
-        let cli_rb =
-            Cli::try_parse_from(["vetto", "upgrade", "--rollback"]).expect("upgrade rollback");
-        assert!(matches!(
-            cli_rb.command,
-            Some(Command::Upgrade { rollback: true, .. })
         ));
     }
 

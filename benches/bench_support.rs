@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use crate::report::stats::{BlockedRecord, NetRecord, SessionStats};
+use vetto::report::stats::{BlockedRecord, NetRecord, SessionStats};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyInputs {

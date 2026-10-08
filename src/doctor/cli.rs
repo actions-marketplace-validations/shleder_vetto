@@ -7,15 +7,6 @@ use anyhow::{Context, Result};
 /// Entry point for `vetto doctor`.
 pub fn run_doctor(probe_deny: bool, check_agent: Option<&str>, fix: bool) -> Result<()> {
     println!("vetto v{} doctor", env!("CARGO_PKG_VERSION"));
-    let user_config = crate::version::load_user_config().unwrap_or_default();
-    if let Some(notice) =
-        crate::version::check_version(env!("CARGO_PKG_VERSION"), &user_config.channel, false)
-    {
-        println!(
-            "update available:        {} -> {} (run 'vetto upgrade')",
-            notice.current_version, notice.latest_version
-        );
-    }
     #[cfg(target_os = "linux")]
     {
         let env_info = crate::doctor::detect_environment();

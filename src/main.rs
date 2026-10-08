@@ -113,7 +113,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "man",
         "shell-env",
         "profile",
-        "upgrade",
         "scan-secrets",
         "watch",
         "events",
@@ -244,18 +243,6 @@ fn run() -> Result<()> {
     if let Some(binary) = shim::detect_argv0_shim() {
         let args: Vec<String> = std::env::args().skip(1).collect();
         return shim::run_cli(Some(binary), args);
-    }
-
-    // Apply a previously staged auto-update before doing anything else.
-    // Skipped for shims (agent hot path), --version (observation only) and
-    // the upgrade command itself (it manages its own lifecycle).
-    let first_arg = raw_args.get(1).map(|s| s.as_str()).unwrap_or("");
-    if first_arg != "upgrade" {
-        match vetto::version::apply_pending_staged_update() {
-            Ok(true) => println!("vetto: continuing with the updated binary on next invocation."),
-            Ok(false) => {}
-            Err(e) => eprintln!("vetto: warning: staged update not applied: {e:#}"),
-        }
     }
 
     let processed_args = preprocess_cli_args(&raw_args)?;
@@ -700,18 +687,6 @@ fn run() -> Result<()> {
         },
         Some(cli::Command::Completions { shell }) => cli::print_completions(*shell),
         Some(cli::Command::Man) => cli::print_man(),
-        Some(cli::Command::Upgrade {
-            channel,
-            check,
-            dry_run,
-            rollback,
-        }) => {
-            if *rollback {
-                vetto::version::run_rollback(*dry_run)
-            } else {
-                vetto::version::run_upgrade(channel.as_deref(), *check, *dry_run)
-            }
-        }
         Some(cli::Command::ScanSecrets {
             path,
             json,

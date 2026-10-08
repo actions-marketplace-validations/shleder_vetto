@@ -9,9 +9,10 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use vetto::bench_support::session_stats;
+mod bench_support;
+use bench_support::session_stats;
 #[cfg(target_os = "linux")]
-use vetto::bench_support::{policy_inputs, PolicyInputs};
+use bench_support::{policy_inputs, PolicyInputs};
 use vetto::report;
 
 #[cfg(target_os = "linux")]

@@ -4,7 +4,9 @@
 //! (such as those used by Claude Desktop and Cursor) in an isolated sandbox.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "linux", windows, test))]
+use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
@@ -16,58 +18,9 @@ use crate::sandbox::{self, StdioMode};
 
 /// Resolves an executable binary candidate from PATH or a relative/absolute path.
 pub fn resolve_in_path(cmd: &str) -> Result<PathBuf> {
-    let p = Path::new(cmd);
-    if p.is_absolute() || p.components().count() > 1 {
-        return Ok(p.to_path_buf());
-    }
-    if let Some(path_var) = std::env::var_os("PATH") {
-        #[cfg(windows)]
-        let extensions = [".exe", ".cmd", ".bat", ""];
-
-        for dir in std::env::split_paths(&path_var) {
-            #[cfg(unix)]
-            {
-                let candidate = dir.join(cmd);
-                if candidate.is_file() {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(meta) = candidate.metadata() {
-                        if meta.permissions().mode() & 0o111 != 0 {
-                            return Ok(candidate);
-                        }
-                    }
-                }
-            }
-
-            #[cfg(windows)]
-            {
-                let candidate = dir.join(cmd);
-                if candidate.is_file() {
-                    return Ok(candidate);
-                }
-                for ext in &extensions {
-                    let with_ext = dir.join(format!("{cmd}{ext}"));
-                    if with_ext.is_file() {
-                        return Ok(with_ext);
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(unix)]
-    {
-        for dir in ["/bin", "/usr/bin"] {
-            let candidate = Path::new(dir).join(cmd);
-            if candidate.is_file() {
-                use std::os::unix::fs::PermissionsExt;
-                if let Ok(meta) = candidate.metadata() {
-                    if meta.permissions().mode() & 0o111 != 0 {
-                        return Ok(candidate);
-                    }
-                }
-            }
-        }
-    }
-    bail!("command '{cmd}' not found in PATH")
+    let resolved =
+        crate::supervise::spawn::resolve_in_path(cmd).map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(PathBuf::from(resolved))
 }
 
 /// Parses the network mode for MCP wrapping.

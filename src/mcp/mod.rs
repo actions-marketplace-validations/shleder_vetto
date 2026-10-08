@@ -272,42 +272,6 @@ pub fn parse_command_tokens(command_str: &str) -> Vec<String> {
     tokens
 }
 
-#[cfg(unix)]
-#[allow(dead_code)]
-fn pipe2() -> Result<(std::os::fd::OwnedFd, std::os::fd::OwnedFd)> {
-    let mut fds = [0 as libc::c_int; 2];
-    // SAFETY: valid out-array for the libc pipe call.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
-        bail!("pipe: {}", std::io::Error::last_os_error());
-    }
-    for fd in fds {
-        // SAFETY: fd came from the successful pipe call.
-        let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if flags < 0 {
-            let error = std::io::Error::last_os_error();
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_GETFD): {error}");
-        }
-        if unsafe { libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC) } < 0 {
-            let error = std::io::Error::last_os_error();
-            unsafe {
-                libc::close(fds[0]);
-                libc::close(fds[1]);
-            }
-            bail!("fcntl(F_SETFD): {error}");
-        }
-    }
-    use std::os::fd::FromRawFd;
-    // SAFETY: fresh descriptors from successful pipe and CLOEXEC setup.
-    Ok((
-        unsafe { std::os::fd::OwnedFd::from_raw_fd(fds[0]) },
-        unsafe { std::os::fd::OwnedFd::from_raw_fd(fds[1]) },
-    ))
-}
-
 pub fn execute_sandboxed_command(
     command_str: &str,
     extra_args: Option<&[String]>,
