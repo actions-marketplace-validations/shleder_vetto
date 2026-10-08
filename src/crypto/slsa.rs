@@ -1,6 +1,6 @@
 //! Cosign / Sigstore SLSA Level 3 In-Toto Attestation Envelope generator.
 //!
-//! Fulfills Section 17.2.2 of the Next-Generation Architectural Specification:
+//! Fulfills Section 17.2.2 of the Security Architecture Specification:
 //! Generates machine-verifiable In-Toto SLSA Provenance v1 envelopes
 //! (`https://slsa.dev/provenance/v1`) with cryptographic Ed25519 signing.
 

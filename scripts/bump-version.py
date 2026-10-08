@@ -162,7 +162,7 @@ def main():
     update_file(os.path.join(REPO_ROOT, "npm", "README.md"), rf'Prebuilt targets in `{re.escape(current)}`:', f'Prebuilt targets in `{target}`:')
     update_file(os.path.join(REPO_ROOT, "deploy", "k8s", "daemonset.yaml"), rf'image:\s*ghcr\.io/shleder/vetto:{re.escape(current)}', f'image: ghcr.io/shleder/vetto:{target}')
     update_file(os.path.join(REPO_ROOT, "deploy", "helm", "vetto", "Chart.yaml"), rf'appVersion:\s*"[^"]+"', f'appVersion: "{target}"')
-    for doc in [os.path.join(REPO_ROOT, "README.md")] + [os.path.join(REPO_ROOT, "docs", f"README.{lang}.md") for lang in ["ru", "zh", "ja", "es", "de"]]:
+    for doc in [os.path.join(REPO_ROOT, "README.md")]:
         update_file(doc, rf'/releases/tag/v{re.escape(current)}', f'/releases/tag/v{target}')
         update_file(doc, rf'badge/version-{re.escape(current)}-blue', f'badge/version-{target}-blue')
         update_file(doc, rf'badge/npm-v{re.escape(current)}-CB3837', f'badge/npm-v{target}-CB3837')
@@ -209,11 +209,9 @@ def main():
     update_file(os.path.join(REPO_ROOT, "docs", "tutorials", "installing.md"), rf'@shledery/vetto@{re.escape(current)}', f'@shledery/vetto@{target}')
     update_file(os.path.join(REPO_ROOT, "docs", "SBOM.md"), rf'/tag/v{re.escape(current)}', f'/tag/v{target}')
     update_file(os.path.join(REPO_ROOT, "docs", "SBOM.md"), rf'release `v{re.escape(current)}`', f'release `v{target}`')
-    update_file(os.path.join(REPO_ROOT, "docs", "security", "slsa-provenance.md"), rf'download v{re.escape(current)}', f'download v{target}')
     update_file(os.path.join(REPO_ROOT, "docs", "integrations", "opencode.md"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "docs", "integrations", "claude-code.md"), rf'"version":\s*"{re.escape(current)}"', f'"version": "{target}"')
     update_file(os.path.join(REPO_ROOT, "docs", "field-testing.md"), rf'current `{re.escape(current)}` package', f'current `{target}` package')
-    update_file(os.path.join(REPO_ROOT, "docs", "architecture", "verify-ng.md"), r'(?:Implementation Status|Статус реализации) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Implementation Status ({target}, verified)')
     update_file(os.path.join(REPO_ROOT, "docs", "threat-model.md"), r'(?:Threat Model Status|Статус модели угроз) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Threat Model Status ({target}, verified)')
 
     # Install scripts help

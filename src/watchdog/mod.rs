@@ -121,7 +121,7 @@ fn get_path_mtime(path: &Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Lightweight scan of latest modification time in project workspace.
+/// Fast scan of latest modification time in project workspace.
 pub fn scan_workspace_mtime(root: &Path) -> u64 {
     let mut max_mtime = get_path_mtime(root);
     let mut queue = vec![root.to_path_buf()];

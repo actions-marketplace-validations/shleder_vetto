@@ -22,15 +22,6 @@
 [![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey?style=flat-square)](https://github.com/shleder/vetto)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square)](LICENSE)
 
-<p align="center">
-  <a href="README.md"><b>English</b></a> |
-  <a href="docs/README.ru.md">Русский</a> |
-  <a href="docs/README.zh.md">简体中文</a> |
-  <a href="docs/README.ja.md">日本語</a> |
-  <a href="docs/README.es.md">Español</a> |
-  <a href="docs/README.de.md">Deutsch</a>
-</p>
-
 </div>
 
 Vetto is an unprivileged sandbox for AI coding CLI agents such as Claude Code, OpenAI Codex, Cursor, OpenCode, and Aider. It isolates filesystem access, network sockets, and child processes between `fork()` and `execve()` using native kernel facilities on Linux and macOS without running a background daemon or requiring root privileges.
@@ -208,7 +199,6 @@ For the complete list of supported agents, network scopes, and path rules, see t
 
 Releases are built via automated GitHub Actions workflows with public cryptographic verification:
 
-- **SLSA Level 3 Provenance**: In-toto build attestations generated for release binaries.
 - **Minisign Signatures**: Published with each release archive under public key `75ECEC9B5080C590`.
 - **SHA-256 Checksums**: Verified automatically by installation scripts.
 

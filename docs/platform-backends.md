@@ -70,11 +70,7 @@ The Linux backend represents Vetto's reference production architecture, leveragi
 - **Read-Isolation Limitations**: Because Darwin kernels do not expose unprivileged mount namespaces or VFS inode masking, unprivileged read denial on macOS cannot guarantee absolute secrecy against all native binaries. Vetto transparently exposes this platform behavior in `vetto doctor` under the `sbpl-read-fragment` probe.
 - **Network Boundaries**: Darwin kernels lack unprivileged network namespaces (`CLONE_NEWNET`). Egress restriction is limited to `--net=off` via SBPL `(deny network*)` (with a local UNIX domain socket exemption for libSystem/XPC IPC). Per-domain allowlisting is unsupported and fails closed.
 - **Process Supervision**: In the absence of PID namespaces, process reaping is enforced by a dedicated `kqueue` EVFILT_PROC watchdog (`pdeath_watch`) that broadcasts `SIGKILL` to the process tree when the supervisor terminates.
-- **Production Recommendation**: For threat models requiring 100% hardware-enforced kernel read-denial of host credentials (`~/.ssh`, `~/.aws`, `.env`), run Vetto inside **OrbStack**, a lightweight Linux VM, or Docker devcontainers.
-
-### macOS Unified Logging (`os_log`)
-- When `--oslog` or `oslog = true` in policy is enabled, `sandbox::logger::oslog::OsLogSink` streams sandbox events (policy denials, warnings, session lifecycle) to the macOS unified log via `/usr/bin/logger -t vetto`.
-- Logging is non-blocking and best-effort: logging failures never interrupt the sandbox session.
+- **Production Recommendation**: For threat models requiring 100% hardware-enforced kernel read-denial of host credentials (`~/.ssh`, `~/.aws`, `.env`), run Vetto inside **OrbStack** (Linux VM), or Docker devcontainers.
 
 ### Packaging and Apple Notarization
 - `scripts/package-macos-pkg.sh` packages `vetto` into a native `.pkg` installer.

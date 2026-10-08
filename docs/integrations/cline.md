@@ -17,7 +17,7 @@ Vetto solves this with **0ms kernel-level sandboxing** enforced by Linux Landloc
 
 ---
 
-## 2. Fast Setup (Global PATH Shims)
+## 2. Setup via Global PATH Shims
 
 Cline invokes the default terminal configured in VS Code (`bash`, `zsh`, etc.) to run build commands, tests, and scripts.
 
