@@ -4,6 +4,7 @@
 
 #![cfg_attr(windows, allow(unused_imports))]
 
+#[allow(unused_imports)]
 use std::io::Write;
 use std::time::{Duration, Instant};
 
@@ -161,9 +162,14 @@ impl StdioPump {
                     final_out = raw_out;
                 }
 
-                let mut dest = std::io::stdout();
-                let _ = dest.write_all(&final_out);
-                let _ = dest.flush();
+                #[cfg(unix)]
+                safe_flush_output(libc::STDOUT_FILENO, &final_out);
+                #[cfg(not(unix))]
+                {
+                    let mut dest = std::io::stdout();
+                    let _ = dest.write_all(&final_out);
+                    let _ = dest.flush();
+                }
             }
 
             // Handle stderr
@@ -178,9 +184,14 @@ impl StdioPump {
                     final_err = raw_err;
                 }
 
-                let mut dest = std::io::stderr();
-                let _ = dest.write_all(&final_err);
-                let _ = dest.flush();
+                #[cfg(unix)]
+                safe_flush_output(libc::STDERR_FILENO, &final_err);
+                #[cfg(not(unix))]
+                {
+                    let mut dest = std::io::stderr();
+                    let _ = dest.write_all(&final_err);
+                    let _ = dest.flush();
+                }
             }
 
             // Drain residual bytes from PTY master if present
@@ -222,9 +233,14 @@ impl StdioPump {
                     } else {
                         residual
                     };
-                    let mut dest = std::io::stdout();
-                    let _ = dest.write_all(&to_write);
-                    let _ = dest.flush();
+                    #[cfg(unix)]
+                    safe_flush_output(libc::STDOUT_FILENO, &to_write);
+                    #[cfg(not(unix))]
+                    {
+                        let mut dest = std::io::stdout();
+                        let _ = dest.write_all(&to_write);
+                        let _ = dest.flush();
+                    }
                     final_out.extend_from_slice(&to_write);
                 }
             }
@@ -243,3 +259,55 @@ impl StdioPump {
         }
     }
 }
+
+/// Bounded non-blocking chunked output writer protecting against full pipes and EPIPE deadlocks (INV-25).
+#[cfg(unix)]
+fn safe_flush_output(fd: libc::c_int, data: &[u8]) {
+    let mut offset = 0;
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while offset < data.len() {
+        if Instant::now() >= deadline {
+            break;
+        }
+        let chunk_len = (data.len() - offset).min(8192);
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let r = unsafe { libc::poll(&mut pfd, 1, 50) };
+        if r <= 0 {
+            if r < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+            }
+            break;
+        }
+        if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+            break;
+        }
+        if pfd.revents & libc::POLLOUT != 0 {
+            let written = unsafe {
+                libc::write(
+                    fd,
+                    data[offset..offset + chunk_len].as_ptr().cast(),
+                    chunk_len,
+                )
+            };
+            if written > 0 {
+                offset += written as usize;
+            } else if written < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    continue;
+                }
+                break;
+            } else {
+                break;
+            }
+        }
+    }
+}
+
