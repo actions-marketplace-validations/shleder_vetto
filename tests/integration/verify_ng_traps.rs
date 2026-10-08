@@ -265,22 +265,39 @@ fn trap_report_carries_both_axes() {
     assert_eq!(v["results"][0]["strength"], "STRONG");
 }
 
-/// CLI surface: `verify-ng --lint` passes on the shipped registry.
+/// In-process API: `verify_ng` lint passes on the shipped registry.
 #[test]
 fn cli_verify_ng_lint_passes() {
     let res = vetto::verify_ng::run_verify_ng(false, true);
     assert!(res.is_ok(), "registry lint must pass");
 }
 
-/// CLI surface: `verify-ng --lint --json` is parseable.
+/// Verification harness: `verify_ng` lint in JSON mode produces valid registry metadata.
 #[test]
 fn cli_verify_ng_lint_json_parseable() {
+    let scenarios = registry::builtin_scenarios();
+    let errors = registry::lint_registry(&scenarios);
+    let hash = registry::registry_hash_full(&scenarios);
+    let value = serde_json::json!({
+        "tool": "vetto verify-ng",
+        "registry_hash": hash,
+        "scenarios": scenarios.len(),
+        "errors": errors,
+    });
+    assert!(value.get("registry_hash").is_some(), "hash: {value}");
+    assert!(
+        value
+            .get("errors")
+            .and_then(|e| e.as_array())
+            .map(|e| e.is_empty())
+            .unwrap_or(false),
+        "errors: {value}"
+    );
     let res = vetto::verify_ng::run_verify_ng(true, true);
     assert!(res.is_ok(), "lint --json must pass");
 }
 
-/// CLI surface: `verify-ng` without execution never reports PASS (FM-01 at
-/// the CLI layer: the harness refuses hollow verdicts, gate fails closed).
+/// In-process API: `verify_ng` without execution runner fails closed (FM-01).
 #[test]
 fn cli_verify_ng_without_suite_never_passes() {
     let res = vetto::verify_ng::run_verify_ng(false, false);
