@@ -1468,7 +1468,15 @@ mod tests {
 
     #[test]
     fn test_unrecognized_and_phantom_subcommands_fail_parsing() {
-        for subcmd in ["rn", "stauts", "verify-ng", "profiles", "profile", "watch", "digest"] {
+        for subcmd in [
+            "rn",
+            "stauts",
+            "verify-ng",
+            "profiles",
+            "profile",
+            "watch",
+            "digest",
+        ] {
             let res = Cli::try_parse_from(["vetto", subcmd]);
             assert!(res.is_err(), "subcommand {subcmd} must not parse");
             let err_str = res.unwrap_err().to_string();

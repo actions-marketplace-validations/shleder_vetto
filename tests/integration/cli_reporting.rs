@@ -24,7 +24,15 @@ fn completions_are_available_for_all_requested_shells() {
 
 #[test]
 fn typo_subcommands_fail_with_clap_error_not_workspace_profile() {
-    for typo in ["rn", "stauts", "verify-ng", "profiles", "profile", "watch", "digest"] {
+    for typo in [
+        "rn",
+        "stauts",
+        "verify-ng",
+        "profiles",
+        "profile",
+        "watch",
+        "digest",
+    ] {
         let output = Command::new(vetto_bin())
             .arg(typo)
             .output()
@@ -41,4 +49,3 @@ fn typo_subcommands_fail_with_clap_error_not_workspace_profile() {
         );
     }
 }
-
