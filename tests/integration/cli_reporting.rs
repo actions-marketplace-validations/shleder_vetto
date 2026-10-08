@@ -69,4 +69,3 @@ fn removed_phantom_subcommands_are_rejected() {
         );
     }
 }
-

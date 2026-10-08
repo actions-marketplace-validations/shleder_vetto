@@ -275,8 +275,8 @@ fn cli_verify_ng_lint_passes() {
 /// Verification harness: `verify_ng` lint in JSON mode produces valid registry metadata.
 #[test]
 fn cli_verify_ng_lint_json_parseable() {
-    let scenarios = registry::builtin_scenarios();
-    let errors = registry::lint_registry(&scenarios);
+    let scenarios = registry::registry();
+    let errors = registry::lint_all(&scenarios);
     let hash = registry::registry_hash_full(&scenarios);
     let value = serde_json::json!({
         "tool": "vetto verify-ng",
