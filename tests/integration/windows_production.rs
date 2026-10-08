@@ -17,6 +17,11 @@ use std::time::{Duration, Instant};
 
 use vetto::config::NetMode;
 use vetto::policy::Policy;
+use vetto::sandbox::capability::{
+    allows_pass, apply_backend_ceiling, required_capabilities, BackendKind, CanonicalPolicy,
+    Category, ClaimStrength, EnforcementReport, EnforcementState, ExecutionIdentity,
+    PreparationFailureKind, SandboxBackend, Scenario, SecurityCapability, Severity, Verdict,
+};
 #[cfg(target_os = "windows")]
 use vetto::sandbox::production::{
     execute_simple, execute_with_backend, ProdSpawnLog, UnpreparedProductionExecution,
@@ -26,11 +31,6 @@ use vetto::sandbox::production::{
 };
 #[cfg(target_os = "windows")]
 use vetto::sandbox::{Backend, StdioMode};
-use vetto::sandbox::capability::{
-    allows_pass, apply_backend_ceiling, required_capabilities, BackendKind, CanonicalPolicy,
-    Category, ClaimStrength, EnforcementReport, EnforcementState, ExecutionIdentity,
-    PreparationFailureKind, SandboxBackend, Scenario, SecurityCapability, Severity, Verdict,
-};
 
 /// Serializes the Windows production-spawn tests: spawn-counter deltas and
 /// the Job Object tree assertions stay exact under the harness's default

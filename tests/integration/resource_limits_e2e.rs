@@ -23,11 +23,11 @@ use vetto::sandbox::capability::{
 #[cfg(target_os = "linux")]
 use vetto::policy::CgroupConfig;
 #[cfg(target_os = "linux")]
+use vetto::sandbox::capability::{HostVerification, LinuxBackend, SandboxBackend};
+#[cfg(target_os = "linux")]
 use vetto::sandbox::linux::cgroup::setup_cgroup;
 #[cfg(target_os = "linux")]
 use vetto::sandbox::linux::limits;
-#[cfg(target_os = "linux")]
-use vetto::sandbox::capability::{HostVerification, LinuxBackend, SandboxBackend};
 
 #[test]
 #[cfg(target_os = "linux")]
