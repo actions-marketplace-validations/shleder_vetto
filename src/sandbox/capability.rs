@@ -788,88 +788,19 @@ impl SandboxBackend for DirectBackend {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct GenericPlatformBackend {
-    kind: BackendKind,
+pub struct LinuxBackend {
     report: Option<EnforcementReport>,
     plan: Option<ChildEnforcementPlan>,
     tier: Option<Tier>,
     diag: Option<String>,
 }
 
-impl GenericPlatformBackend {
-    pub fn new(kind: BackendKind) -> Self {
-        Self {
-            kind,
-            report: None,
-            plan: None,
-            tier: None,
-            diag: None,
-        }
-    }
-}
-
-impl SandboxBackend for GenericPlatformBackend {
-    fn kind(&self) -> BackendKind {
-        self.kind
+impl LinuxBackend {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    fn name(&self) -> &'static str {
-        self.kind.label()
-    }
-
-    fn supports(&self, capability: SecurityCapability) -> bool {
-        match self.kind {
-            BackendKind::Direct => capability == SecurityCapability::HostEvidence,
-            BackendKind::Linux => true,
-            BackendKind::Macos => matches!(
-                capability,
-                SecurityCapability::FilesystemIsolation
-                    | SecurityCapability::NetworkIsolation
-                    | SecurityCapability::ProcessIsolation
-                    | SecurityCapability::ProcessTreeContainment
-                    | SecurityCapability::HostEvidence
-            ),
-            BackendKind::Windows => matches!(
-                capability,
-                SecurityCapability::ProcessIsolation
-                    | SecurityCapability::ProcessTreeContainment
-                    | SecurityCapability::ResourceLimits
-                    | SecurityCapability::HostEvidence
-            ),
-        }
-    }
-
-    fn prepare_with_context(
-        &mut self,
-        policy: &CanonicalPolicy,
-        identity: &ExecutionIdentity,
-        _ctx: &PrepareContext,
-    ) -> EnforcementReport {
-        let mut states = BTreeMap::new();
-        for cap in SecurityCapability::all() {
-            let state = if self.supports(cap) {
-                EnforcementState::Enforced
-            } else {
-                EnforcementState::Unsupported
-            };
-            states.insert(cap, state);
-        }
-        let report =
-            EnforcementReport::build(self.kind, policy, identity, &states, &BTreeMap::new(), true);
-        self.plan = Some(ChildEnforcementPlan {
-            net_deny: policy.net_mode == "off",
-            new_pgroup: true,
-            ..Default::default()
-        });
-        self.report = Some(report.clone());
-        report
-    }
-
-    fn pre_exec_plan(&self) -> Option<ChildEnforcementPlan> {
-        self.plan.clone()
-    }
-
-    fn note_spawned(&mut self, _pid: u32) {
+    fn promote_configured_to_enforced(&mut self) {
         if let Some(r) = self.report.as_mut() {
             for rec in &mut r.records {
                 if rec.state == EnforcementState::Configured {
@@ -879,23 +810,202 @@ impl SandboxBackend for GenericPlatformBackend {
         }
     }
 
+    fn fail_installed(&mut self, kind: PreparationFailureKind) {
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                match record.state {
+                    EnforcementState::Configured
+                    | EnforcementState::Enforced
+                    | EnforcementState::Verified => {
+                        record.state = EnforcementState::Failed;
+                        record.failure = Some(kind);
+                    }
+                    _ => {}
+                }
+            }
+            report.preparation_ok = false;
+        }
+    }
+
+    pub fn apply_tier_restriction(&mut self, tier: Option<Tier>) {
+        self.tier = tier;
+        match tier {
+            Some(Tier::Seccomp) => self.restrict_seccomp_records(),
+            Some(Tier::FsOnly) => self.restrict_fsonly_records(),
+            _ => {}
+        }
+    }
+
+    pub fn restrict_to_seccomp_tier(&mut self, tier: Option<Tier>) {
+        self.apply_tier_restriction(tier);
+    }
+
+    fn restrict_seccomp_records(&mut self) {
+        let net_not_off = self.plan.as_ref().is_some_and(|p| !p.net_deny);
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                if matches!(
+                    record.capability,
+                    SecurityCapability::FilesystemIsolation
+                        | SecurityCapability::ExecutionRootIsolation
+                ) {
+                    record.state = EnforcementState::Unsupported;
+                    record.failure = None;
+                }
+                if record.capability == SecurityCapability::NetworkIsolation && net_not_off {
+                    record.state = EnforcementState::Unsupported;
+                    record.failure = Some(PreparationFailureKind::UnsupportedOnPlatform);
+                }
+            }
+        }
+    }
+
+    fn restrict_fsonly_records(&mut self) {
+        let net_not_off = self.plan.as_ref().is_some_and(|p| !p.net_deny);
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                if record.capability == SecurityCapability::ProcessTreeContainment {
+                    record.state = EnforcementState::Unsupported;
+                    record.failure = Some(PreparationFailureKind::UnsupportedOnPlatform);
+                }
+                if record.capability == SecurityCapability::NetworkIsolation && net_not_off {
+                    record.state = EnforcementState::Unsupported;
+                    record.failure = Some(PreparationFailureKind::UnsupportedOnPlatform);
+                }
+            }
+        }
+    }
+}
+
+impl SandboxBackend for LinuxBackend {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Linux
+    }
+
+    fn name(&self) -> &'static str {
+        "linux (landlock+seccomp+rlimit+pgroup; no userns)"
+    }
+
+    fn supports(&self, capability: SecurityCapability) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            match capability {
+                SecurityCapability::FilesystemIsolation
+                | SecurityCapability::NetworkIsolation
+                | SecurityCapability::ProcessIsolation
+                | SecurityCapability::ProcessTreeContainment
+                | SecurityCapability::ResourceLimits
+                | SecurityCapability::SyscallRestriction
+                | SecurityCapability::ExecutionRootIsolation
+                | SecurityCapability::HostEvidence => true,
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = capability;
+            false
+        }
+    }
+
+    fn prepare_with_context(
+        &mut self,
+        policy: &CanonicalPolicy,
+        identity: &ExecutionIdentity,
+        _ctx: &PrepareContext,
+    ) -> EnforcementReport {
+        self.plan = None;
+        #[cfg(not(target_os = "linux"))]
+        {
+            let states: BTreeMap<SecurityCapability, EnforcementState> = SecurityCapability::all()
+                .into_iter()
+                .map(|c| (c, EnforcementState::Unsupported))
+                .collect();
+            let report = EnforcementReport::build(
+                BackendKind::Linux,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.report = Some(report.clone());
+            if self.tier == Some(Tier::Seccomp) {
+                self.restrict_seccomp_records();
+            } else if self.tier == Some(Tier::FsOnly) {
+                self.restrict_fsonly_records();
+            }
+            self.report.clone().unwrap_or(report)
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let mut states = BTreeMap::new();
+            for cap in SecurityCapability::all() {
+                states.insert(cap, EnforcementState::Configured);
+            }
+            states.insert(SecurityCapability::HostEvidence, EnforcementState::Enforced);
+            let report = EnforcementReport::build(
+                BackendKind::Linux,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.plan = Some(ChildEnforcementPlan {
+                net_deny: policy.net_mode == "off",
+                new_pgroup: true,
+                ..Default::default()
+            });
+            self.report = Some(report.clone());
+            if self.tier == Some(Tier::Seccomp) {
+                self.restrict_seccomp_records();
+            } else if self.tier == Some(Tier::FsOnly) {
+                self.restrict_fsonly_records();
+            }
+            self.report.clone().unwrap_or(report)
+        }
+    }
+
+    fn pre_exec_plan(&self) -> Option<ChildEnforcementPlan> {
+        self.plan.clone()
+    }
+
+    fn note_spawned(&mut self, _pid: u32) {
+        self.promote_configured_to_enforced();
+    }
+
     fn note_host_verified(&mut self, verification: &HostVerification) {
         if let Some(r) = self.report.as_mut() {
             for rec in &mut r.records {
                 if rec.capability == SecurityCapability::ProcessIsolation
                     && verification.no_new_privs
                 {
-                    rec.state = EnforcementState::Verified;
+                    if rec.state == EnforcementState::Enforced {
+                        rec.state = EnforcementState::Verified;
+                    }
                 }
                 if rec.capability == SecurityCapability::SyscallRestriction
                     && verification.seccomp_filter
                 {
-                    rec.state = EnforcementState::Verified;
+                    if rec.state == EnforcementState::Enforced {
+                        rec.state = EnforcementState::Verified;
+                    }
+                }
+                if rec.capability == SecurityCapability::NetworkIsolation
+                    && (verification.netns_isolated
+                        || (verification.seccomp_filter
+                            && self.plan.as_ref().is_some_and(|p| p.net_deny)))
+                {
+                    if rec.state == EnforcementState::Enforced {
+                        rec.state = EnforcementState::Verified;
+                    }
                 }
                 if rec.capability == SecurityCapability::ProcessTreeContainment
                     && (verification.subreaper_ok || verification.win_in_job)
                 {
-                    rec.state = EnforcementState::Verified;
+                    if rec.state == EnforcementState::Enforced {
+                        rec.state = EnforcementState::Verified;
+                    }
                 }
                 if rec.capability == SecurityCapability::ResourceLimits
                     && (verification.rlimit_as_ok
@@ -907,21 +1017,34 @@ impl SandboxBackend for GenericPlatformBackend {
                         || verification.cgroup_cpu_ok
                         || verification.cgroup_pids_ok)
                 {
-                    rec.state = EnforcementState::Verified;
+                    if rec.state == EnforcementState::Enforced {
+                        rec.state = EnforcementState::Verified;
+                    }
                 }
             }
         }
     }
 
+    fn note_failed(&mut self, kind: PreparationFailureKind) {
+        self.fail_installed(kind);
+    }
+
     fn note_tree_clean(&mut self, clean: bool) {
+        if self.tier == Some(Tier::FsOnly) {
+            return;
+        }
         if let Some(r) = self.report.as_mut() {
             for rec in &mut r.records {
                 if rec.capability == SecurityCapability::ProcessTreeContainment {
-                    if clean {
-                        rec.state = EnforcementState::Verified;
-                    } else {
-                        rec.state = EnforcementState::Failed;
-                        rec.failure = Some(PreparationFailureKind::VerificationUnavailable);
+                    match rec.state {
+                        EnforcementState::Enforced if clean => {
+                            rec.state = EnforcementState::Verified;
+                        }
+                        EnforcementState::Enforced | EnforcementState::Configured if !clean => {
+                            rec.state = EnforcementState::Failed;
+                            rec.failure = Some(PreparationFailureKind::VerificationUnavailable);
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -937,99 +1060,500 @@ impl SandboxBackend for GenericPlatformBackend {
     }
 
     fn restrict_tier(&mut self, tier: Option<Tier>) {
-        self.tier = tier;
+        self.apply_tier_restriction(tier);
     }
 
     fn enforcement(&self) -> Option<&EnforcementReport> {
         self.report.as_ref()
     }
+
+    fn teardown(&mut self) {
+        self.report = None;
+        self.plan = None;
+        self.diag = None;
+        self.tier = None;
+    }
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct LinuxBackend {
-    inner: GenericPlatformBackend,
+pub struct MacosBackend {
+    report: Option<EnforcementReport>,
+    tree_diag: Option<String>,
 }
 
-impl LinuxBackend {
+impl MacosBackend {
     pub fn new() -> Self {
-        Self {
-            inner: GenericPlatformBackend::new(BackendKind::Linux),
+        Self::default()
+    }
+
+    fn promote_configured_to_enforced(&mut self) {
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                if record.state == EnforcementState::Configured {
+                    record.state = EnforcementState::Enforced;
+                }
+            }
+        }
+    }
+
+    fn fail_installed(&mut self, kind: PreparationFailureKind) {
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                match record.state {
+                    EnforcementState::Configured
+                    | EnforcementState::Enforced
+                    | EnforcementState::Verified => {
+                        record.state = EnforcementState::Failed;
+                        record.failure = Some(kind);
+                    }
+                    _ => {}
+                }
+            }
+            report.preparation_ok = false;
         }
     }
 }
 
-impl std::ops::Deref for LinuxBackend {
-    type Target = GenericPlatformBackend;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl std::ops::DerefMut for LinuxBackend {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl SandboxBackend for LinuxBackend {
+impl SandboxBackend for MacosBackend {
     fn kind(&self) -> BackendKind {
-        self.inner.kind()
+        BackendKind::Macos
     }
+
     fn name(&self) -> &'static str {
-        self.inner.name()
+        "macos (seatbelt write+net-off+rlimit+pgroup; no seccomp, reads broad)"
     }
+
     fn supports(&self, capability: SecurityCapability) -> bool {
-        self.inner.supports(capability)
+        #[cfg(target_os = "macos")]
+        {
+            matches!(
+                capability,
+                SecurityCapability::FilesystemIsolation
+                    | SecurityCapability::NetworkIsolation
+                    | SecurityCapability::ProcessIsolation
+                    | SecurityCapability::ProcessTreeContainment
+                    | SecurityCapability::ResourceLimits
+                    | SecurityCapability::HostEvidence
+            )
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = capability;
+            false
+        }
     }
-    fn prepare(
-        &mut self,
-        policy: &CanonicalPolicy,
-        identity: &ExecutionIdentity,
-    ) -> EnforcementReport {
-        self.inner.prepare(policy, identity)
-    }
+
     fn prepare_with_context(
         &mut self,
         policy: &CanonicalPolicy,
         identity: &ExecutionIdentity,
-        ctx: &PrepareContext,
+        _ctx: &PrepareContext,
     ) -> EnforcementReport {
-        self.inner.prepare_with_context(policy, identity, ctx)
+        self.tree_diag = None;
+        #[cfg(not(target_os = "macos"))]
+        {
+            let states: BTreeMap<SecurityCapability, EnforcementState> = SecurityCapability::all()
+                .into_iter()
+                .map(|c| (c, EnforcementState::Unsupported))
+                .collect();
+            let report = EnforcementReport::build(
+                BackendKind::Macos,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.report = Some(report.clone());
+            report
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let is_supported_net =
+                policy.net_mode == "off" || policy.net_mode.starts_with("allowlist");
+            if !is_supported_net {
+                let mut states: BTreeMap<SecurityCapability, EnforcementState> =
+                    SecurityCapability::all()
+                        .into_iter()
+                        .map(|c| (c, EnforcementState::Unsupported))
+                        .collect();
+                states.insert(
+                    SecurityCapability::NetworkIsolation,
+                    EnforcementState::Failed,
+                );
+                let mut failures = BTreeMap::new();
+                failures.insert(
+                    SecurityCapability::NetworkIsolation,
+                    PreparationFailureKind::UnsupportedOnPlatform,
+                );
+                let report = EnforcementReport::build(
+                    BackendKind::Macos,
+                    policy,
+                    identity,
+                    &states,
+                    &failures,
+                    false,
+                );
+                self.report = Some(report.clone());
+                return report;
+            }
+            let mut states = BTreeMap::new();
+            let mut set = |cap: SecurityCapability, ok: bool| {
+                states.insert(
+                    cap,
+                    if ok {
+                        EnforcementState::Configured
+                    } else {
+                        EnforcementState::Unsupported
+                    },
+                );
+            };
+            set(SecurityCapability::FilesystemIsolation, true);
+            set(SecurityCapability::NetworkIsolation, true);
+            set(SecurityCapability::ProcessIsolation, true);
+            set(SecurityCapability::ProcessTreeContainment, true);
+            set(SecurityCapability::ResourceLimits, true);
+            set(SecurityCapability::SyscallRestriction, false);
+            set(SecurityCapability::ExecutionRootIsolation, false);
+            states.insert(SecurityCapability::HostEvidence, EnforcementState::Enforced);
+            let report = EnforcementReport::build(
+                BackendKind::Macos,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.report = Some(report.clone());
+            report
+        }
     }
-    fn pre_exec_plan(&self) -> Option<ChildEnforcementPlan> {
-        self.inner.pre_exec_plan()
+
+    fn note_spawned(&mut self, _pid: u32) {
+        self.promote_configured_to_enforced();
     }
-    fn note_spawned(&mut self, pid: u32) {
-        self.inner.note_spawned(pid);
-    }
+
     fn note_host_verified(&mut self, verification: &HostVerification) {
-        self.inner.note_host_verified(verification);
+        let Some(report) = self.report.as_mut() else {
+            return;
+        };
+        if verification.pgroup_separate {
+            if let Some(record) = report
+                .records
+                .iter_mut()
+                .find(|r| r.capability == SecurityCapability::ProcessIsolation)
+            {
+                if record.state == EnforcementState::Enforced {
+                    record.state = EnforcementState::Verified;
+                }
+            }
+        }
     }
+
+    fn note_failed(&mut self, kind: PreparationFailureKind) {
+        self.fail_installed(kind);
+    }
+
     fn note_tree_clean(&mut self, clean: bool) {
-        self.inner.note_tree_clean(clean);
+        let Some(report) = self.report.as_mut() else {
+            return;
+        };
+        if let Some(record) = report
+            .records
+            .iter_mut()
+            .find(|r| r.capability == SecurityCapability::ProcessTreeContainment)
+        {
+            match record.state {
+                EnforcementState::Enforced if clean => {
+                    record.state = EnforcementState::Verified;
+                }
+                EnforcementState::Enforced | EnforcementState::Configured if !clean => {
+                    record.state = EnforcementState::Failed;
+                    record.failure = Some(PreparationFailureKind::VerificationUnavailable);
+                }
+                _ => {}
+            }
+        }
     }
+
     fn note_diagnostic(&mut self, diag: String) {
-        self.inner.note_diagnostic(diag);
+        self.tree_diag = Some(diag);
     }
+
     fn diagnostic(&self) -> Option<String> {
-        self.inner.diagnostic()
+        self.tree_diag.clone()
     }
-    fn restrict_tier(&mut self, tier: Option<Tier>) {
-        self.inner.restrict_tier(tier);
-    }
+
     fn enforcement(&self) -> Option<&EnforcementReport> {
-        self.inner.enforcement()
+        self.report.as_ref()
+    }
+
+    fn teardown(&mut self) {
+        self.report = None;
+        self.tree_diag = None;
     }
 }
 
-pub type MacosBackend = GenericPlatformBackend;
-pub type WindowsBackend = GenericPlatformBackend;
+#[derive(Debug, Clone, Default)]
+pub struct WindowsBackend {
+    report: Option<EnforcementReport>,
+    spawned_pid: Option<u32>,
+    diagnostic: Option<String>,
+}
+
+impl WindowsBackend {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn promote_configured(&mut self, capability: SecurityCapability) {
+        if let Some(report) = self.report.as_mut() {
+            if let Some(record) = report
+                .records
+                .iter_mut()
+                .find(|r| r.capability == capability)
+            {
+                if record.state == EnforcementState::Configured {
+                    record.state = EnforcementState::Enforced;
+                }
+            }
+        }
+    }
+}
+
+impl SandboxBackend for WindowsBackend {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Windows
+    }
+
+    fn name(&self) -> &'static str {
+        "windows (job kill-on-close + appcontainer process sandbox; no syscall filter)"
+    }
+
+    fn supports(&self, capability: SecurityCapability) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            matches!(
+                capability,
+                SecurityCapability::FilesystemIsolation
+                    | SecurityCapability::NetworkIsolation
+                    | SecurityCapability::ProcessIsolation
+                    | SecurityCapability::ProcessTreeContainment
+                    | SecurityCapability::ResourceLimits
+                    | SecurityCapability::HostEvidence
+            )
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = capability;
+            false
+        }
+    }
+
+    fn prepare_with_context(
+        &mut self,
+        policy: &CanonicalPolicy,
+        identity: &ExecutionIdentity,
+        _ctx: &PrepareContext,
+    ) -> EnforcementReport {
+        self.diagnostic = None;
+        self.spawned_pid = None;
+        #[cfg(not(target_os = "windows"))]
+        {
+            let states: BTreeMap<SecurityCapability, EnforcementState> = SecurityCapability::all()
+                .into_iter()
+                .map(|c| (c, EnforcementState::Unsupported))
+                .collect();
+            let report = EnforcementReport::build(
+                BackendKind::Windows,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.report = Some(report.clone());
+            report
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let caps = crate::sandbox::windows::probe();
+            if !caps.enforcement_ready() {
+                let states: BTreeMap<SecurityCapability, EnforcementState> = SecurityCapability::all()
+                    .into_iter()
+                    .map(|c| (c, EnforcementState::Failed))
+                    .collect();
+                let failures: BTreeMap<SecurityCapability, PreparationFailureKind> =
+                    SecurityCapability::all()
+                        .into_iter()
+                        .map(|c| (c, PreparationFailureKind::PlatformUnavailable))
+                        .collect();
+                let report = EnforcementReport::build(
+                    BackendKind::Windows,
+                    policy,
+                    identity,
+                    &states,
+                    &failures,
+                    false,
+                );
+                self.report = Some(report.clone());
+                return report;
+            }
+
+            let mut states = BTreeMap::new();
+            states.insert(
+                SecurityCapability::FilesystemIsolation,
+                EnforcementState::Configured,
+            );
+            states.insert(
+                SecurityCapability::ExecutionRootIsolation,
+                EnforcementState::Unsupported,
+            );
+            states.insert(
+                SecurityCapability::NetworkIsolation,
+                if policy.net_mode == "off" {
+                    EnforcementState::Configured
+                } else {
+                    EnforcementState::Unsupported
+                },
+            );
+            states.insert(
+                SecurityCapability::ProcessIsolation,
+                EnforcementState::Configured,
+            );
+            states.insert(
+                SecurityCapability::ProcessTreeContainment,
+                EnforcementState::Configured,
+            );
+            states.insert(
+                SecurityCapability::ResourceLimits,
+                EnforcementState::Configured,
+            );
+            states.insert(
+                SecurityCapability::SyscallRestriction,
+                EnforcementState::Unsupported,
+            );
+            states.insert(SecurityCapability::HostEvidence, EnforcementState::Enforced);
+
+            let report = EnforcementReport::build(
+                BackendKind::Windows,
+                policy,
+                identity,
+                &states,
+                &BTreeMap::new(),
+                true,
+            );
+            self.diagnostic = Some(format!(
+                "win prepare ok=true as-user={} exec-root=unsupported syscalls=unsupported",
+                caps.experimental_create_process_as_user_in_sandbox
+            ));
+            self.report = Some(report.clone());
+            report
+        }
+    }
+
+    fn enforcement(&self) -> Option<&EnforcementReport> {
+        self.report.as_ref()
+    }
+
+    fn note_spawned(&mut self, pid: u32) {
+        self.spawned_pid = Some(pid);
+    }
+
+    fn note_host_verified(&mut self, verification: &HostVerification) {
+        let Some(report) = self.report.as_ref() else {
+            return;
+        };
+        if !report.preparation_ok {
+            return;
+        }
+        if verification.win_in_job {
+            self.promote_configured(SecurityCapability::FilesystemIsolation);
+            self.promote_configured(SecurityCapability::NetworkIsolation);
+            self.promote_configured(SecurityCapability::ProcessIsolation);
+            if verification.win_kill_on_close {
+                self.promote_configured(SecurityCapability::ProcessTreeContainment);
+            }
+        }
+        if verification.win_job_ceiling {
+            self.promote_configured(SecurityCapability::ResourceLimits);
+        }
+        if verification.win_low_integrity {
+            if let Some(report) = self.report.as_mut() {
+                if let Some(record) = report.records.iter_mut().find(|r| {
+                    r.capability == SecurityCapability::ProcessIsolation
+                        && r.state == EnforcementState::Enforced
+                }) {
+                    record.state = EnforcementState::Verified;
+                }
+            }
+        }
+    }
+
+    fn note_failed(&mut self, kind: PreparationFailureKind) {
+        if let Some(report) = self.report.as_mut() {
+            for record in &mut report.records {
+                match record.state {
+                    EnforcementState::Configured
+                    | EnforcementState::Enforced
+                    | EnforcementState::Verified => {
+                        record.state = EnforcementState::Failed;
+                        record.failure = Some(kind);
+                    }
+                    _ => {}
+                }
+            }
+            report.preparation_ok = false;
+        }
+    }
+
+    fn note_tree_clean(&mut self, clean: bool) {
+        let Some(report) = self.report.as_mut() else {
+            return;
+        };
+        if let Some(record) = report
+            .records
+            .iter_mut()
+            .find(|r| r.capability == SecurityCapability::ProcessTreeContainment)
+        {
+            match record.state {
+                EnforcementState::Enforced if clean => {
+                    record.state = EnforcementState::Verified;
+                }
+                EnforcementState::Enforced | EnforcementState::Configured if !clean => {
+                    record.state = EnforcementState::Failed;
+                    record.failure = Some(PreparationFailureKind::VerificationUnavailable);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn note_diagnostic(&mut self, diag: String) {
+        let diag = match &self.diagnostic {
+            Some(st) => format!("{st} {diag}"),
+            None => diag,
+        };
+        self.diagnostic = Some(diag);
+    }
+
+    fn diagnostic(&self) -> Option<String> {
+        self.diagnostic.clone()
+    }
+
+    fn teardown(&mut self) {
+        self.report = None;
+        self.spawned_pid = None;
+        self.diagnostic = None;
+    }
+}
 
 pub fn select_backend(kind: BackendKind) -> Box<dyn SandboxBackend> {
     match kind {
         BackendKind::Direct => Box::new(DirectBackend::new()),
         BackendKind::Linux => Box::new(LinuxBackend::new()),
-        other => Box::new(GenericPlatformBackend::new(other)),
+        BackendKind::Macos => Box::new(MacosBackend::new()),
+        BackendKind::Windows => Box::new(WindowsBackend::new()),
     }
 }
 
