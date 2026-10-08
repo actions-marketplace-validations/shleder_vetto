@@ -10,7 +10,6 @@
 //! `TempProject` + isolated HOME via `run_vetto_in` (which sets HOME to
 //! `test_home()`).
 
-use crate::common::*;
 use vetto::verify_ng::{
     caps, engine, evidence, exit, fixture, frozen, model, oracle, redact, registry, report,
 };
