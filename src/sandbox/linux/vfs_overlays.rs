@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::mounts;
-use crate::error::{VettoError, VettoResult};
+use crate::error::VettoResult;
 
 pub const SENSITIVE_PROC_SYS_PATHS: &[&str] = &[
     "/proc/sysrq-trigger",

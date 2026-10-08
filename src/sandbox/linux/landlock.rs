@@ -455,7 +455,7 @@ fn open_path_fd(path: &Path) -> VettoResult<OpenPath> {
 
 /// Create a Landlock ruleset with dynamic ABI negotiation and graceful degradation.
 /// Returns the ruleset descriptor, the negotiated ABI version, and whether network handling is active.
-fn create_ruleset_dynamic(mut abi: u32, mut has_net: bool) -> VettoResult<(OwnedFd, u32, bool)> {
+fn create_ruleset_dynamic(mut abi: u32, has_net: bool) -> VettoResult<(OwnedFd, u32, bool)> {
     loop {
         let net_active = has_net && abi >= 4;
         let attr = LandlockRulesetAttr {

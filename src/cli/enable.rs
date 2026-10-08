@@ -303,9 +303,6 @@ fn enable_agent_internal(
         }
     }
 
-    // Activation funnel milestone (issue #27): agent wrapped. Once-only.
-    let _ = crate::telemetry::record_funnel_milestone("enable");
-
     Ok(())
 }
 
