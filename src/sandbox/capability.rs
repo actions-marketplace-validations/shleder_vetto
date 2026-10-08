@@ -721,6 +721,7 @@ pub trait SandboxBackend: Send {
     }
     fn note_spawned(&mut self, _pid: u32) {}
     fn note_host_verified(&mut self, _verification: &HostVerification) {}
+    fn note_failed(&mut self, _kind: PreparationFailureKind) {}
     fn note_tree_clean(&mut self, _clean: bool) {}
     fn note_diagnostic(&mut self, _diag: String) {}
     fn diagnostic(&self) -> Option<String> {
