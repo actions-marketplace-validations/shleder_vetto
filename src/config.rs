@@ -115,8 +115,6 @@ pub struct RunConfig {
     pub report_max_age_secs: Option<u64>,
     pub fail_on_block: Option<u64>,
     pub git_ssh: bool,
-    pub otel_endpoint: Option<String>,
-    pub otel: bool,
     pub session_timeout: Option<std::time::Duration>,
     pub auto_timeout_requested: bool,
     pub limits_spec: Option<String>,
@@ -415,12 +413,6 @@ mod tests {
     use crate::policy::presets::{agent_network_allowlist, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
     use clap::Parser;
 
-    #[test]
-    fn run_config_parses_otel_flag() {
-        let cli = Cli::try_parse_from(["vetto", "--otel", "--", "true"]).unwrap();
-        let cfg = RunConfig::from_cli(&cli).unwrap();
-        assert!(cfg.otel);
-    }
 
     fn config(args: &[&str]) -> Result<RunConfig> {
         let mut argv = vec!["vetto"];

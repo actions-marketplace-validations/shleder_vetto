@@ -138,7 +138,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "--report-dir",
         "--report-retention",
         "--report-max-age-secs",
-        "--otel-endpoint",
         "--timeout",
         "--limits",
         "--agent",

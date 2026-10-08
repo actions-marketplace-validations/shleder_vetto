@@ -146,14 +146,6 @@ pub struct Cli {
     #[arg(long)]
     pub git_ssh: bool,
 
-    /// OpenTelemetry OTLP endpoint for session span export.
-    #[arg(long, value_name = "URL")]
-    pub otel_endpoint: Option<String>,
-
-    /// Enable OpenTelemetry spans for the session
-    #[arg(long)]
-    pub otel: bool,
-
     /// Kill the sandboxed session after DURATION without the agent finishing
     /// (e.g. 90s, 30m, 2h). Enforced with --tui=none (CI mode); other TUI
     /// modes warn and ignore it.
@@ -1029,8 +1021,6 @@ impl Cli {
             report_max_age_secs,
             fail_on_block,
             git_ssh,
-            otel_endpoint: cli.otel_endpoint.clone(),
-            otel: cli.otel,
             session_timeout,
             auto_timeout_requested,
             limits_spec,
