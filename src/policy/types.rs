@@ -115,23 +115,217 @@ impl CgroupConfig {
     }
 }
 
+/// Standard for formatting and interpreting byte quantity representations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitStandard {
+    /// IEC standard powers of 2 (1024-based): KiB, MiB, GiB, TiB.
+    IecBinary,
+    /// SI standard powers of 10 (1000-based): KB, MB, GB, TB.
+    SiDecimal,
+}
+
+/// Errors occurring during byte quantity string parsing.
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+pub enum ParseBytesError {
+    #[error("byte string is empty")]
+    Empty,
+    #[error("invalid numeric value: '{0}'")]
+    InvalidNumber(String),
+    #[error("unknown unit suffix: '{0}'")]
+    UnknownUnit(String),
+    #[error("arithmetic overflow calculating byte size")]
+    Overflow,
+}
+
+const KIB: u64 = 1024;
+const MIB: u64 = 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
+const TIB: u64 = 1024 * 1024 * 1024 * 1024;
+
+const KB: u64 = 1000;
+const MB: u64 = 1000 * 1000;
+const GB: u64 = 1000 * 1000 * 1000;
+const TB: u64 = 1000 * 1000 * 1000 * 1000;
+
+/// Parse a human-readable byte quantity string into an exact byte count (`u64`).
+pub fn parse_bytes(input: &str) -> Result<u64, ParseBytesError> {
+    parse_bytes_with_standard(input, UnitStandard::SiDecimal)
+}
+
+/// Parse a byte quantity string into bytes using the specified unit standard.
+pub fn parse_bytes_with_standard(
+    input: &str,
+    standard: UnitStandard,
+) -> Result<u64, ParseBytesError> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err(ParseBytesError::Empty);
+    }
+
+    if let Ok(raw) = s.parse::<u64>() {
+        return Ok(raw);
+    }
+
+    let lower = s.to_ascii_lowercase();
+
+    let (number_str, mult) = if let Some(n) = lower.strip_suffix("tib") {
+        (n, TIB)
+    } else if let Some(n) = lower.strip_suffix("gib") {
+        (n, GIB)
+    } else if let Some(n) = lower.strip_suffix("mib") {
+        (n, MIB)
+    } else if let Some(n) = lower.strip_suffix("kib") {
+        (n, KIB)
+    } else if let Some(n) = lower.strip_suffix("tb") {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => TIB,
+                UnitStandard::SiDecimal => TB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix("gb") {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => GIB,
+                UnitStandard::SiDecimal => GB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix("mb") {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => MIB,
+                UnitStandard::SiDecimal => MB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix("kb") {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => KIB,
+                UnitStandard::SiDecimal => KB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix('t') {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => TIB,
+                UnitStandard::SiDecimal => TB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix('g') {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => GIB,
+                UnitStandard::SiDecimal => GB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix('m') {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => MIB,
+                UnitStandard::SiDecimal => MB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix('k') {
+        (
+            n,
+            match standard {
+                UnitStandard::IecBinary => KIB,
+                UnitStandard::SiDecimal => KB,
+            },
+        )
+    } else if let Some(n) = lower.strip_suffix('b') {
+        (n, 1u64)
+    } else {
+        if s.chars().all(|c| c.is_ascii_digit()) {
+            return Err(ParseBytesError::Overflow);
+        }
+        return Err(ParseBytesError::UnknownUnit(s.to_string()));
+    };
+
+    let trimmed = number_str.trim();
+    if trimmed.is_empty() {
+        return Err(ParseBytesError::InvalidNumber(trimmed.to_string()));
+    }
+
+    if trimmed.contains('.') {
+        let val: f64 = trimmed
+            .parse()
+            .map_err(|_| ParseBytesError::InvalidNumber(trimmed.to_string()))?;
+
+        if !val.is_finite() || val < 0.0 {
+            return Err(ParseBytesError::InvalidNumber(trimmed.to_string()));
+        }
+
+        let bytes = (val * mult as f64).round();
+        if bytes > u64::MAX as f64 {
+            return Err(ParseBytesError::Overflow);
+        }
+        Ok(bytes as u64)
+    } else {
+        let val: u64 = trimmed.parse().map_err(|_| {
+            if trimmed.starts_with('-') || !trimmed.chars().all(|c| c.is_ascii_digit()) {
+                ParseBytesError::InvalidNumber(trimmed.to_string())
+            } else {
+                ParseBytesError::Overflow
+            }
+        })?;
+
+        val.checked_mul(mult).ok_or(ParseBytesError::Overflow)
+    }
+}
+
+/// Parse a cgroup memory specification (e.g. `memory.max` or `memory.swap.max`).
+pub fn parse_cgroup_memory(input: &str) -> Result<Option<u64>, ParseBytesError> {
+    let s = input.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("max") || s == "-1" {
+        return Ok(None);
+    }
+    parse_bytes_with_standard(s, UnitStandard::IecBinary).map(Some)
+}
+
 /// Parse human-readable or raw byte amount into bytes.
 /// Returns None if string is empty, "max", or unparseable.
 pub fn parse_bytes_value(input: &str) -> Option<u64> {
-    crate::policy::units::parse_cgroup_memory(input)
-        .ok()
-        .flatten()
+    parse_cgroup_memory(input).ok().flatten()
 }
 
 /// Parse byte amount supporting decimal suffixes (k/m/g/kb/mb/gb) and binary suffixes (kib/mib/gib).
 /// Returns None on unparseable input or u64 multiplication overflow.
 pub fn parse_byte_size(value: &str) -> Option<u64> {
-    crate::policy::units::parse_bytes(value).ok()
+    parse_bytes(value).ok()
 }
 
 /// Format byte count into human-readable string representation (B, KiB, MiB, GiB).
 pub fn format_bytes(bytes: u64) -> String {
-    crate::policy::units::format_bytes(bytes, crate::policy::units::UnitStandard::IecBinary)
+    format_bytes_typed(bytes, UnitStandard::IecBinary)
+}
+
+/// Format a byte count into a human-readable string according to the requested unit standard.
+pub fn format_bytes_typed(bytes: u64, standard: UnitStandard) -> String {
+    let (kilo, suffix_k, suffix_m, suffix_g, suffix_t) = match standard {
+        UnitStandard::IecBinary => (1024.0, "KiB", "MiB", "GiB", "TiB"),
+        UnitStandard::SiDecimal => (1000.0, "KB", "MB", "GB", "TB"),
+    };
+
+    let b = bytes as f64;
+    if b < kilo {
+        format!("{bytes} B")
+    } else if b < kilo * kilo {
+        format!("{:.1} {}", b / kilo, suffix_k)
+    } else if b < kilo * kilo * kilo {
+        format!("{:.1} {}", b / (kilo * kilo), suffix_m)
+    } else if b < kilo * kilo * kilo * kilo {
+        format!("{:.1} {}", b / (kilo * kilo * kilo), suffix_g)
+    } else {
+        format!("{:.1} {}", b / (kilo * kilo * kilo * kilo), suffix_t)
+    }
 }
 
 /// Parse CPU limit string into an effective core ratio (e.g. 0.5 for 50%, 1.0 for 100%, 2.0 for 200%).
@@ -171,7 +365,7 @@ pub fn parse_cpu_ratio(input: &str) -> Option<f64> {
 
 /// Parse human-readable memory limit into bytes or string representation.
 pub fn parse_memory_bytes(input: &str) -> Option<String> {
-    match crate::policy::units::parse_cgroup_memory(input).ok()? {
+    match parse_cgroup_memory(input).ok()? {
         None => Some("max".to_string()),
         Some(bytes) => Some(bytes.to_string()),
     }

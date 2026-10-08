@@ -1,7 +1,7 @@
 //! Stage 3C production integration: the REAL production runner over 3B.
 //!
 //! Every test here drives `vetto::sandbox::production` (the authoritative
-//! production execution path), never `verify_ng::runner` directly. Payloads
+//! production execution path). Payloads
 //! exit 0 when confinement held and 10 on escape; host-observed facts
 //! (wait status, canary integrity, typed enforcement report) decide.
 
@@ -21,10 +21,10 @@ use vetto::sandbox::production::{
     freeze_production, prod_tier_mapping, PROD_REGISTRY, PROD_SCENARIO_ID,
 };
 #[cfg(unix)]
-use vetto::verify_ng::evidence::ExecutionIdentity;
-use vetto::verify_ng::sandbox_backend::SecurityCapability;
+use vetto::sandbox::capability::ExecutionIdentity;
+use vetto::sandbox::capability::SecurityCapability;
 #[cfg(unix)]
-use vetto::verify_ng::sandbox_backend::{
+use vetto::sandbox::capability::{
     BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, SandboxBackend,
 };
 
@@ -602,10 +602,10 @@ fn test_prod_multi_agent_isolation_001() {
     // other's nonce). The nonce-targeted sweep only signals environ
     // bearers of its own run — proven by disjoint residual sets.
     let sweep_a =
-        vetto::verify_ng::linux_enforce::sweep_tree_by_nonce(a.nonce.as_str(), a.pid.unwrap_or(0))
+        vetto::sandbox::linux::proctrack::sweep_tree_by_nonce(a.nonce.as_str(), a.pid.unwrap_or(0))
             .expect("linux sweep");
     let sweep_b =
-        vetto::verify_ng::linux_enforce::sweep_tree_by_nonce(b.nonce.as_str(), b.pid.unwrap_or(0))
+        vetto::sandbox::linux::proctrack::sweep_tree_by_nonce(b.nonce.as_str(), b.pid.unwrap_or(0))
             .expect("linux sweep");
     assert!(
         !sweep_a.residual.iter().any(|p| Some(*p as u32) == b.pid),
@@ -1381,7 +1381,7 @@ fn test_prod_legacy_backend_bypass_001() {
     assert_eq!(out.nonce, log[0].run_id, "ledger bound to the run nonce");
     assert!(
         out.report
-            .binds_identity(&vetto::verify_ng::evidence::ExecutionIdentity::new(
+            .binds_identity(&vetto::sandbox::capability::ExecutionIdentity::new(
                 PROD_SCENARIO_ID,
                 out.nonce.as_str(),
                 PROD_REGISTRY,
@@ -1560,7 +1560,7 @@ fn test_prod_linux_identity_001() {
     assert!(!out.nonce.is_empty());
     assert!(out
         .report
-        .binds_identity(&vetto::verify_ng::evidence::ExecutionIdentity::new(
+        .binds_identity(&vetto::sandbox::capability::ExecutionIdentity::new(
             PROD_SCENARIO_ID,
             out.nonce.as_str(),
             PROD_REGISTRY,

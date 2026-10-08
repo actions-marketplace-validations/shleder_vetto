@@ -5,6 +5,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 static ACTIVE_ROOTS: Mutex<Option<HashSet<u32>>> = Mutex::new(None);
+static SPAWN_SERIAL: std::sync::OnceLock<Mutex<()>> = std::sync::OnceLock::new();
+
+/// Global spawn serializer (FM-09). Hold from detection to fork-return.
+pub fn spawn_serial() -> &'static Mutex<()> {
+    SPAWN_SERIAL.get_or_init(|| Mutex::new(()))
+}
 
 /// Register an active sandbox root PID into the concurrent process tracker.
 pub fn register_active_root(pid: u32) {

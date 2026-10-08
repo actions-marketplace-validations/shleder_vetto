@@ -499,12 +499,12 @@ fn parse_jsonl_log(path: &Path, session_hint: &str) -> Result<SessionAuditDetail
         if let Ok(ev) = ev_res {
             events_total += 1;
 
-            if let Some(signal) = crate::classifier::classify_event(&ev) {
+            if let crate::events::Event::BlockedAttempt { ref path, ref reason, .. } = ev {
                 let key = (
-                    signal.category.to_string(),
-                    signal.severity.label().to_string(),
-                    signal.subject,
-                    signal.reason.to_string(),
+                    "blocked".to_string(),
+                    "warning".to_string(),
+                    path.clone().unwrap_or_default(),
+                    reason.clone(),
                 );
                 *suspicious_map.entry(key).or_insert(0) += 1;
             }

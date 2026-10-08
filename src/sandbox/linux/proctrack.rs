@@ -322,6 +322,339 @@ pub fn set_subreaper() -> crate::error::VettoResult<()> {
     Ok(())
 }
 
+/// Byte-substring search (haystack may be NUL-separated, e.g. `environ`).
+pub fn contains_slice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|window| window == needle)
+}
+
+/// Outcome of one nonce-targeted tree sweep.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SweepOutcome {
+    pub clean: bool,
+    pub killed: usize,
+    pub residual: Vec<i32>,
+    pub subreaper: bool,
+    pub blind: bool,
+}
+
+/// True when this process is a child sub-reaper (`PR_SET_CHILD_SUBREAPER`).
+#[cfg(target_os = "linux")]
+pub fn is_child_subreaper() -> bool {
+    let mut flag: libc::c_int = 0;
+    let rc = unsafe {
+        libc::prctl(
+            libc::PR_GET_CHILD_SUBREAPER,
+            &mut flag as *mut libc::c_int as libc::c_ulong,
+            0,
+            0,
+            0,
+        )
+    };
+    rc == 0 && flag == 1
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn is_child_subreaper() -> bool {
+    false
+}
+
+/// Real UID from a `/proc/<pid>/status` body.
+pub fn status_uid(status_body: &str) -> Option<u32> {
+    for line in status_body.lines() {
+        if let Some(rest) = line.trim_start().strip_prefix("Uid:") {
+            let first = rest.split_whitespace().next().unwrap_or("");
+            return first.parse::<u32>().ok();
+        }
+    }
+    None
+}
+
+/// True when a `/proc/<pid>/status` body describes a zombie or dead process.
+pub fn pid_is_zombie(status: &str) -> bool {
+    for line in status.lines() {
+        if let Some(rest) = line.trim_start().strip_prefix("State:") {
+            let s = rest.trim_start();
+            return s.starts_with('Z') || s.starts_with('X');
+        }
+    }
+    false
+}
+
+/// True while `kill(pid, 0)` succeeds.
+pub fn pid_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+}
+
+/// Sweep this run's residual processes after the root was reaped.
+pub fn sweep_tree_by_nonce(nonce: &str, root_pid: u32) -> Option<SweepOutcome> {
+    #[cfg(target_os = "linux")]
+    {
+        Some(sweep_tree_by_nonce_linux(nonce, root_pid))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (nonce, root_pid);
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sweep_tree_by_nonce_linux(nonce: &str, root_pid: u32) -> SweepOutcome {
+    let subreaper = is_child_subreaper();
+    let mut outcome = SweepOutcome {
+        clean: false,
+        killed: 0,
+        residual: Vec::new(),
+        subreaper,
+        blind: false,
+    };
+    if !subreaper {
+        outcome.blind = true;
+        return outcome;
+    }
+    let me = unsafe { libc::getpid() } as u32;
+    let me_uid = unsafe { libc::geteuid() };
+    let needle = nonce.as_bytes();
+    let deadline = Instant::now() + Duration::from_millis(crate::proctree::MAX_EXTINCTION_DEADLINE_MS);
+    loop {
+        let (matched, blind) = scan_nonce_pids(needle, root_pid, me, me_uid);
+        if blind {
+            outcome.blind = true;
+        }
+        if matched.is_empty() {
+            if !outcome.blind {
+                outcome.clean = true;
+            }
+            return outcome;
+        }
+        for pid in &matched {
+            if unsafe { libc::kill(*pid, libc::SIGKILL) } == 0 {
+                outcome.killed += 1;
+            }
+            let mut status = 0i32;
+            unsafe { libc::waitpid(*pid, &mut status, libc::WNOHANG) };
+        }
+        if Instant::now() >= deadline {
+            if blind {
+                outcome.blind = true;
+            }
+            outcome.residual = last_nonce_pids(nonce, root_pid, me);
+            return outcome;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -> (Vec<i32>, bool) {
+    let mut matched = Vec::new();
+    let mut blind = false;
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return (matched, true);
+    };
+    for entry in entries.flatten() {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let Ok(pid) = name.parse::<i32>() else {
+            continue;
+        };
+        if pid <= 0
+            || pid as u32 == root_pid
+            || pid as u32 == me
+            || crate::sandbox::handle::is_active_root(pid as u32)
+        {
+            continue;
+        }
+        let status = match std::fs::read_to_string(format!("/proc/{pid}/status")) {
+            Ok(s) => s,
+            Err(e)
+                if e.raw_os_error() == Some(libc::ENOENT)
+                    || e.raw_os_error() == Some(libc::ESRCH) =>
+            {
+                continue;
+            }
+            Err(_) => continue,
+        };
+        if let Some(uid) = status_uid(&status) {
+            if uid != me_uid {
+                continue;
+            }
+        }
+        let env = match std::fs::read(format!("/proc/{pid}/environ")) {
+            Ok(env) => env,
+            Err(e)
+                if e.raw_os_error() == Some(libc::ENOENT)
+                    || e.raw_os_error() == Some(libc::ESRCH) =>
+            {
+                continue;
+            }
+            Err(_) => {
+                if pid_is_zombie(&status) || !pid_alive(pid as u32) {
+                    continue;
+                }
+                if let Ok(latest_status) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
+                    if pid_is_zombie(&latest_status) {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+                if ppid_from_status(&status) == Some(me) {
+                    blind = true;
+                }
+                continue;
+            }
+        };
+        if contains_slice(&env, needle) {
+            matched.push(pid);
+        } else if (env.is_empty()
+            || (!contains_slice(&env, b"VETTO_RUN_NONCE=")
+                && !contains_slice(&env, b"VETTO_PROD_NONCE=")
+                && !contains_slice(&env, b"VETTO_VNG_NONCE=")))
+            && pid_alive(pid as u32)
+            && !pid_is_zombie(&status)
+            && ppid_from_status(&status) == Some(me)
+            && pid != root_pid as i32
+            && !crate::sandbox::handle::is_active_root(pid as u32)
+        {
+            let my_sid = session_of(0);
+            let their_sid = session_of(pid);
+            let their_pgid = unsafe { libc::getpgid(pid) };
+            let is_orphan = match (my_sid, their_sid) {
+                (Some(mine), Some(theirs)) if mine != theirs => true,
+                _ => their_pgid == root_pid as i32,
+            };
+            if is_orphan {
+                blind = true;
+                matched.push(pid);
+            }
+        }
+    }
+    (matched, blind)
+}
+
+#[cfg(target_os = "linux")]
+fn last_nonce_pids(nonce: &str, root_pid: u32, me: u32) -> Vec<i32> {
+    let mut out = Vec::new();
+    let needle = nonce.as_bytes();
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let Ok(pid) = name.parse::<i32>() else {
+                continue;
+            };
+            if pid <= 0
+                || pid as u32 == root_pid
+                || pid as u32 == me
+                || crate::sandbox::handle::is_active_root(pid as u32)
+            {
+                continue;
+            }
+            let Ok(env) = std::fs::read(format!("/proc/{pid}/environ")) else {
+                continue;
+            };
+            if contains_slice(&env, needle) {
+                out.push(pid);
+            }
+        }
+    }
+    out.sort_unstable();
+    out.truncate(8);
+    out
+}
+
+pub fn limits_field_is(limits_body: &str, row: &str, expected: u64) -> bool {
+    for line in limits_body.lines() {
+        if let Some(idx) = line.find(row) {
+            let after = line[idx + row.len()..].trim_start();
+            let mut cols = after.split_whitespace();
+            let soft = cols.next().unwrap_or("");
+            let hard = cols.next().unwrap_or("");
+            let want = expected.to_string();
+            return soft == want && hard == want;
+        }
+    }
+    false
+}
+
+pub fn proc_field_is(status_body: &str, field: &str, expected: &str) -> bool {
+    for line in status_body.lines() {
+        if let Some(rest) = line.trim_start().strip_prefix(field) {
+            return rest.trim() == expected;
+        }
+    }
+    false
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ExpectedLimits {
+    pub rlimit_as: Option<u64>,
+    pub rlimit_nproc: Option<u64>,
+    pub rlimit_cpu: Option<u64>,
+    pub rlimit_fsize: Option<u64>,
+    pub cgroup_memory_max: Option<String>,
+    pub cgroup_pids_max: Option<String>,
+    pub cgroup_cpu_max: Option<String>,
+    pub cgroup_swap_max: Option<String>,
+}
+
+pub fn verify_child_host(pid: u32) -> crate::sandbox::capability::HostVerification {
+    #[cfg(target_os = "linux")]
+    {
+        verify_child_host_linux(pid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        crate::sandbox::capability::HostVerification::none()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn verify_child_host_linux(pid: u32) -> crate::sandbox::capability::HostVerification {
+    use crate::sandbox::capability::HostVerification;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut out = HostVerification::none();
+    loop {
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok();
+        if let Some(body) = status.as_deref() {
+            if proc_field_is(body, "Seccomp:", "2") {
+                out.seccomp_filter = true;
+            }
+            if proc_field_is(body, "NoNewPrivs:", "1") {
+                out.no_new_privs = true;
+            }
+        }
+        let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+        if pgid == pid as libc::pid_t {
+            out.pgroup_separate = true;
+        }
+        if let (Ok(child_netns), Ok(host_netns)) = (
+            std::fs::read_link(format!("/proc/{pid}/ns/net")),
+            std::fs::read_link("/proc/self/ns/net"),
+        ) {
+            if child_netns != host_netns {
+                out.netns_isolated = true;
+            }
+        }
+        out.subreaper_ok = is_child_subreaper();
+        let zombie = match status.as_deref() {
+            Some(body) => pid_is_zombie(body),
+            None => false,
+        };
+        if out.all_observed() || Instant::now() >= deadline || !pid_alive(pid) || zombie {
+            return out;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

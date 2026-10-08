@@ -19,7 +19,7 @@ use crate::supervise::error::SuperviseError;
 use crate::supervise::lifecycle::LifecycleOutcome;
 use crate::supervise::pump::PumpData;
 use crate::supervise::spawn::SupervisedSession;
-use crate::verify_ng::sandbox_backend::{EnforcementState, SecurityCapability};
+use crate::sandbox::capability::{EnforcementState, SecurityCapability};
 
 /// Result and authoritative security verdict of a finalized supervised session.
 #[derive(Debug, Clone)]

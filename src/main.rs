@@ -539,8 +539,14 @@ fn run() -> Result<()> {
                 &net,
             )
         }
-        Some(cli::Command::VerifyNg { json, lint }) => {
-            vetto::verify_ng::run_verify_ng(*json, *lint)
+        Some(cli::Command::VerifyNg { json, lint: _ }) => {
+            let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
+            vetto::verify::run_cli(
+                *json,
+                &args.profile,
+                args.policy.as_deref().map(PathBuf::from).as_deref(),
+                &net,
+            )
         }
         Some(cli::Command::Redteam { json }) => {
             let report = vetto::redteam::run_redteam_battery();
@@ -647,24 +653,6 @@ fn run() -> Result<()> {
                     &home,
                 )?;
                 println!("vetto: imported policy written to {}", output.display());
-                Ok(())
-            }
-            cli::PolicyCommand::Sign { file, key, out } => {
-                let sig_path =
-                    policy::crypto::sign_policy_file(file, key.as_deref(), out.as_deref())?;
-                println!(
-                    "Successfully signed policy file {} -> {}",
-                    file.display(),
-                    sig_path.display()
-                );
-                Ok(())
-            }
-            cli::PolicyCommand::Verify { file, sig, key } => {
-                policy::crypto::verify_policy_file(file, sig.as_deref(), key.as_deref())?;
-                println!(
-                    "Policy cryptographic verification SUCCESS for {}",
-                    file.display()
-                );
                 Ok(())
             }
             cli::PolicyCommand::Use { name, force } => {
@@ -871,7 +859,7 @@ fn scan_secrets_cli(
     max_files: Option<usize>,
 ) -> Result<()> {
     let target = path.unwrap_or(Path::new("."));
-    let mut options = policy::secretscan::SecretScanOptions::default();
+    let mut options = crate::fs::SecretScanOptions::default();
     if let Some(ms) = max_size {
         options.max_file_size_bytes = ms;
     }
@@ -880,16 +868,16 @@ fn scan_secrets_cli(
     }
 
     let result = if target.is_file() {
-        let findings = policy::secretscan::scan_file(target, options.max_file_size_bytes);
+        let findings = crate::fs::scan_file(target, options.max_file_size_bytes);
         let bytes_scanned = std::fs::metadata(target).map(|m| m.len()).unwrap_or(0);
-        policy::secretscan::SecretScanResult {
+        crate::fs::SecretScanResult {
             findings,
             files_scanned: 1,
             bytes_scanned,
             timed_out: false,
         }
     } else {
-        policy::secretscan::scan_directory(target, &options)
+        crate::fs::scan_directory(target, &options)
     };
 
     if json {
