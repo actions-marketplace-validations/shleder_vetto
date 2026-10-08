@@ -123,7 +123,7 @@ mod tests {
 
         assert_eq!(
             SuperviseError::SignalInstallationFailed("sigaction failed".into()).exit_code(),
-            1
+            125
         );
 
         assert_eq!(
@@ -142,7 +142,7 @@ mod tests {
 
         assert_eq!(
             SuperviseError::Fatal(anyhow::anyhow!("unexpected")).exit_code(),
-            1
+            125
         );
     }
 

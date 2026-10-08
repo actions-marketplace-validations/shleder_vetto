@@ -63,7 +63,7 @@ pub struct FinalizeContext<'a> {
 
 /// Finalizes the supervised session, verifying process extinction,
 /// evaluating verdicts, generating reports, and calculating the final exit code.
-pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, SuperviseError> {
+pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, SuperviseError> {
     let exit_code = ctx.lifecycle.exit_code;
     let timed_out = ctx.lifecycle.timed_out;
     let duration_secs = ctx.lifecycle.duration_secs;
