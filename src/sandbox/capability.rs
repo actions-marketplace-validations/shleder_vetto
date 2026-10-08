@@ -104,9 +104,10 @@ impl PreparationFailureKind {
 }
 
 /// Backend implementation kinds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum BackendKind {
+    #[default]
     Direct,
     Linux,
     Macos,
@@ -319,6 +320,19 @@ impl EnforcementReport {
             && self.registry_hash == identity.registry_hash
             && self.frozen_hash == identity.frozen_hash
     }
+
+    pub fn render_deterministic(&self) -> String {
+        let mut parts = vec![format!("backend={}", self.backend.label())];
+        for record in &self.records {
+            parts.push(format!(
+                "{}={}",
+                record.capability.label(),
+                record.state.label()
+            ));
+        }
+        parts.push(format!("preparation_ok={}", self.preparation_ok));
+        parts.join("|")
+    }
 }
 
 /// Execution identity bound to scenario and nonce.
@@ -340,7 +354,7 @@ impl ExecutionIdentity {
         frozen_hash: &str,
     ) -> Self {
         Self {
-            scenario_id: scenario_id.to_string>,
+            scenario_id: scenario_id.to_string(),
             session_nonce: session_nonce.to_string(),
             registry_hash: registry_hash.to_string(),
             frozen_hash: frozen_hash.to_string(),
@@ -786,6 +800,14 @@ impl SandboxBackend for LinuxBackend {
     }
     fn prepare(&mut self, policy: &CanonicalPolicy, identity: &ExecutionIdentity) -> EnforcementReport {
         self.inner.prepare(policy, identity)
+    }
+    fn prepare_with_context(
+        &mut self,
+        policy: &CanonicalPolicy,
+        identity: &ExecutionIdentity,
+        ctx: &PrepareContext,
+    ) -> EnforcementReport {
+        self.inner.prepare_with_context(policy, identity, ctx)
     }
     fn pre_exec_plan(&self) -> Option<ChildEnforcementPlan> {
         self.inner.pre_exec_plan()

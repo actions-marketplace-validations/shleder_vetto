@@ -234,12 +234,12 @@ fn collect_loop(mut rx: broadcast::Receiver<Event>, inner: Arc<Mutex<Inner>>) {
 }
 
 fn ingest(inner: &mut Inner, ev: Event) {
-    if let Event::BlockedAttempt { ref path, ref reason, .. } = ev {
+    if let Event::BlockedAttempt { ref path, ref source, .. } = ev {
         let key = (
             "blocked".to_string(),
             "warning".to_string(),
-            path.clone().unwrap_or_default(),
-            reason.clone(),
+            path.clone(),
+            source.clone(),
         );
         if inner.suspicious.contains_key(&key) || inner.suspicious.len() < MAX_DISTINCT_RECORDS {
             *inner.suspicious.entry(key).or_insert(0) += 1;

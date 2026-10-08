@@ -87,9 +87,6 @@ impl MergedPolicy {
             if let Some(true) = sec.git_guard {
                 self.git_guard = true;
             }
-            if let Some(true) = sec.snapshot {
-                self.snapshot = true;
-            }
             if let Some(prof) = &sec.seccomp_profile {
                 self.seccomp_profile = Some(prof.clone());
             }
@@ -263,24 +260,15 @@ impl MergedPolicy {
                     if let Some(connect) = &ports.allow_tcp_connect {
                         self.net_connect_ports.extend(connect);
                     }
-                    if let Some(bind) = &ports.allow_tcp_bind {
-                        self.net_bind_ports.extend(bind);
-                    }
                 }
                 if let Some(connect) = &network.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
-                }
-                if let Some(bind) = &network.allow_tcp_bind {
-                    self.net_bind_ports.extend(bind);
                 }
             }
 
             if let Some(ports) = &layer.net_ports {
                 if let Some(connect) = &ports.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
-                }
-                if let Some(bind) = &ports.allow_tcp_bind {
-                    self.net_bind_ports.extend(bind);
                 }
             }
         }
