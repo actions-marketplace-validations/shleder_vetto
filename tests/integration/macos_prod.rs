@@ -21,12 +21,12 @@ use std::time::Duration;
 use vetto::config::NetMode;
 #[cfg(target_os = "macos")]
 use vetto::policy::{DenyEntry, Policy};
+#[cfg(target_os = "macos")]
+use vetto::sandbox::capability::PreparationFailureKind;
 use vetto::sandbox::capability::{
     select_backend, BackendKind, CanonicalPolicy, EnforcementState, ExecutionIdentity, FrozenSpec,
     PlatformMatrix, SecurityCapability,
 };
-#[cfg(target_os = "macos")]
-use vetto::sandbox::capability::PreparationFailureKind;
 #[cfg(target_os = "macos")]
 use vetto::sandbox::production::{
     execute_simple, prod_tier_mapping, ProdSpawnLog, PROD_REGISTRY, PROD_SCENARIO_ID,
