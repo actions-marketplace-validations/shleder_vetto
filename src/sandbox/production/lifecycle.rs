@@ -1508,8 +1508,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn phase1_contract_tamper_rejected_before_spawn() {
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-contract-tamper-{}", new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-contract-tamper-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let marker = tmp.join("child-started");
         let base_backend = Backend::detect(NetMode::Off, false).expect("detect mechanics");
@@ -1599,8 +1598,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn phase2_contract_tamper_all_field_classes_rejected_no_spawn() {
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-tamper-full-matrix-{}", new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-tamper-full-matrix-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let marker = tmp.join("child-started");
         let base_backend = Backend::detect(NetMode::Off, false).expect("detect mechanics");
@@ -2053,8 +2051,7 @@ mod tests {
                 return;
             }
         };
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-contract-audit-{}", new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-contract-audit-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let prepared = UnpreparedProductionExecution::new(
             base_backend,
