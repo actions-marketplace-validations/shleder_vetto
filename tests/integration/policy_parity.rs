@@ -93,15 +93,15 @@ fn backend_selection_flag_parity() {
 }
 
 #[test]
-fn oslog_and_lpac_flags_parse_parity() {
+fn lpac_flag_parse_parity() {
     let proj = TempProject::new("parity-flags-dryrun");
     let out = run_vetto_in(
         proj.path(),
-        &["--dry-run", "--oslog", "--lpac", "--", "cargo", "--version"],
+        &["--dry-run", "--lpac", "--", "cargo", "--version"],
     );
     assert!(
         out.status.success(),
-        "dry-run with --oslog and --lpac must succeed; stderr: {}",
+        "dry-run with --lpac must succeed; stderr: {}",
         stderr(&out)
     );
 }

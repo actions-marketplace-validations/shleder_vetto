@@ -75,10 +75,6 @@ pub struct Cli {
     #[arg(long, value_name = "BACKEND")]
     pub backend: Option<String>,
 
-    /// Emit events to macOS unified log (os_log / logger)
-    #[arg(long)]
-    pub oslog: bool,
-
     /// Run Windows AppContainer in Less Privileged AppContainer (LPAC) mode
     #[arg(long)]
     pub lpac: bool,
@@ -150,10 +146,6 @@ pub struct Cli {
     #[arg(long)]
     pub git_ssh: bool,
 
-    /// Desktop notifications on security violations (blocked path access, network escape).
-    #[arg(long)]
-    pub notify: bool,
-
     /// OpenTelemetry OTLP endpoint for session span export.
     #[arg(long, value_name = "URL")]
     pub otel_endpoint: Option<String>,
@@ -198,10 +190,6 @@ pub struct Cli {
     /// Verbose diagnostics on stderr
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
-
-    /// Forward session events to system journal (journald, EventLog, syslog)
-    #[arg(long)]
-    pub system_log: bool,
 
     /// Select an agent preset.
     #[arg(
@@ -1031,7 +1019,6 @@ impl Cli {
             explicit_net,
             tui,
             backend: cli.backend.clone(),
-            oslog: cli.oslog,
             lpac: cli.lpac,
             observe_seccomp,
             jsonl_path,
@@ -1042,12 +1029,10 @@ impl Cli {
             report_max_age_secs,
             fail_on_block,
             git_ssh,
-            notify: cli.notify,
             otel_endpoint: cli.otel_endpoint.clone(),
             otel: cli.otel,
             session_timeout,
             auto_timeout_requested,
-            system_log: cli.system_log,
             limits_spec,
             verify_preflight,
             shadow,

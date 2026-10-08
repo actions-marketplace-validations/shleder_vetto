@@ -19,7 +19,6 @@ pub mod history;
 pub mod init;
 pub mod logger;
 pub mod mcp;
-pub mod notify;
 pub mod onboard;
 pub mod policy;
 pub mod policy_ir;

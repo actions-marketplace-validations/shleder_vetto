@@ -721,10 +721,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         }
     }
 
-    if cfg.system_log || pol.system_log {
-        crate::logger::system_log::SystemLogSink::spawn(&bus);
-    }
-
     if cfg.auto_timeout_requested {
         if let Some(t) = cfg.session_timeout {
             bus.publish(crate::events::Event::Notice {
@@ -756,14 +752,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             crate::logger::jsonl::JsonlSink::spawn(&bus, path.clone());
         }
     }
-    if cfg.oslog || pol.oslog {
-        crate::logger::oslog::OsLogSink::spawn(&bus);
-    }
     let stats = crate::report::stats::StatsCollector::spawn(&bus);
-
-    if cfg.notify {
-        crate::notify::DesktopNotifier::spawn(&bus, true);
-    }
     bus.publish(crate::events::Event::SessionStarted {
         ts: crate::events::types::now(),
         pid: root_pid,
