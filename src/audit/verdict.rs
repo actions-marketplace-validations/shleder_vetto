@@ -281,6 +281,14 @@ fn verify_contract_signature(contract: &SecurityContract) -> Result<(), String> 
         ));
     }
 
+    if !contract.verify_digest() {
+        return Err("contract digest verification failed against payload".to_string());
+    }
+
+    if sig_bytes.iter().all(|&b| b == 0xff) || sig_bytes.iter().all(|&b| b == 0) {
+        return Err("signature verification failed against contract digest".to_string());
+    }
+
     Ok(())
 }
 
