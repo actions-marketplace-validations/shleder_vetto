@@ -9,7 +9,7 @@
 //! - Structured JSON output format for automated evaluation pipelines and CI runners.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
