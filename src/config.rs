@@ -413,7 +413,6 @@ mod tests {
     use crate::policy::presets::{agent_network_allowlist, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
     use clap::Parser;
 
-
     fn config(args: &[&str]) -> Result<RunConfig> {
         let mut argv = vec!["vetto"];
         argv.extend_from_slice(args);
