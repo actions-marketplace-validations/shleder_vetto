@@ -163,33 +163,6 @@ pub fn explicit_policy_deny_count(path: &Path) -> Option<usize> {
     })
 }
 
-/// Opt-in background staging hook for direct-binary installs.
-pub fn stage_update_if_available(user_config: &crate::version::UserConfig) {
-    let exe_path = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(_) => return,
-    };
-    if crate::version::detect_install_method(&exe_path) != crate::version::InstallMethod::Binary {
-        return;
-    }
-    let Some(notice) =
-        crate::version::check_version(env!("CARGO_PKG_VERSION"), &user_config.channel, false)
-    else {
-        return;
-    };
-    let Some((url, ext)) = crate::version::binary_archive_url(&notice.latest_version) else {
-        return;
-    };
-    match crate::version::stage_update(&notice.latest_version, &url, ext) {
-        Ok(dir) => println!(
-            "vetto: update v{} staged, applies on next startup ({}).",
-            notice.latest_version,
-            dir.display()
-        ),
-        Err(e) => eprintln!("vetto: warning: background staging failed: {e:#}"),
-    }
-}
-
 /// Resolves an executable binary candidate from PATH or absolute/relative path.
 pub fn resolve_in_path(cmd: &str) -> std::io::Result<String> {
     let command_path = Path::new(cmd);
@@ -331,19 +304,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             source,
         })?;
 
-    // 2. Banner and auto-update staging
-    let user_config = crate::version::load_user_config().unwrap_or_default();
-    if !cfg.benchmark {
-        crate::version::print_banner_if_update_available(
-            env!("CARGO_PKG_VERSION"),
-            &user_config.channel,
-        );
-        if crate::version::auto_update_enabled(&user_config) {
-            stage_update_if_available(&user_config);
-        }
-    }
-
-    // 3. Detect sandbox backend
+    // 2. Detect sandbox backend
     let backend_res =
         Backend::detect_with_backend(cfg.net.clone(), cfg.observe_seccomp, cfg.backend.as_deref());
     let (mut backend_opt, tier) = match backend_res {
