@@ -33,7 +33,6 @@ use crate::verify_ng::sandbox_backend::{
 use super::context::ProductionSessionContext;
 use super::drain::StreamCollector;
 use super::error::ProductionError;
-use super::signals::{EscalationPolicy, ScopedSignalForwarder, SignalTarget};
 use super::{
     ProdSpawnEvent, ProductionResult, PROD_EXIT_POLL, PROD_NONCE_ENV, PROD_REGISTRY, RUN_NONCE_ENV,
 };
@@ -587,13 +586,6 @@ impl PreparedProductionExecution {
             self.capability.note_host_verified(&verification);
         }
 
-        let forwarder = ScopedSignalForwarder::install(
-            self.context.clone(),
-            SignalTarget::Process(pid),
-            EscalationPolicy::default(),
-        )
-        .ok();
-
         self.fsm.transition(ExecutionState::Observe).map_err(|_| {
             ProductionError::InvalidState {
                 expected: ExecutionState::Observe,
@@ -620,7 +612,6 @@ impl PreparedProductionExecution {
             capability: self.capability,
             fsm: self.fsm,
             collector: None,
-            signals: forwarder,
         })
     }
 }
@@ -649,7 +640,6 @@ pub struct SpawnedProductionExecution {
     /// When None, stdio drainage is managed externally (e.g. by supervise::pump
     /// or caller-owned AsyncPipeReader).
     pub collector: Option<StreamCollector>,
-    pub signals: Option<ScopedSignalForwarder>,
 }
 
 impl SpawnedProductionExecution {
@@ -774,8 +764,7 @@ impl SpawnedProductionExecution {
         let setsid_orphan_escaped = if matches!(
             self.handle.strategy,
             Some(crate::sandbox::handle::KillStrategy::ProcessGroup { sweep: true, .. })
-        ) && exit_code.unwrap_or(0) == 0
-        {
+        ) {
             let me = unsafe { libc::getpid() } as u32;
             let my_sid = crate::sandbox::linux::proctrack::session_of(0);
             let needle_run = format!("VETTO_RUN_NONCE={}", self.nonce);
@@ -881,7 +870,7 @@ impl SpawnedProductionExecution {
         }
 
         #[cfg(target_os = "linux")]
-        if setsid_orphan_escaped && final_exit_code.unwrap_or(0) == 0 {
+        if setsid_orphan_escaped {
             self.capability.note_diagnostic(
                 "setsid escaper swept in fs-only: containment gap forces fail-closed exit 125"
                     .to_string(),

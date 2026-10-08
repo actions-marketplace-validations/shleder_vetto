@@ -343,6 +343,8 @@ impl StreamCollector {
     pub fn finish(self) -> (Vec<u8>, Vec<u8>, bool, bool) {
         #[cfg(unix)]
         {
+            self.stdout_reader.notify_child_exited();
+            self.stderr_reader.notify_child_exited();
             let (out, out_trunc) = self.stdout_reader.join_with_status();
             let (err, err_trunc) = self.stderr_reader.join_with_status();
             (out, err, out_trunc, err_trunc)

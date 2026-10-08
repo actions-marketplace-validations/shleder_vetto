@@ -85,8 +85,7 @@ pub struct Spawned {
     /// Loopback port the in-netns relay listens on (allowlist mode).
     #[cfg(unix)]
     pub relay_port: Option<u16>,
-    /// seccomp user-notify listener fd (`--observe-seccomp`); `main` passes
-    /// it to `observe_seccomp::spawn_notifier` which takes ownership.
+    /// Optional notification listener fd retained for backwards compatibility.
     #[cfg(unix)]
     pub notif_listener: Option<OwnedFd>,
 }

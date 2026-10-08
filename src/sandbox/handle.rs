@@ -290,7 +290,9 @@ impl SandboxHandle {
         #[cfg(target_os = "linux")]
         {
             if let Some(ref cg) = self.cgroup {
-                cg.kill_all()?;
+                if let Err(e) = cg.kill_all() {
+                    tracing::warn!("cgroup kill_all failed during terminate: {e}");
+                }
             }
             const SYS_PIDFD_SEND_SIGNAL: libc::c_long = 424;
             if let Some(ref pfd) = self.pidfd {

@@ -5,7 +5,7 @@
 #![cfg_attr(windows, allow(unused_imports))]
 
 use std::io::Write;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -64,6 +64,9 @@ impl StdioPump {
         stderr_r: Option<OwnedFd>,
         mask_secrets: bool,
     ) -> Result<Self, SuperviseError> {
+        if let Some(ref master) = pty_master {
+            let _ = crate::pty::set_nonblocking(master.as_raw_fd(), true);
+        }
         let out_reader = stdout_r.map(|fd| {
             crate::sandbox::production::AsyncPipeReader::spawn(
                 fd,
@@ -184,12 +187,31 @@ impl StdioPump {
             if let Some(master) = &self.pty_master {
                 let mut pty_buf = [0u8; 8192];
                 let mut residual = Vec::new();
+                let deadline = Instant::now() + DEFAULT_DRAIN_BUDGET;
                 loop {
-                    let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
-                    if n == 0 {
+                    let now = Instant::now();
+                    if now >= deadline {
                         break;
                     }
-                    residual.extend_from_slice(&pty_buf[..n]);
+                    let remaining_ms = (deadline - now).as_millis().min(50) as libc::c_int;
+                    let mut pfd = libc::pollfd {
+                        fd: master.as_raw_fd(),
+                        events: libc::POLLIN,
+                        revents: 0,
+                    };
+                    let pret = unsafe { libc::poll(&mut pfd, 1, remaining_ms) };
+                    if pret <= 0 {
+                        break;
+                    }
+                    if pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                        let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
+                        if n == 0 {
+                            break;
+                        }
+                        residual.extend_from_slice(&pty_buf[..n]);
+                    } else {
+                        break;
+                    }
                 }
                 if !residual.is_empty() {
                     let to_write = if self.mask_secrets {

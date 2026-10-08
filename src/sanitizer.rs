@@ -386,9 +386,33 @@ fn is_word_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
 }
 
+/// Mask high-entropy tokens in a byte slice in place (pad with '*').
+pub fn mask_secrets_in_place(bytes: &mut [u8]) {
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if is_entropy_char(bytes[i]) {
+            let start = i;
+            while i < bytes.len() && is_entropy_char(bytes[i]) {
+                i += 1;
+            }
+            let candidate = &bytes[start..i];
+            if candidate.len() >= 20
+                && !is_whitelisted_hash_or_pattern(candidate)
+                && shannon_entropy(candidate) > 4.5
+            {
+                for b in &mut bytes[start..i] {
+                    *b = b'*';
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sanitize_line;
+    use super::*;
 
     #[test]
     fn redacts_aws_key() {
@@ -437,5 +461,15 @@ mod tests {
         let random = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
         let entropy = sanitize_line(random);
         assert_eq!(entropy, "[REDACTED_HIGH_ENTROPY]");
+    }
+
+    #[test]
+    fn test_mask_secrets_in_place() {
+        let mut bytes = b"prefix aB39zKmP2qL8vX1yR4wT7jN_xY9ZaBc suffix".to_vec();
+        mask_secrets_in_place(&mut bytes);
+        assert_eq!(
+            std::str::from_utf8(&bytes).unwrap(),
+            "prefix ******************************* suffix"
+        );
     }
 }

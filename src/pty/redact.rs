@@ -1,7 +1,6 @@
 //! Zero-overhead streaming PTY redactor utilizing Aho-Corasick multi-pattern automaton
 //! and 256-byte carry-over lookback buffer across chunk reads.
 
-use super::entropy;
 use std::collections::VecDeque;
 
 /// Redaction replacement style.
@@ -383,7 +382,7 @@ impl StreamingRedactor {
 
         // Apply entropy masking on emitted slice
         if self.style == RedactionStyle::PadMask {
-            entropy::mask_high_entropy_pad(&mut result);
+            crate::sanitizer::mask_secrets_in_place(&mut result);
         }
 
         result
@@ -401,7 +400,7 @@ impl StreamingRedactor {
     pub fn flush(&mut self) -> Vec<u8> {
         let mut remaining = std::mem::take(&mut self.carry_over);
         if self.style == RedactionStyle::PadMask {
-            entropy::mask_high_entropy_pad(&mut remaining);
+            crate::sanitizer::mask_secrets_in_place(&mut remaining);
         }
         remaining
     }

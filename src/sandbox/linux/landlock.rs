@@ -45,7 +45,6 @@ pub const MAKE_SYM: u64 = 1 << 12;
 pub const REFER: u64 = 1 << 13; // ABI 2
 pub const TRUNCATE: u64 = 1 << 14; // ABI 3
 pub const IOCTL_DEV: u64 = 1 << 15; // ABI 5 (Linux 6.10+)
-pub const LANDLOCK_ACCESS_FS_IOCTL_DEV: u64 = IOCTL_DEV;
 
 // Network access rights (ABI 4+, Linux 6.7+)
 pub const LANDLOCK_ACCESS_NET_BIND_TCP: u64 = 1 << 0;
@@ -354,42 +353,6 @@ pub fn prepare_ruleset_with_net_for_abi(
     }
 }
 
-/// Prepare rules after probing the running kernel's Landlock ABI.
-///
-/// Unlike [`apply_policy`], this function is non-invasive: it performs only
-/// the version probe and filesystem metadata checks needed to build the data
-/// representation.
-pub fn prepare_ruleset(
-    allow_write: &[std::path::PathBuf],
-    allow_read: &[std::path::PathBuf],
-    strip_read_on_write: bool,
-) -> VettoResult<PreparedRuleset> {
-    prepare_ruleset_with_net(allow_write, allow_read, strip_read_on_write, &[], &[])
-}
-
-/// Prepare filesystem and network port rules after probing the running kernel's Landlock ABI.
-pub fn prepare_ruleset_with_net(
-    allow_write: &[std::path::PathBuf],
-    allow_read: &[std::path::PathBuf],
-    strip_read_on_write: bool,
-    bind_ports: &[u16],
-    connect_ports: &[u16],
-) -> VettoResult<PreparedRuleset> {
-    let Some(abi) = abi_version() else {
-        return Err(VettoError::Landlock(
-            "kernel does not support Landlock (needs >= 5.13)".into(),
-        ));
-    };
-    Ok(prepare_ruleset_with_net_for_abi(
-        abi,
-        allow_write,
-        allow_read,
-        strip_read_on_write,
-        bind_ports,
-        connect_ports,
-    ))
-}
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct OpenHow {
@@ -521,11 +484,12 @@ fn create_ruleset_dynamic(mut abi: u32, mut has_net: bool) -> VettoResult<(Owned
         }
 
         let err = std::io::Error::last_os_error();
-        // If EINVAL or E2BIG occurred, degrade network handling first, then ABI version and retry
+        // If EINVAL or E2BIG occurred on requested network rules, fail closed without downgrade
         if err.raw_os_error() == Some(libc::EINVAL) || err.raw_os_error() == Some(libc::E2BIG) {
-            if has_net && abi >= 4 {
-                has_net = false;
-                continue;
+            if has_net {
+                return Err(VettoError::Landlock(format!(
+                    "cannot enforce requested Landlock network isolation: {err}"
+                )));
             }
             if abi > 1 {
                 abi -= 1;
@@ -656,24 +620,6 @@ pub fn apply_policy(
         strip_read_on_write,
         &[],
         &[],
-        false,
-    )
-}
-
-/// Apply filesystem allowlist and optional TCP network port rules.
-pub fn apply_policy_with_net_ports(
-    allow_write: &[std::path::PathBuf],
-    allow_read: &[std::path::PathBuf],
-    strip_read_on_write: bool,
-    bind_ports: &[u16],
-    connect_ports: &[u16],
-) -> VettoResult<()> {
-    apply_policy_advanced(
-        allow_write,
-        allow_read,
-        strip_read_on_write,
-        bind_ports,
-        connect_ports,
         false,
     )
 }

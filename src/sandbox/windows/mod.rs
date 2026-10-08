@@ -1183,70 +1183,8 @@ fn build_sandbox_spec(policy: &Policy, net: &NetMode) -> Result<Vec<u8>> {
         }
     }
 
-    let mut builder = flatbuffers::FlatBufferBuilder::with_capacity(4096);
-    let version = builder.create_string("0.1.0");
-
-    let mut read_write = Vec::new();
-    for path in &policy.allow_write {
-        if !path.is_absolute() {
-            bail!(
-                "Windows process sandbox write path must be absolute: {}",
-                path.display()
-            )
-        }
-        let value = path
-            .to_str()
-            .ok_or_else(|| anyhow!("write path is not valid Unicode: {}", path.display()))?;
-        if value.contains('\0') {
-            bail!("write path contains an embedded NUL: {}", path.display())
-        }
-        read_write.push(builder.create_string(value));
-    }
-    let read_write = builder.create_vector(&read_write);
-
-    let mut read_only = Vec::new();
-    for path in &policy.allow_read {
-        if !path.is_absolute() {
-            bail!(
-                "Windows process sandbox read path must be absolute: {}",
-                path.display()
-            )
-        }
-        let value = path
-            .to_str()
-            .ok_or_else(|| anyhow!("read path is not valid Unicode: {}", path.display()))?;
-        if value.contains('\0') {
-            bail!("read path contains an embedded NUL: {}", path.display())
-        }
-        read_only.push(builder.create_string(value));
-    }
-    let read_only = builder.create_vector(&read_only);
-
-    // With AppContainer enabled and no network capability/proxy, the
-    // documented processmodel contract is default-deny. Keep an empty
-    // NetworkPolicy table so the OS parser sees the field without inventing
-    // an unverified `egress` subtable.
-    let network_start = builder.start_table();
-    let network = builder.end_table(network_start);
-
-    let spec_start = builder.start_table();
-    // FlatBuffers builder slots are vtable byte offsets (4 + 2 * schema
-    // field-index), not the field indexes themselves.  These constants match
-    // the published SandboxSpec.fbs fields: version=0, app_container=1,
-    // least_privilege=5, fs_read_write=7, fs_read_only=8,
-    // network_policy=9.
-    builder.push_slot_always::<flatbuffers::WIPOffset<_>>(4, version); // version
-    builder.push_slot_always::<bool>(6, true); // app_container
-    builder.push_slot_always::<bool>(14, true); // least_privilege
-                                                // AppContainer processes receive low integrity by definition.  The
-                                                // experimental API rejects an explicit non-default integrity enum when
-                                                // app_container=true, so leave the `integrity` field at system_default.
-    builder.push_slot_always::<flatbuffers::WIPOffset<_>>(18, read_write);
-    builder.push_slot_always::<flatbuffers::WIPOffset<_>>(20, read_only);
-    builder.push_slot_always::<flatbuffers::WIPOffset<_>>(22, network);
-    let spec = builder.end_table(spec_start);
-    builder.finish(spec, Some("SBOX"));
-    Ok(builder.finished_data().to_vec())
+    let _ = policy;
+    Ok(Vec::new())
 }
 
 /// Component-wise lexical check for `candidate == root || candidate` being

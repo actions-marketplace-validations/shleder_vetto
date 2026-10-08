@@ -5,7 +5,6 @@
 //! byte pumping, live secret redaction, and resizing.
 
 pub mod ansi;
-pub mod entropy;
 pub mod redact;
 #[cfg(unix)]
 pub mod resizer;
@@ -13,7 +12,6 @@ pub mod resizer;
 pub mod sigwinch;
 
 pub use ansi::AnsiRedactor;
-pub use entropy::{calculate_entropy, is_entropy_masked, mask_high_entropy_tokens};
 pub use redact::{RedactionStyle, StreamingRedactor};
 
 #[cfg(all(unix, target_os = "macos"))]

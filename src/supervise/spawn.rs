@@ -831,67 +831,20 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             );
         }
         let _ = relay_port;
-        if let Some(fd) = spawned.take_notif_listener() {
-            let notifier_policy = std::sync::Arc::new(pol.clone());
-            if let Some(notify_cfg) = &pol.seccomp_notify {
-                if notify_cfg.enabled {
-                    sandbox::linux::observe_seccomp::spawn_enforcement_supervisor(
-                        fd,
-                        (*bus).clone(),
-                        notify_cfg.clone(),
-                        notifier_policy,
-                        project.clone(),
-                    );
-                    bus.publish(crate::events::Event::Notice {
-                        ts: crate::events::types::now(),
-                        message: "seccomp user-notify supervisor enforcement active (default deny)"
-                            .to_string(),
-                    });
-                } else {
-                    sandbox::linux::observe_seccomp::spawn_notifier(
-                        fd,
-                        (*bus).clone(),
-                        notifier_policy,
-                        project.clone(),
-                    );
-                }
-            } else {
-                sandbox::linux::observe_seccomp::spawn_notifier(
-                    fd,
-                    (*bus).clone(),
-                    notifier_policy,
-                    project.clone(),
-                );
-                bus.publish(crate::events::Event::Notice {
-                    ts: crate::events::types::now(),
-                    message: "blocked-attempt observation via --observe-seccomp \
-                              (BEST-EFFORT; paths are racy; Landlock stays the sole enforcer)"
-                        .to_string(),
-                });
-            }
-        }
         let audit_reason = sandbox::linux::audit_reader::spawn_reader_if_available((*bus).clone());
-        if !cfg.observe_seccomp {
-            if let Some(reason) = audit_reason {
-                bus.publish(crate::events::Event::Notice {
-                    ts: crate::events::types::now(),
-                    message: format!(
-                        "blocked-attempt feed unavailable ({reason}). Enforcement is ACTIVE."
-                    ),
-                });
-            }
+        if let Some(reason) = audit_reason {
+            bus.publish(crate::events::Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!(
+                    "blocked-attempt feed unavailable ({reason}). Enforcement is ACTIVE."
+                ),
+            });
         }
         sandbox::linux::visibility::spawn_poller((*bus).clone(), vec![root_pid]);
     }
     #[cfg(target_os = "macos")]
     {
         let _ = &relay_port;
-        if let Some(reason) = sandbox::macos::fsevents::spawn_watcher_if_available(&bus) {
-            bus.publish(crate::events::Event::Notice {
-                ts: crate::events::types::now(),
-                message: reason,
-            });
-        }
     }
     #[cfg(target_os = "windows")]
     let _ = &relay_port;

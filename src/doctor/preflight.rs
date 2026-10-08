@@ -1031,7 +1031,7 @@ pub fn probe_cgroups_v2() -> CgroupsV2Diagnostic {
 #[cfg(target_os = "linux")]
 pub fn probe_seccomp() -> SeccompDiagnostic {
     let filter_available = crate::sandbox::linux::seccomp_netblock::probe_available();
-    let notify_available = crate::sandbox::linux::observe_seccomp::probe_available();
+    let notify_available = false;
     let current_mode = detect_seccomp_mode();
     let env_info = crate::doctor::detect_environment();
     let container_restricted =
