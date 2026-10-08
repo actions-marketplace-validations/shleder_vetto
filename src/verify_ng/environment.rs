@@ -123,16 +123,16 @@ pub fn capture_proc_environ(pid: u32) -> Option<Vec<(String, String)>> {
     // Poll briefly for child to pass execve() so we don't capture parent's pre-exec environ
     for _ in 0..30 {
         if let Ok(child_comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
-            if let Some(ref pcomm) = parent_comm {
-                if !pcomm.is_empty() && &child_comm == pcomm {
+            if let Some(pcomm) = parent_comm.as_deref() {
+                if !pcomm.is_empty() && child_comm.as_str() == pcomm {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                     continue;
                 }
             }
         }
         if let Ok(child_cmdline) = std::fs::read(format!("/proc/{pid}/cmdline")) {
-            if let Some(ref pcmd) = parent_cmdline {
-                if !pcmd.is_empty() && &child_cmdline == pcmd {
+            if let Some(pcmd) = parent_cmdline.as_deref() {
+                if !pcmd.is_empty() && child_cmdline.as_slice() == pcmd {
                     std::thread::sleep(std::time::Duration::from_millis(2));
                     continue;
                 }
@@ -142,19 +142,19 @@ pub fn capture_proc_environ(pid: u32) -> Option<Vec<(String, String)>> {
     }
 
     // Safety guard: if child is still matching parent comm or cmdline, execve never finished
-    if let (Some(ref pcomm), Ok(child_comm)) = (
-        parent_comm.as_ref(),
+    if let (Some(pcomm), Ok(child_comm)) = (
+        parent_comm.as_deref(),
         std::fs::read_to_string(format!("/proc/{pid}/comm")),
     ) {
-        if !pcomm.is_empty() && &child_comm == pcomm {
+        if !pcomm.is_empty() && child_comm.as_str() == pcomm {
             return None;
         }
     }
-    if let (Some(ref pcmd), Ok(child_cmdline)) = (
-        parent_cmdline.as_ref(),
+    if let (Some(pcmd), Ok(child_cmdline)) = (
+        parent_cmdline.as_deref(),
         std::fs::read(format!("/proc/{pid}/cmdline")),
     ) {
-        if !pcmd.is_empty() && &child_cmdline == pcmd {
+        if !pcmd.is_empty() && child_cmdline.as_slice() == pcmd {
             return None;
         }
     }
