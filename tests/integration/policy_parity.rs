@@ -107,6 +107,37 @@ fn lpac_flag_parse_parity() {
 }
 
 #[test]
+fn purged_telemetry_and_logging_flags_rejected() {
+    let proj = TempProject::new("parity-purged-flags");
+    let purged_flags = [
+        "--oslog",
+        "--system-log",
+        "--notify",
+        "--anonymous-telemetry",
+        "--otel",
+        "--otel-endpoint",
+    ];
+
+    for flag in purged_flags {
+        let mut args = vec!["--dry-run", flag];
+        if flag == "--otel-endpoint" {
+            args.push("http://localhost:4317");
+        }
+        args.extend_from_slice(&["--", "cargo", "--version"]);
+        let out = run_vetto_in(proj.path(), &args);
+        assert!(
+            !out.status.success(),
+            "purged flag {flag} must be rejected by CLI, but it succeeded"
+        );
+        let err = stderr(&out);
+        assert!(
+            err.contains("unexpected argument") || err.contains("was unexpected"),
+            "expected clap unexpected argument error for {flag}, got stderr:\n{err}"
+        );
+    }
+}
+
+#[test]
 fn write_inside_project_root_parity() {
     let proj = TempProject::new("parity-write-inside");
     let target = proj.path().join("inside-parity.txt");
