@@ -88,8 +88,6 @@ pub struct SupervisedSession {
     pub bus: std::sync::Arc<crate::events::EventBus>,
     /// Statistics collector attached to event bus.
     pub stats: std::sync::Arc<crate::report::stats::StatsCollector>,
-    /// OpenTelemetry session, if configured.
-    pub otel_session: Option<std::sync::Arc<crate::telemetry::TelemetrySession>>,
     /// Default log path for this session.
     pub default_log_path: PathBuf,
     /// Unix domain socket path for credential broker, if active.
@@ -763,19 +761,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     }
     let stats = crate::report::stats::StatsCollector::spawn(&bus);
 
-    let otel_session = std::sync::Arc::new(
-        crate::telemetry::TelemetrySession::start(
-            cfg.otel,
-            cfg.otel_endpoint.as_deref(),
-            &format!("session-{root_pid}"),
-            tier_label(tier),
-            &cfg.net.label(),
-            &pol.name,
-        )
-        .map_err(SuperviseError::Fatal)?,
-    );
-    crate::telemetry::spawn_telemetry_subscriber(&bus, otel_session.clone());
-
     if cfg.notify {
         crate::notify::DesktopNotifier::spawn(&bus, true);
     }
@@ -979,7 +964,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         verify_outcome,
         bus,
         stats: std::sync::Arc::new(stats),
-        otel_session: Some(otel_session),
         default_log_path,
         #[cfg(unix)]
         cred_sock,

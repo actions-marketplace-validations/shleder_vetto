@@ -33,7 +33,6 @@ pub mod sandbox;
 pub mod sanitizer;
 pub mod shim;
 pub mod supervise;
-pub mod telemetry;
 #[cfg(unix)]
 pub mod tui;
 pub mod verify;

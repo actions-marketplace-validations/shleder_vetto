@@ -66,8 +66,6 @@ pub struct GlobalConfig {
     pub shadow: Option<bool>,
     #[serde(default)]
     pub mask_secrets: Option<bool>,
-    #[serde(default)]
-    pub anonymous_telemetry: Option<bool>,
 }
 
 pub fn load_global_config_from_home(home: &Path) -> Option<GlobalConfig> {
@@ -139,7 +137,6 @@ pub struct RunConfig {
     pub ephemeral_force_discard: bool,
     pub auto_deny_secrets: bool,
     pub read_only_caches: bool,
-    pub anonymous_telemetry: bool,
     pub tmpfs_tmp: bool,
     pub mask_secrets: bool,
     pub net_quota: std::collections::HashMap<String, u64>,

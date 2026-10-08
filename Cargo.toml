@@ -12,7 +12,6 @@ categories = ["command-line-utilities", "development-tools"]
 
 [features]
 default = []
-telemetry = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
 
 [[bin]]
 name = "vetto"
@@ -26,9 +25,6 @@ clap_complete = "4"
 clap_mangen = "0.2"
 crossterm = "0.27"
 glob = "0.3"
-opentelemetry = { version = "0.27", optional = true }
-opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic"], optional = true }
-opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"], optional = true }
 ratatui = "0.26"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

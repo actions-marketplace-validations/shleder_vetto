@@ -215,8 +215,6 @@ def main():
     update_file(os.path.join(REPO_ROOT, "docs", "field-testing.md"), rf'current `{re.escape(current)}` package', f'current `{target}` package')
     update_file(os.path.join(REPO_ROOT, "docs", "architecture", "verify-ng.md"), r'(?:Implementation Status|Статус реализации) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Implementation Status ({target}, verified)')
     update_file(os.path.join(REPO_ROOT, "docs", "threat-model.md"), r'(?:Threat Model Status|Статус модели угроз) \(' + re.escape(current) + r', (?:verified|факт)\)', f'Threat Model Status ({target}, verified)')
-    update_file(os.path.join(REPO_ROOT, "docs", "telemetry.md"), rf'"vetto_version":\s*"{re.escape(current)}"', f'"vetto_version": "{target}"')
-    update_file(os.path.join(REPO_ROOT, "docs", "telemetry.md"), r'\(e\.g\. `' + re.escape(current) + r'`\)', f'(e.g. `{target}`)')
 
     # Install scripts help
     update_file(os.path.join(REPO_ROOT, "install.sh"), r'\(e\.g\. ' + re.escape(current) + r'\)', f'(e.g. {target})')

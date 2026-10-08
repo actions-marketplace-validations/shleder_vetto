@@ -81,7 +81,6 @@ The action downloads official pre-compiled release binaries from GitHub Releases
 | `report-dir` | String | `'.vetto/reports'` | Output directory for audit and security reports. |
 | `fail-on-block` | String | `'false'` | Fail step if blocked attempts occur. `'true'` or integer threshold (e.g. `'1'`). |
 | `upload-sarif` | String | `'false'` | Upload SARIF report to GitHub Code Scanning via `github/codeql-action/upload-sarif@v3`. |
-| `telemetry` | String | `'false'` | Opt-in anonymous telemetry. |
 | `github-token` | String | `""` | GitHub token for authenticated release resolution when rate-limited. |
 
 ## Action Outputs

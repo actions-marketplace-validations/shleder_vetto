@@ -96,10 +96,6 @@ pub struct Cli {
     #[arg(long)]
     pub tmpfs_tmp: bool,
 
-    /// Opt-in: send anonymous violation telemetry (hashed agent slug + category, no paths/secrets)
-    #[arg(long)]
-    pub anonymous_telemetry: bool,
-
     /// Shadow mode: policy layer logs "would deny" instead of blocking in verification/preflight.
     /// Note: Kernel sandbox (Landlock/seccomp) cannot be shadowed; shadow mode applies to policy-layer verification.
     #[arg(long)]
@@ -1067,8 +1063,6 @@ impl Cli {
             ephemeral_force_discard: false,
             auto_deny_secrets,
             read_only_caches: cli.read_only_caches,
-            anonymous_telemetry: cli.anonymous_telemetry
-                || global.anonymous_telemetry.unwrap_or(false),
             tmpfs_tmp,
             mask_secrets,
             net_quota,
