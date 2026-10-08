@@ -21,3 +21,31 @@ fn completions_are_available_for_all_requested_shells() {
         );
     }
 }
+
+#[test]
+fn typo_subcommands_fail_with_clap_error_not_workspace_profile() {
+    for typo in [
+        "rn",
+        "stauts",
+        "verify-ng",
+        "profiles",
+        "profile",
+        "watch",
+        "digest",
+    ] {
+        let output = Command::new(vetto_bin())
+            .arg(typo)
+            .output()
+            .expect("spawn subcommand");
+        assert!(!output.status.success(), "subcommand '{typo}' must fail");
+        let err = stderr(&output);
+        assert!(
+            err.contains("unrecognized subcommand") || err.contains("unexpected"),
+            "stderr for '{typo}' must be a clap error: {err}"
+        );
+        assert!(
+            !err.contains("workspace profile"),
+            "stderr for '{typo}' must not mention workspace profile: {err}"
+        );
+    }
+}

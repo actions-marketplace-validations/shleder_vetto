@@ -9,7 +9,7 @@
 //! - Structured JSON output format for automated evaluation pipelines and CI runners.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 #[cfg(unix)]
@@ -187,37 +187,6 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
     Ok(temp_path)
 }
 
-fn resolve_binary_in_path(cmd: &str) -> Result<String> {
-    let command_path = Path::new(cmd);
-    if command_path.is_absolute() || command_path.components().count() > 1 {
-        return Ok(cmd.to_string());
-    }
-    if let Ok(real) = crate::shim::find_real_binary(cmd) {
-        return Ok(real.to_string_lossy().into_owned());
-    }
-    if let Some(path) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let candidate = dir.join(cmd);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Ok(m) = std::fs::metadata(&candidate) {
-                    if m.is_file() && (m.permissions().mode() & 0o111) != 0 {
-                        return Ok(candidate.to_string_lossy().into_owned());
-                    }
-                }
-            }
-            #[cfg(windows)]
-            {
-                if candidate.is_file() {
-                    return Ok(candidate.to_string_lossy().into_owned());
-                }
-            }
-        }
-    }
-    bail!("benchmark target binary '{cmd}' not found in PATH")
-}
-
 fn measure_peak_memory_bytes(pid: Option<u32>) -> u64 {
     let _ = pid;
 
@@ -322,7 +291,9 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
 
     // Resolve binary path early
     let mut agent_cmd = cfg.agent.clone();
-    agent_cmd[0] = resolve_binary_in_path(&agent_cmd[0])?;
+    agent_cmd[0] = crate::shim::resolve_executable(&agent_cmd[0])?
+        .to_string_lossy()
+        .into_owned();
 
     // Backend detection (fast-path)
     let backend =
