@@ -264,6 +264,9 @@ impl MergedPolicy {
                 if let Some(connect) = &network.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
                 }
+                if let Some(bind) = &network.allow_tcp_bind {
+                    self.net_bind_ports.extend(bind);
+                }
             }
 
             if let Some(ports) = &layer.net_ports {

@@ -156,6 +156,8 @@ pub struct RawNetwork {
     pub net_ports: Option<RawNetPorts>,
     #[serde(default)]
     pub allow_tcp_connect: Option<Vec<u16>>,
+    #[serde(default)]
+    pub allow_tcp_bind: Option<Vec<u16>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]

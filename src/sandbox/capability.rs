@@ -515,8 +515,166 @@ pub fn freeze_spec(
         deny_write,
         deny_resolved,
         nonce: nonce.to_string(),
-        policy_bytes: Vec::new(),
+        policy_bytes: canonical_policy_bytes(policy),
     }
+}
+
+pub fn canonical_policy_bytes(policy: &crate::policy::Policy) -> Vec<u8> {
+    fn paths(ps: &[std::path::PathBuf]) -> String {
+        let mut v: Vec<String> = ps.iter().map(|p| p.display().to_string()).collect();
+        v.sort();
+        format!("[{}]", v.join(","))
+    }
+    fn strs(ss: &[String]) -> String {
+        let mut v = ss.to_vec();
+        v.sort();
+        format!("[{}]", v.join(","))
+    }
+    fn opt(o: &Option<String>) -> &str {
+        o.as_deref().unwrap_or("-")
+    }
+    fn opt_u(o: &Option<u64>) -> String {
+        o.map(|n| n.to_string()).unwrap_or_else(|| "-".to_string())
+    }
+    let mut quota: Vec<(&String, &u64)> = policy.net_quota.iter().collect();
+    quota.sort();
+    let quota_s = quota
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut ports_b = policy.net_bind_ports.clone();
+    ports_b.sort_unstable();
+    let mut ports_c = policy.net_connect_ports.clone();
+    ports_c.sort_unstable();
+    let num_list = |ps: &[u16]| {
+        ps.iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let deny_resolved: Vec<String> = {
+        let mut v: Vec<String> = policy
+            .deny_resolved
+            .iter()
+            .map(|e| format!("{}:{}", e.path.display(), e.is_dir))
+            .collect();
+        v.sort();
+        v
+    };
+    let lim = &policy.limits;
+    let io_rate = lim
+        .io_rate
+        .as_ref()
+        .map(|r| format!("iops={}bw={}", opt_u(&r.max_iops), opt_u(&r.max_bandwidth)));
+    let sec_notify = policy.seccomp_notify.as_ref().map(|n| {
+        format!(
+            "enabled={}default={}allow=[{}]",
+            n.enabled,
+            opt(&n.default_action),
+            {
+                let mut v = n.allow_syscalls.clone();
+                v.sort();
+                v.join(",")
+            }
+        )
+    });
+    let cgroup = policy.cgroup.as_ref().map(|c| {
+        format!(
+            "mem={}pids={}swap={}cpu={}",
+            opt(&c.memory_max),
+            opt(&c.pids_max),
+            opt(&c.swap_max),
+            opt(&c.cpu_max)
+        )
+    });
+    let meta = &policy.metadata;
+    let mut extends = meta.extends.clone();
+    extends.sort();
+    let mut out = String::new();
+    out.push_str("vng-policy-v1;");
+    out.push_str(&format!("name={};", policy.name));
+    out.push_str(&format!(
+        "meta=name={}|desc={}|extends=[{}]|source={}|immutable={};",
+        meta.name,
+        meta.description,
+        extends.join(","),
+        meta.source_kind.map(|k| k.label()).unwrap_or("-"),
+        meta.immutable
+    ));
+    out.push_str(&format!(
+        "limits=cpu={}|as={}|procs={}|files={}|fsize={}|io={};",
+        opt_u(&lim.cpu_seconds),
+        opt_u(&lim.address_space_bytes),
+        opt_u(&lim.processes),
+        opt_u(&lim.open_files),
+        opt_u(&lim.file_size_bytes),
+        io_rate.as_deref().unwrap_or("-")
+    ));
+    out.push_str(&format!(
+        "fs=allow_w={}|allow_r={}|deny_w={}|deny_r={}|resolved=[{}];",
+        paths(&policy.allow_write),
+        paths(&policy.allow_read),
+        paths(&policy.deny_write),
+        paths(&policy.deny_read),
+        deny_resolved.join(",")
+    ));
+    {
+        let mut pass = policy.environment.pass_through.clone();
+        pass.sort();
+        let mut deny = policy.environment.deny.clone();
+        deny.sort();
+        out.push_str(&format!(
+            "env=pass=[{}]|deny=[{}];",
+            pass.join(","),
+            deny.join(",")
+        ));
+    }
+    out.push_str(&format!(
+        "net=deny_net={}|cidr=[{}]|quota=[{}]|bind=[{}]|conn=[{}]|unix=[{}];",
+        policy.deny_network,
+        {
+            let mut v = policy.allow_cidr.clone();
+            v.sort();
+            v.join(",")
+        },
+        quota_s,
+        num_list(&ports_b),
+        num_list(&ports_c),
+        {
+            let mut v = policy.allow_unix_sockets.clone();
+            v.sort();
+            v.join(",")
+        }
+    ));
+    out.push_str(&format!(
+        "harden=seccomp={}|notify={}|cgroup={}|cpu_max={}|io_prio={}|dev=[{}];",
+        policy.seccomp_profile.label(),
+        sec_notify.as_deref().unwrap_or("-"),
+        cgroup.as_deref().unwrap_or("-"),
+        opt(&policy.cpu_max),
+        opt(&policy.io_priority),
+        {
+            let mut v = policy.dev_allow.clone().unwrap_or_default();
+            v.sort();
+            v.join(",")
+        }
+    ));
+    out.push_str(&format!(
+        "misc=oslog={}|lpac={}|immutable={}|syslog={}|autodeny={}|proxies=[{}]|ro=[{}]|git={}|snap={}|tmpfs={}|warn=[{}];",
+        policy.oslog,
+        policy.lpac,
+        policy.is_immutable,
+        policy.system_log,
+        policy.auto_deny_secrets,
+        strs(&policy.secret_proxies),
+        paths(&policy.ro_mounts),
+        policy.git_guard,
+        policy.snapshot,
+        policy.tmpfs_tmp,
+        strs(&policy.warnings)
+    ));
+    out.into_bytes()
 }
 
 /// Pre-exec child plan for isolation setup.
@@ -909,6 +1067,27 @@ impl PlatformMatrix {
             .find(|e| e.backend == backend && e.capability == cap)
             .map(|e| e.supported)
             .unwrap_or(false)
+    }
+
+    pub fn render(&self) -> String {
+        let mut rows: Vec<String> = self
+            .entries
+            .iter()
+            .map(|e| {
+                format!(
+                    "{} {} {}",
+                    e.backend.label(),
+                    e.capability.label(),
+                    if e.supported {
+                        "supported"
+                    } else {
+                        "unsupported"
+                    }
+                )
+            })
+            .collect();
+        rows.sort();
+        rows.join("\n")
     }
 }
 
