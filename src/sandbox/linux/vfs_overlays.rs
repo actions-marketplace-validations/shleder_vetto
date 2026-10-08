@@ -167,7 +167,9 @@ mod tests {
     fn mask_mandatory_secrets_handles_absent_paths() {
         let nonexistent = Path::new("/tmp/nonexistent-vetto-test-home-xyz");
         let has_host_items = get_dangerous_unix_sockets().iter().any(|s| s.exists())
-            || SENSITIVE_PROC_SYS_PATHS.iter().any(|p| Path::new(p).exists());
+            || SENSITIVE_PROC_SYS_PATHS
+                .iter()
+                .any(|p| Path::new(p).exists());
         let res = mask_mandatory_secrets(nonexistent, None);
         if has_host_items {
             if let Err(err) = res {
