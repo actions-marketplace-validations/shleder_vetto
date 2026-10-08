@@ -23,8 +23,10 @@ use vetto::config::NetMode;
 use vetto::policy::{DenyEntry, Policy};
 use vetto::sandbox::capability::{
     select_backend, BackendKind, CanonicalPolicy, EnforcementState, ExecutionIdentity, FrozenSpec,
-    PlatformMatrix, PreparationFailureKind, SecurityCapability,
+    PlatformMatrix, SecurityCapability,
 };
+#[cfg(target_os = "macos")]
+use vetto::sandbox::capability::PreparationFailureKind;
 #[cfg(target_os = "macos")]
 use vetto::sandbox::production::{
     execute_simple, prod_tier_mapping, ProdSpawnLog, PROD_REGISTRY, PROD_SCENARIO_ID,

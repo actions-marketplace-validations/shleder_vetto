@@ -19,8 +19,11 @@ use vetto::config::NetMode;
 use vetto::policy::Policy;
 use vetto::sandbox::capability::{
     allows_pass, apply_backend_ceiling, required_capabilities, BackendKind, CanonicalPolicy,
-    Category, ClaimStrength, EnforcementReport, EnforcementState, ExecutionIdentity,
-    PreparationFailureKind, SandboxBackend, Scenario, SecurityCapability, Severity, Verdict,
+    Category, ClaimStrength, ExecutionIdentity, Scenario, SecurityCapability, Severity, Verdict,
+};
+#[cfg(target_os = "windows")]
+use vetto::sandbox::capability::{
+    EnforcementReport, EnforcementState, PreparationFailureKind, SandboxBackend,
 };
 #[cfg(target_os = "windows")]
 use vetto::sandbox::production::{
