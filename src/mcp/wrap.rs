@@ -4,7 +4,9 @@
 //! (such as those used by Claude Desktop and Cursor) in an isolated sandbox.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "linux", windows, test))]
+use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 
