@@ -6,8 +6,6 @@
 //! the same policy, sandbox, observation, PTY, and report code as the CLI.
 
 pub mod audit;
-#[doc(hidden)]
-pub mod bench_support;
 pub mod classifier;
 pub mod cli;
 pub mod config;
