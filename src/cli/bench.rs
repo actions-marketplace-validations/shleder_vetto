@@ -187,7 +187,6 @@ pub fn resolve_or_materialize_policy(profile_name: &str) -> Result<PathBuf> {
     Ok(temp_path)
 }
 
-
 fn measure_peak_memory_bytes(pid: Option<u32>) -> u64 {
     let _ = pid;
 

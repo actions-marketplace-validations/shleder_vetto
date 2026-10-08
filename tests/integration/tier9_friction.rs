@@ -133,7 +133,6 @@ fn test_feature_94_auto_timeout_calculation() {
     let _ = fs::remove_dir_all(&temp);
 }
 
-
 #[test]
 fn test_feature_97_gen_sbom_script() {
     let script = Path::new("scripts/gen-sbom.sh");

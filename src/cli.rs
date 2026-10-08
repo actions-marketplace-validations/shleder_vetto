@@ -687,7 +687,6 @@ pub enum PolicyCommand {
     List,
 }
 
-
 /// Render completions to stdout without starting a sandbox session.
 pub fn print_completions(shell: Shell) -> anyhow::Result<()> {
     let mut command = Cli::command();

@@ -285,7 +285,10 @@ fn cli_verify_ng_lint_json_parseable() {
 #[test]
 fn cli_verify_ng_without_suite_never_passes() {
     let res = vetto::verify_ng::run_verify_ng(false, false);
-    assert!(res.is_err(), "gate must fail closed without execution runner");
+    assert!(
+        res.is_err(),
+        "gate must fail closed without execution runner"
+    );
 }
 
 /// Capability skeleton: missing required caps surface as NOT_APPLICABLE

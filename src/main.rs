@@ -14,9 +14,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use vetto::config::{NetMode, RunConfig, TuiMode};
-use vetto::{
-    cli, doctor, events, exit_codes, logger, mcp, policy, sandbox, shim, watchdog,
-};
+use vetto::{cli, doctor, events, exit_codes, logger, mcp, policy, sandbox, shim, watchdog};
 
 fn main() {
     if let Err(err) = run() {
@@ -651,9 +649,13 @@ fn run() -> Result<()> {
                 println!("built-in profiles:");
                 for name in policy::defaults::PROFILE_NAMES {
                     let desc = match name {
-                        "default" => "project+tmp write, toolchain caches read-only, secrets masked",
+                        "default" => {
+                            "project+tmp write, toolchain caches read-only, secrets masked"
+                        }
                         "strict" => "minimal: project write only, no caches, no git identity",
-                        "audit" => "same fs as default; pair with --observe-seccomp/--jsonl/--report",
+                        "audit" => {
+                            "same fs as default; pair with --observe-seccomp/--jsonl/--report"
+                        }
                         "permissive" => "wide toolchain read surface; secrets still denied",
                         _ => "",
                     };
