@@ -21,4 +21,3 @@ pub use record::{
     TierClassification, TreeExtinctionPayload, VettoAuditRecord,
 };
 pub use verdict::{EvidenceStrength, FinalVerdict, SecurityVerdict, VerdictEngine, VerdictStatus};
-

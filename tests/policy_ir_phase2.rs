@@ -1373,7 +1373,10 @@ fn test_fsm_extinction_guard_blocks_completion_and_terminal() {
 // ----------------------------------------------------------------------------
 #[test]
 fn test_fsm_emergency_cleanup_from_all_active_states() {
-    assert_eq!(EXIT_FAIL_CLOSED, 125, "Fail-closed exit code must be 125 (INV-01)");
+    assert_eq!(
+        EXIT_FAIL_CLOSED, 125,
+        "Fail-closed exit code must be 125 (INV-01)"
+    );
 
     let active_canonical_states = [
         ExecutionState::Uninitialized,
@@ -1390,9 +1393,13 @@ fn test_fsm_emergency_cleanup_from_all_active_states() {
     for state in active_canonical_states {
         // Direct transition to EmergencyCleanup
         let mut fsm = ExecutionStateMachine::from_state(state);
-        fsm.transition(ExecutionState::EmergencyCleanup).unwrap_or_else(|e| {
-            panic!("Direct transition from {:?} to EmergencyCleanup must succeed: {}", state, e);
-        });
+        fsm.transition(ExecutionState::EmergencyCleanup)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Direct transition from {:?} to EmergencyCleanup must succeed: {}",
+                    state, e
+                );
+            });
         assert_eq!(fsm.current_state(), ExecutionState::EmergencyCleanup);
         assert!(fsm.is_fail_closed());
 
@@ -1407,7 +1414,9 @@ fn test_fsm_emergency_cleanup_from_all_active_states() {
         assert!(fsm_helper.is_fail_closed());
         assert_eq!(fsm_helper.current_state(), ExecutionState::FailClosed);
 
-        fsm_helper.transition(ExecutionState::EmergencyCleanup).unwrap();
+        fsm_helper
+            .transition(ExecutionState::EmergencyCleanup)
+            .unwrap();
         assert_eq!(fsm_helper.current_state(), ExecutionState::EmergencyCleanup);
     }
 
@@ -1427,9 +1436,13 @@ fn test_fsm_emergency_cleanup_from_all_active_states() {
 
     for state in active_phase3_states {
         let mut fsm = ExecutionStateMachine::from_state(state);
-        fsm.transition(ExecutionState::EmergencyCleanup).unwrap_or_else(|e| {
-            panic!("Phase 3 transition from {:?} to EmergencyCleanup must succeed: {}", state, e);
-        });
+        fsm.transition(ExecutionState::EmergencyCleanup)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Phase 3 transition from {:?} to EmergencyCleanup must succeed: {}",
+                    state, e
+                );
+            });
         assert_eq!(fsm.current_state(), ExecutionState::EmergencyCleanup);
         assert!(fsm.is_fail_closed());
     }
@@ -1467,7 +1480,9 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
     assert_eq!(v_writes.exit_code, 125);
     assert!(!v_writes.is_contract_satisfied());
     assert!(!v_writes.is_success());
-    assert!(v_writes.reason.contains("writes outside authorized workspace"));
+    assert!(v_writes
+        .reason
+        .contains("writes outside authorized workspace"));
 
     // 5.1.c: Surviving zombie processes
     let v_zombies = VerdictEngine::evaluate(&contract, 0, 0, 3, true, 0);
@@ -1476,7 +1491,9 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
     assert_eq!(v_zombies.exit_code, 125);
     assert!(!v_zombies.is_contract_satisfied());
     assert!(!v_zombies.is_success());
-    assert!(v_zombies.reason.contains("3 descendant processes escaped extinction"));
+    assert!(v_zombies
+        .reason
+        .contains("3 descendant processes escaped extinction"));
 
     // 5.2: Child Process Exit Code 1 Without Security Violation -> Satisfied, exit_code: 1
     // Decoupling Invariant: Workload failure does NOT equal security breach!
@@ -1503,7 +1520,10 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
 
     // 5.3: Dropped Evidence Channel -> SecurityVerdict::Inconclusive, exit_code: 125
     let v_inconclusive = VerdictEngine::evaluate(&contract, 0, 0, 0, false, 0);
-    assert_eq!(v_inconclusive.security_verdict, SecurityVerdict::Inconclusive);
+    assert_eq!(
+        v_inconclusive.security_verdict,
+        SecurityVerdict::Inconclusive
+    );
     assert_eq!(v_inconclusive.status, VerdictStatus::Inconclusive);
     assert_eq!(v_inconclusive.exit_code, 125);
     assert!(!v_inconclusive.is_contract_satisfied());
@@ -1528,7 +1548,10 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
     // 5.5: Serialization Check of to_audit_export()
     // 5.5.a: Clean export serialization
     let clean_export = v_clean.to_audit_export();
-    assert!(clean_export.is_object(), "Export must produce a JSON object");
+    assert!(
+        clean_export.is_object(),
+        "Export must produce a JSON object"
+    );
     assert_eq!(clean_export["status"], "PASS");
     assert_eq!(clean_export["strength"], "STRONG");
     assert_eq!(clean_export["security_verdict"], "SATISFIED");
@@ -1572,6 +1595,17 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
         inconc_export["recommended_action"],
         "Wipe CoW layer; audit ledger inconclusive."
     );
+
+    // 5.6: Direct FinalVerdict constructor validation
+    let constructed = FinalVerdict::new(
+        VerdictStatus::Pass,
+        EvidenceStrength::Strong,
+        SecurityVerdict::Satisfied,
+        "Workload completed with zero boundary violations",
+        0,
+    );
+    assert_eq!(constructed.security_verdict, SecurityVerdict::Satisfied);
+    assert_eq!(constructed.exit_code, 0);
+    assert!(constructed.is_contract_satisfied());
+    assert!(constructed.is_success());
 }
-
-

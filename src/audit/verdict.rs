@@ -126,7 +126,11 @@ impl FinalVerdict {
 
     /// Formatted security verdict badge (e.g. `SATISFIED [STRONG]`, `VIOLATED [STRONG]`).
     pub fn security_badge(&self) -> String {
-        format!("{} [{}]", self.security_verdict.label(), self.strength.label())
+        format!(
+            "{} [{}]",
+            self.security_verdict.label(),
+            self.strength.label()
+        )
     }
 
     /// Action mandated by the Decision Truth Table (§18.2).

@@ -14,7 +14,6 @@ pub enum ExecutionState {
     // ========================================================================
     // 12 Canonical States (Stage 2 / Goal 2.4 / R4)
     // ========================================================================
-
     /// Initial uninitialized state before policy compilation or preflight
     Uninitialized,
     /// Policy parsed, normalized, and validated into IR
@@ -43,7 +42,6 @@ pub enum ExecutionState {
     // ========================================================================
     // Phase 3 Runtime Variants (100% Backward Compatibility)
     // ========================================================================
-
     /// Initial intent collection from agent profile / CLI (legacy alias for Uninitialized)
     Intent,
     /// Canonical contract sealed with BLAKE3/SHA-256 digest (legacy alias for PreflightPassed)
@@ -175,7 +173,6 @@ impl std::fmt::Display for ExecutionState {
         write!(f, "{}", self.as_str())
     }
 }
-
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum StateTransitionError {
@@ -625,7 +622,10 @@ mod fsm_tests {
         ];
 
         for next in sequence {
-            assert!(fsm.transition(next).is_ok(), "failed transition to {next:?}");
+            assert!(
+                fsm.transition(next).is_ok(),
+                "failed transition to {next:?}"
+            );
             assert_eq!(fsm.current_state(), next);
         }
 
@@ -731,19 +731,58 @@ mod fsm_tests {
             assert_eq!(state.to_canonical(), state);
         }
 
-        assert_eq!(ExecutionState::Intent.to_canonical(), ExecutionState::Uninitialized);
-        assert_eq!(ExecutionState::ContractSealed.to_canonical(), ExecutionState::PreflightPassed);
-        assert_eq!(ExecutionState::Prepare.to_canonical(), ExecutionState::IsolationConfigured);
-        assert_eq!(ExecutionState::Enforce.to_canonical(), ExecutionState::IsolationConfigured);
-        assert_eq!(ExecutionState::Spawn.to_canonical(), ExecutionState::ChildSpawned);
-        assert_eq!(ExecutionState::Observe.to_canonical(), ExecutionState::Running);
-        assert_eq!(ExecutionState::Terminate.to_canonical(), ExecutionState::Terminating);
-        assert_eq!(ExecutionState::Cleanup.to_canonical(), ExecutionState::CleanedUp);
-        assert_eq!(ExecutionState::Verify.to_canonical(), ExecutionState::CleanedUp);
-        assert_eq!(ExecutionState::Attest.to_canonical(), ExecutionState::CleanedUp);
-        assert_eq!(ExecutionState::Verdict.to_canonical(), ExecutionState::CleanedUp);
-        assert_eq!(ExecutionState::Terminal.to_canonical(), ExecutionState::Completed);
-        assert_eq!(ExecutionState::FailClosed.to_canonical(), ExecutionState::Failed);
+        assert_eq!(
+            ExecutionState::Intent.to_canonical(),
+            ExecutionState::Uninitialized
+        );
+        assert_eq!(
+            ExecutionState::ContractSealed.to_canonical(),
+            ExecutionState::PreflightPassed
+        );
+        assert_eq!(
+            ExecutionState::Prepare.to_canonical(),
+            ExecutionState::IsolationConfigured
+        );
+        assert_eq!(
+            ExecutionState::Enforce.to_canonical(),
+            ExecutionState::IsolationConfigured
+        );
+        assert_eq!(
+            ExecutionState::Spawn.to_canonical(),
+            ExecutionState::ChildSpawned
+        );
+        assert_eq!(
+            ExecutionState::Observe.to_canonical(),
+            ExecutionState::Running
+        );
+        assert_eq!(
+            ExecutionState::Terminate.to_canonical(),
+            ExecutionState::Terminating
+        );
+        assert_eq!(
+            ExecutionState::Cleanup.to_canonical(),
+            ExecutionState::CleanedUp
+        );
+        assert_eq!(
+            ExecutionState::Verify.to_canonical(),
+            ExecutionState::CleanedUp
+        );
+        assert_eq!(
+            ExecutionState::Attest.to_canonical(),
+            ExecutionState::CleanedUp
+        );
+        assert_eq!(
+            ExecutionState::Verdict.to_canonical(),
+            ExecutionState::CleanedUp
+        );
+        assert_eq!(
+            ExecutionState::Terminal.to_canonical(),
+            ExecutionState::Completed
+        );
+        assert_eq!(
+            ExecutionState::FailClosed.to_canonical(),
+            ExecutionState::Failed
+        );
     }
 
     #[test]
@@ -901,4 +940,3 @@ mod fsm_tests {
         ));
     }
 }
-
