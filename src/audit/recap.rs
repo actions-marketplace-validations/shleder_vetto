@@ -35,7 +35,7 @@ pub struct SessionRecapInput {
 
 /// Standard two-line recap badge rendered upon protected session completion.
 pub fn render_recap_badge() -> &'static str {
-    "[vetto] protected session completed: 0 secrets leaked, host secrets masked (~/.ssh, ~/.aws, .env).\n[vetto] daemon-less sandbox runtime • https://github.com/shleder/vetto\n"
+    "[vetto] protected session completed: 0 secrets leaked, host secrets masked.\n[vetto] daemon-less sandbox runtime • https://github.com/shleder/vetto\n"
 }
 
 /// Render the recap lines (without the `vetto: recap: ` prefix).
@@ -191,9 +191,9 @@ mod tests {
         let badge = render_recap_badge();
         assert_eq!(
             badge,
-            "[vetto] protected session completed: 0 secrets leaked, host secrets masked (~/.ssh, ~/.aws, .env).\n[vetto] daemon-less sandbox runtime • https://github.com/shleder/vetto\n"
+            "[vetto] protected session completed: 0 secrets leaked, host secrets masked.\n[vetto] daemon-less sandbox runtime • https://github.com/shleder/vetto\n"
         );
-        assert!(badge.contains("0 secrets leaked, host secrets masked (~/.ssh, ~/.aws, .env)."));
+        assert!(badge.contains("0 secrets leaked, host secrets masked."));
         assert!(badge.contains("daemon-less sandbox runtime • https://github.com/shleder/vetto"));
     }
 }

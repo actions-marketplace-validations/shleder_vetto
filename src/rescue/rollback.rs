@@ -93,6 +93,8 @@ pub fn atomic_commit_bytes_with_mode(
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&tmp_path, fs::Permissions::from_mode(m));
     }
+    #[cfg(not(unix))]
+    let _ = mode;
 
     if let Err(e) = fs::rename(&tmp_path, target_path) {
         let _ = fs::remove_file(&tmp_path);
