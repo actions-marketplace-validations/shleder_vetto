@@ -1644,3 +1644,122 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
     assert!(constructed.is_contract_satisfied());
     assert!(constructed.is_success());
 }
+
+// ----------------------------------------------------------------------------
+// Test 6: FSM Transition Hardening Regressions (M2 Remediation)
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_transition_hardening_regressions() {
+    // 6.1: PolicyCompiled -> IsolationConfigured must be rejected (cannot skip PreflightPassed)
+    let mut fsm_compiled = ExecutionStateMachine::from_state(ExecutionState::PolicyCompiled);
+    let err_skip_preflight = fsm_compiled
+        .transition(ExecutionState::IsolationConfigured)
+        .unwrap_err();
+    assert!(
+        matches!(
+            err_skip_preflight,
+            StateTransitionError::InvalidTransition {
+                from: ExecutionState::PolicyCompiled,
+                to: ExecutionState::IsolationConfigured,
+                ..
+            }
+        ),
+        "Skipping PreflightPassed must be disallowed: {:?}",
+        err_skip_preflight
+    );
+
+    // 6.2: EmergencyCleanup -> Completed must be rejected
+    let mut fsm_emergency = ExecutionStateMachine::from_state(ExecutionState::EmergencyCleanup);
+    let err_emergency_completed = fsm_emergency
+        .transition(ExecutionState::Completed)
+        .unwrap_err();
+    assert!(
+        matches!(
+            err_emergency_completed,
+            StateTransitionError::InvalidTransition {
+                from: ExecutionState::EmergencyCleanup,
+                to: ExecutionState::Completed,
+                ..
+            }
+        ),
+        "EmergencyCleanup -> Completed must be disallowed: {:?}",
+        err_emergency_completed
+    );
+
+    // 6.3: Cleanup -> Completed must be rejected (cannot skip Verify/Attest/Verdict)
+    let mut fsm_cleanup = ExecutionStateMachine::from_state(ExecutionState::Cleanup);
+    let err_cleanup_completed = fsm_cleanup
+        .transition(ExecutionState::Completed)
+        .unwrap_err();
+    assert!(
+        matches!(
+            err_cleanup_completed,
+            StateTransitionError::InvalidTransition {
+                from: ExecutionState::Cleanup,
+                to: ExecutionState::Completed,
+                ..
+            }
+        ),
+        "Cleanup -> Completed must be disallowed: {:?}",
+        err_cleanup_completed
+    );
+
+    // 6.4: ExecutionState::Failed and ExecutionState::FailClosed are terminal
+    assert!(
+        ExecutionState::Failed.is_terminal(),
+        "ExecutionState::Failed must be terminal"
+    );
+    assert!(
+        ExecutionState::FailClosed.is_terminal(),
+        "ExecutionState::FailClosed must be terminal"
+    );
+
+    let fsm_failed = ExecutionStateMachine::from_state(ExecutionState::Failed);
+    assert!(
+        fsm_failed.is_terminal(),
+        "ExecutionStateMachine in Failed state must report is_terminal == true"
+    );
+
+    let fsm_fail_closed = ExecutionStateMachine::from_state(ExecutionState::FailClosed);
+    assert!(
+        fsm_fail_closed.is_terminal(),
+        "ExecutionStateMachine in FailClosed state must report is_terminal == true"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Test 7: Shadow Mode With Severed Evidence Channel Priority (M2 Remediation)
+// ----------------------------------------------------------------------------
+#[test]
+fn test_verdict_shadow_mode_severed_evidence_priority() {
+    let mut contract = create_test_verdict_contract();
+    contract.filesystem.shadow = true;
+
+    // In shadow mode with unauthorized writes and severed evidence channel:
+    // Severed evidence channel takes priority over shadow mode pass.
+    let verdict = VerdictEngine::evaluate(&contract, 0, 5, 0, false, 0);
+    assert_eq!(
+        verdict.security_verdict,
+        SecurityVerdict::Inconclusive,
+        "Severed evidence channel must yield Inconclusive even in shadow mode"
+    );
+    assert_eq!(
+        verdict.status,
+        VerdictStatus::Inconclusive,
+        "Verdict status must be Inconclusive"
+    );
+    assert_eq!(
+        verdict.exit_code, 125,
+        "Exit code must be 125 fail-closed when evidence channel is severed"
+    );
+    assert!(
+        !verdict.is_contract_satisfied(),
+        "Contract cannot be satisfied with severed evidence channel"
+    );
+    assert!(
+        !verdict.is_success(),
+        "Execution cannot be marked success when evidence channel is severed"
+    );
+    assert_eq!(verdict.security_badge(), "INCONCLUSIVE [STRONG]");
+    assert!(verdict.reason.contains("dropped events"));
+}

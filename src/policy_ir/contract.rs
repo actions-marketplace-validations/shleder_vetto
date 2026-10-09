@@ -212,10 +212,7 @@ impl SecurityContract {
             seccomp_profile: self.production.as_ref().map_or("default".into(), |p| {
                 format!("{:?}", p.installation_policy.seccomp_profile)
             }),
-            observe_seccomp: self
-                .production
-                .as_ref()
-                .is_some_and(|p| p.observe_seccomp),
+            observe_seccomp: self.production.as_ref().is_some_and(|p| p.observe_seccomp),
         }
     }
 }

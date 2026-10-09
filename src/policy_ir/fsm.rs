@@ -128,7 +128,10 @@ impl ExecutionState {
 
     /// Returns `true` if this state is a terminal lifecycle state.
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Completed | Self::Terminal)
+        matches!(
+            self,
+            Self::Completed | Self::Terminal | Self::Failed | Self::FailClosed
+        )
     }
 
     /// Returns `true` if this state represents an active (non-terminal) phase.
@@ -262,12 +265,9 @@ impl ExecutionStateMachine {
         &self.history
     }
 
-    /// Returns `true` if current state is either Completed or Terminal.
+    /// Returns `true` if current state is a terminal lifecycle state.
     pub fn is_terminal(&self) -> bool {
-        matches!(
-            self.current_state,
-            ExecutionState::Completed | ExecutionState::Terminal
-        )
+        self.current_state.is_terminal()
     }
 
     /// Returns `true` if execution has transitioned through FailClosed, Failed, or EmergencyCleanup.
@@ -405,7 +405,6 @@ impl ExecutionStateMachine {
             // Initial & Preflight bridges
             (ExecutionState::Uninitialized, ExecutionState::Intent) => true,
             (ExecutionState::Intent, ExecutionState::Uninitialized) => true,
-            (ExecutionState::PolicyCompiled, ExecutionState::IsolationConfigured) => true,
             (ExecutionState::PreflightPassed, ExecutionState::Prepare) => true,
             (ExecutionState::ContractSealed, ExecutionState::IsolationConfigured) => true,
 
@@ -429,7 +428,6 @@ impl ExecutionStateMachine {
             (ExecutionState::Cleanup, ExecutionState::CleanedUp) => true,
             (ExecutionState::CleanedUp, ExecutionState::Terminal) => true,
             (ExecutionState::Verdict, ExecutionState::Completed) => true,
-            (ExecutionState::Cleanup, ExecutionState::Completed) => true,
             (ExecutionState::Completed, ExecutionState::Terminal) => true,
             (ExecutionState::Terminal, ExecutionState::Completed) => true,
 
@@ -532,7 +530,6 @@ impl ExecutionStateMachine {
             (ExecutionState::EmergencyCleanup, ExecutionState::FailClosed) => true,
             (ExecutionState::EmergencyCleanup, ExecutionState::Failed) => true,
             (ExecutionState::EmergencyCleanup, ExecutionState::Terminal) => true,
-            (ExecutionState::EmergencyCleanup, ExecutionState::Completed) => true,
 
             _ => false,
         };
@@ -669,7 +666,8 @@ mod fsm_tests {
 
         // Emergency cleanup transition
         assert!(fsm.transition(ExecutionState::EmergencyCleanup).is_ok());
-        assert!(fsm.transition(ExecutionState::Completed).is_ok());
+        assert!(fsm.transition(ExecutionState::Completed).is_err());
+        assert!(fsm.transition(ExecutionState::Failed).is_ok());
         assert!(fsm.is_terminal());
         assert!(fsm.is_fail_closed());
     }
@@ -688,7 +686,8 @@ mod fsm_tests {
         assert_eq!(fsm.current_state(), ExecutionState::EmergencyCleanup);
         assert!(fsm.is_fail_closed());
 
-        assert!(fsm.transition(ExecutionState::Completed).is_ok());
+        assert!(fsm.transition(ExecutionState::Completed).is_err());
+        assert!(fsm.transition(ExecutionState::Failed).is_ok());
         assert!(fsm.is_terminal());
     }
 

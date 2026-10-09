@@ -248,6 +248,18 @@ impl VerdictEngine {
             };
         }
 
+        // Invariant 2: Interrupted evidence channel yields INCONCLUSIVE
+        if !evidence_channel_intact {
+            return FinalVerdict {
+                status: VerdictStatus::Inconclusive,
+                strength,
+                security_verdict: SecurityVerdict::Inconclusive,
+                exit_code: 125,
+                reason: "Evidence capture channel dropped events: audit ledger inconclusive"
+                    .to_string(),
+            };
+        }
+
         if unauthorized_writes > 0 {
             if contract.filesystem.shadow {
                 // Log shadow violation but do not fail the process
@@ -284,18 +296,6 @@ impl VerdictEngine {
                     "Lifecycle breach: {} descendant processes escaped extinction",
                     zombies_survived
                 ),
-            };
-        }
-
-        // Invariant 2: Interrupted evidence channel yields INCONCLUSIVE
-        if !evidence_channel_intact {
-            return FinalVerdict {
-                status: VerdictStatus::Inconclusive,
-                strength,
-                security_verdict: SecurityVerdict::Inconclusive,
-                exit_code: 125,
-                reason: "Evidence capture channel dropped events: audit ledger inconclusive"
-                    .to_string(),
             };
         }
 
@@ -664,6 +664,17 @@ mod tests {
         assert!(verdict.is_contract_satisfied());
         assert!(!verdict.is_success());
         assert!(verdict.reason.contains("[SHADOW VIOLATION]"));
+    }
+
+    #[test]
+    fn test_shadow_mode_with_severed_evidence_channel_is_inconclusive() {
+        let mut contract = mock_contract();
+        contract.filesystem.shadow = true;
+        let verdict = VerdictEngine::evaluate(&contract, 0, 5, 0, false, 0);
+        assert_eq!(verdict.status, VerdictStatus::Inconclusive);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Inconclusive);
+        assert_eq!(verdict.exit_code, 125);
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
