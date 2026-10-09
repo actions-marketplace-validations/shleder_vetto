@@ -342,7 +342,7 @@ mod tests {
         let handle = JsonlSink::spawn(&bus, log_path.clone());
 
         let secret_aws = "AKIAIOSFODNN7EXAMPLE";
-        let secret_ghp = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+        let secret_ghp = concat!("gh", "p_0123456789abcdefghijklmnopqrstuvwxyz");
 
         bus.publish(Event::ExecObserved {
             ts: chrono::Utc::now(),

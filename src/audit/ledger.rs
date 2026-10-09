@@ -325,7 +325,7 @@ impl AuditLedger {
                         corruption: Some(LedgerCorruption {
                             line_number,
                             seq: Some(seq),
-                            expected_hash: Some(expected_prev),
+                            expected_hash: Some(expected_prev.clone()),
                             actual_hash: Some(prev_hash.to_string()),
                             reason: format!(
                                 "Signature envelope mismatch: expected seq={}, prev_hash='{}', got seq={}, prev_hash='{}'",

@@ -5,7 +5,6 @@
 //! (blocked file reads, blocked network egress, contacted domains).
 
 use std::collections::BTreeSet;
-use std::fmt::Write;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -204,6 +203,7 @@ pub fn run_diff(args: &DiffArgs) -> Result<()> {
                     added: Vec::new(),
                     modified: Vec::new(),
                     deleted: Vec::new(),
+                    permissions_changed: Vec::new(),
                     total_changed: 0,
                     total_lines_added: 0,
                     total_lines_deleted: 0,

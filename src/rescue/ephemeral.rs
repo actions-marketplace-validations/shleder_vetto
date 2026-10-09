@@ -105,7 +105,7 @@ pub fn handle_ephemeral_completion(
     if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
         let snap_dir = root.join(session_id);
         if snap_dir.exists() {
-            let _ = fs::remove_dir_all(&snap_dir);
+            let _ = std::fs::remove_dir_all(&snap_dir);
         }
     }
 
@@ -138,7 +138,7 @@ impl Drop for EphemeralGuard {
         if !self.completed {
             let _ = crate::rescue::snapshot::rollback_snapshot(&self.session_id, Some(&self.project_dir));
             if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
-                let _ = fs::remove_dir_all(root.join(&self.session_id));
+                let _ = std::fs::remove_dir_all(root.join(&self.session_id));
             }
         }
     }
