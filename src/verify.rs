@@ -526,9 +526,10 @@ fn net_pass_detail(tier: Option<Tier>) -> String {
 #[cfg(unix)]
 fn parse_probe_output(output: &str, tier: Option<Tier>, checks: &mut Vec<CheckResult>) {
     for line in output.lines() {
-        let mut parts = line.splitn(3, '|');
-        let (kind, path, verdict) = match (parts.next(), parts.next(), parts.next()) {
-            (Some(kind), Some(path), Some(verdict)) => (kind, path, verdict),
+        let parts: Vec<&str> = line.split('|').collect();
+        let (kind, path, verdict) = match parts.as_slice() {
+            [kind, verdict] => (*kind, "", *verdict),
+            [kind, path, verdict] => (*kind, *path, *verdict),
             _ => continue,
         };
         match (kind, verdict) {
@@ -589,14 +590,22 @@ fn parse_probe_output(output: &str, tier: Option<Tier>, checks: &mut Vec<CheckRe
             )),
 
             // Supplemental Boundary: Write Outside Root
-            ("WRITE", "denied") => checks.push(pass(
-                "write-outside",
-                format!("write to {path} outside every write root denied"),
-            )),
-            ("WRITE", "allowed") => checks.push(leak(
-                "write-outside",
-                format!("wrote outside every write root: {path}"),
-            )),
+            ("WRITE", "denied") => {
+                let detail = if path.is_empty() {
+                    "write outside every write root denied".to_string()
+                } else {
+                    format!("write to {path} outside every write root denied")
+                };
+                checks.push(pass("write-outside", detail));
+            }
+            ("WRITE", "allowed") => {
+                let detail = if path.is_empty() {
+                    "wrote outside every write root".to_string()
+                } else {
+                    format!("wrote outside every write root: {path}")
+                };
+                checks.push(leak("write-outside", detail));
+            }
             _ => {}
         }
     }
