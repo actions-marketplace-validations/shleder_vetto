@@ -11,13 +11,11 @@ use crate::audit::verdict::FinalVerdict;
 use crate::config::NetMode;
 use crate::policy::{Policy, Tier};
 use crate::policy_ir::ExecutionState;
-use crate::sandbox::StdioMode;
-use crate::verify_ng::evidence::ExecutionIdentity;
-use crate::verify_ng::frozen::FrozenSpec;
-use crate::verify_ng::sandbox_backend::{
-    BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, SandboxBackend,
-    SecurityCapability,
+use crate::sandbox::capability::{
+    BackendKind, CanonicalPolicy, EnforcementReport, EnforcementState, ExecutionIdentity,
+    FrozenSpec, SandboxBackend, SecurityCapability,
 };
+use crate::sandbox::StdioMode;
 
 pub mod context;
 pub mod drain;
@@ -248,7 +246,7 @@ pub fn freeze_production(
     cwd: &std::path::Path,
     nonce: &str,
 ) -> (FrozenSpec, CanonicalPolicy, ExecutionIdentity) {
-    let spec = crate::verify_ng::frozen::freeze_spec(
+    let spec = crate::sandbox::capability::freeze_spec(
         scenario,
         PROD_REGISTRY,
         policy,

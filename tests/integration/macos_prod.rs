@@ -22,13 +22,14 @@ use vetto::config::NetMode;
 #[cfg(target_os = "macos")]
 use vetto::policy::{DenyEntry, Policy};
 #[cfg(target_os = "macos")]
+use vetto::sandbox::capability::PreparationFailureKind;
+use vetto::sandbox::capability::{
+    select_backend, BackendKind, CanonicalPolicy, EnforcementState, ExecutionIdentity, FrozenSpec,
+    PlatformMatrix, SecurityCapability,
+};
+#[cfg(target_os = "macos")]
 use vetto::sandbox::production::{
     execute_simple, prod_tier_mapping, ProdSpawnLog, PROD_REGISTRY, PROD_SCENARIO_ID,
-};
-use vetto::verify_ng::evidence::ExecutionIdentity;
-use vetto::verify_ng::frozen::FrozenSpec;
-use vetto::verify_ng::sandbox_backend::{
-    BackendKind, CanonicalPolicy, EnforcementState, PlatformMatrix, SecurityCapability,
 };
 
 #[cfg(target_os = "macos")]
@@ -88,7 +89,6 @@ fn canonical_policy(net_mode: &str) -> (CanonicalPolicy, ExecutionIdentity) {
 /// all-`Unsupported`.
 #[test]
 fn test_macos_backend_prepare_001() {
-    use vetto::verify_ng::sandbox_backend::select_backend;
     let (policy, identity) = canonical_policy("off");
     let mut backend = select_backend(BackendKind::Macos);
     let report = backend.prepare(&policy, &identity);
@@ -148,13 +148,11 @@ fn test_macos_backend_prepare_001() {
 /// downgrade to `--net=off`.
 #[test]
 fn test_macos_backend_relay_fail_001() {
-    use vetto::verify_ng::sandbox_backend::select_backend;
     let (policy, identity) = canonical_policy("strict:github.com:22");
     let mut backend = select_backend(BackendKind::Macos);
     let report = backend.prepare(&policy, &identity);
     #[cfg(target_os = "macos")]
     {
-        use vetto::verify_ng::sandbox_backend::PreparationFailureKind;
         assert!(
             !report.preparation_ok,
             "strict relay net must fail preparation on macOS"
@@ -185,7 +183,6 @@ fn test_macos_backend_relay_fail_001() {
 /// preparation on macOS with NetworkIsolation in Configured state.
 #[test]
 fn test_macos_backend_allowlist_configured_001() {
-    use vetto::verify_ng::sandbox_backend::select_backend;
     let (policy, identity) = canonical_policy("allowlist:example.com");
     let mut backend = select_backend(BackendKind::Macos);
     let report = backend.prepare(&policy, &identity);
@@ -376,18 +373,6 @@ fn test_macos_no_direct_bypass_001() {
     assert!(
         production.contains("self.mechanics") && production.contains(".spawn(policy, opts)"),
         "the single production spawn boundary must live in production/lifecycle.rs"
-    );
-    // Documented harness exception: verify-ng `run_one` spawns directly but
-    // ONLY under the backend child-side plan installed via `pre_exec`, so
-    // `Enforced` is unreachable for a child that bypassed setup.
-    let runner = include_str!("../../src/verify_ng/runner.rs");
-    assert!(
-        runner.contains("std::process::Command::new"),
-        "harness spawn site must stay visible to this audit"
-    );
-    assert!(
-        runner.contains("pre_exec"),
-        "harness spawn must stay plan-controlled via pre_exec"
     );
     // macOS mechanics installs Seatbelt in the forked child before exec.
     let macos = include_str!("../../src/sandbox/macos/mod.rs");
@@ -894,7 +879,7 @@ fn test_macos_prod_identity_001() {
     assert_eq!(out.pid, Some(log[0].pid));
     assert!(out
         .report
-        .binds_identity(&vetto::verify_ng::evidence::ExecutionIdentity::new(
+        .binds_identity(&vetto::sandbox::capability::ExecutionIdentity::new(
             PROD_SCENARIO_ID,
             out.nonce.as_str(),
             PROD_REGISTRY,

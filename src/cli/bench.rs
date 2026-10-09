@@ -194,7 +194,7 @@ fn measure_peak_memory_bytes(pid: Option<u32>) -> u64 {
     {
         // 1. If child PID is provided, attempt direct inspection via procfs if still available
         if let Some(child_pid) = pid {
-            if let Some(dir) = crate::verify_ng::linux_enforce::child_cgroup_dir(child_pid) {
+            if let Some(dir) = crate::sandbox::linux::cgroup::child_cgroup_dir(child_pid) {
                 if let Ok(content) = std::fs::read_to_string(dir.join("memory.peak")) {
                     if let Ok(bytes) = content.trim().parse::<u64>() {
                         if bytes > 0 {

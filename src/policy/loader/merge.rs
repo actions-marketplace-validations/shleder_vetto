@@ -8,7 +8,6 @@ use anyhow::{anyhow, bail, Context, Result};
 use super::resolve;
 use super::schema::{expand_net_preset, parse_layer, parse_quota_bytes, RawLayer, RawStringList};
 use crate::error::VettoError;
-use crate::policy::conditions::{self, ConditionContext};
 use crate::policy::defaults;
 use crate::policy::types::{
     CgroupConfig, Policy, PolicyMetadata, PolicySourceKind, ResourceLimits, SeccompNotifyConfig,
@@ -88,9 +87,6 @@ impl MergedPolicy {
             if let Some(true) = sec.git_guard {
                 self.git_guard = true;
             }
-            if let Some(true) = sec.snapshot {
-                self.snapshot = true;
-            }
             if let Some(prof) = &sec.seccomp_profile {
                 self.seccomp_profile = Some(prof.clone());
             }
@@ -104,45 +100,6 @@ impl MergedPolicy {
                         .map(RawStringList::into_vec)
                         .unwrap_or_default(),
                 });
-            }
-            if let Some(oslog) = sec.oslog {
-                self.oslog = oslog;
-            }
-            if let Some(lpac) = sec.lpac {
-                self.lpac = lpac;
-            }
-            if let Some(true) = sec.require_signed {
-                self.require_signed = true;
-            }
-        }
-
-        if let Some(plat) = &layer.platform {
-            if let Some(oslog) = plat.oslog {
-                self.oslog = oslog;
-            }
-            if let Some(lpac) = plat.lpac {
-                self.lpac = lpac;
-            }
-            if let Some(io) = &plat.io_rate {
-                let max_bandwidth = io
-                    .max_bandwidth
-                    .as_deref()
-                    .and_then(crate::policy::types::parse_byte_size);
-                let incoming = crate::policy::types::IoRateLimit {
-                    max_iops: io.max_iops,
-                    max_bandwidth,
-                };
-                if let Some(existing) = &mut self.limits.io_rate {
-                    existing.merge_strictest(&incoming);
-                } else {
-                    self.limits.io_rate = Some(incoming);
-                }
-            }
-        }
-
-        if let Some(obs) = &layer.observability {
-            if let Some(oslog) = obs.oslog {
-                self.oslog = oslog;
             }
         }
 
@@ -303,9 +260,6 @@ impl MergedPolicy {
                     if let Some(connect) = &ports.allow_tcp_connect {
                         self.net_connect_ports.extend(connect);
                     }
-                    if let Some(bind) = &ports.allow_tcp_bind {
-                        self.net_bind_ports.extend(bind);
-                    }
                 }
                 if let Some(connect) = &network.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
@@ -318,9 +272,6 @@ impl MergedPolicy {
             if let Some(ports) = &layer.net_ports {
                 if let Some(connect) = &ports.allow_tcp_connect {
                     self.net_connect_ports.extend(connect);
-                }
-                if let Some(bind) = &ports.allow_tcp_bind {
-                    self.net_bind_ports.extend(bind);
                 }
             }
         }
@@ -496,20 +447,12 @@ impl Default for LayeredPolicyLoader {
     }
 }
 
-pub fn read_layer_file(path: &Path, require_signed: bool) -> Result<String> {
+pub fn read_layer_file(path: &Path, _require_signed: bool) -> Result<String> {
     if !is_usable_file(path) {
         bail!(
             "fail-closed: policy file '{}' must be a regular file and not a symlink",
             path.display()
         );
-    }
-    if require_signed {
-        crate::policy::crypto::verify_policy_file(path, None, None).with_context(|| {
-            format!(
-                "policy file '{}' failed signature verification (require_signed is active)",
-                path.display()
-            )
-        })?;
     }
     std::fs::read_to_string(path)
         .with_context(|| format!("failed to read policy file {}", path.display()))
@@ -542,24 +485,6 @@ impl LayeredPolicyLoader {
             format!("custom:{profile}")
         } else {
             profile.to_string()
-        };
-
-        let branch = options
-            .branch
-            .clone()
-            .or_else(|| conditions::detect_git_branch(project));
-        let git_tag = options
-            .git_tag
-            .clone()
-            .or_else(|| conditions::detect_git_tag(project));
-
-        let context = ConditionContext {
-            project,
-            branch: branch.as_deref(),
-            git_tag: git_tag.as_deref(),
-            agent: options.agent.as_deref(),
-            os: None,
-            env: None,
         };
 
         let mut stack = Vec::new();
@@ -602,7 +527,6 @@ impl LayeredPolicyLoader {
                         merge_layer(
                             &layer,
                             &label,
-                            &context,
                             &mut stack,
                             &mut merged,
                             PolicySourceKind::SystemGlobal,
@@ -631,7 +555,6 @@ impl LayeredPolicyLoader {
                         merge_layer(
                             &layer,
                             &label,
-                            &context,
                             &mut stack,
                             &mut merged,
                             PolicySourceKind::UserGlobal,
@@ -665,7 +588,6 @@ impl LayeredPolicyLoader {
             merge_layer(
                 &base,
                 base_profile,
-                &context,
                 &mut stack,
                 &mut merged,
                 PolicySourceKind::BuiltinProfile,
@@ -682,7 +604,6 @@ impl LayeredPolicyLoader {
             merge_layer(
                 &layer,
                 &label,
-                &context,
                 &mut stack,
                 &mut merged,
                 PolicySourceKind::Preset,
@@ -816,23 +737,10 @@ impl LayeredPolicyLoader {
             merge_layer(
                 &layer,
                 &format!("agent:{agent}"),
-                &context,
                 &mut stack,
                 &mut merged,
                 PolicySourceKind::AgentPreset,
             )?;
-            if defaults::canonical_agent_name(agent) == Some("opencode") {
-                let dynamic_providers =
-                    crate::policy::opencode::discover_opencode_providers_from_paths(
-                        Some(home),
-                        Some(project),
-                    );
-                for provider in dynamic_providers {
-                    if !merged.network_allow.contains(&provider) {
-                        merged.network_allow.push(provider);
-                    }
-                }
-            }
         }
 
         // -------------------------------------------------------------------
@@ -876,7 +784,6 @@ impl LayeredPolicyLoader {
                 merge_layer(
                     &layer,
                     &label,
-                    &context,
                     &mut stack,
                     &mut merged,
                     PolicySourceKind::Repository,
@@ -915,7 +822,6 @@ impl LayeredPolicyLoader {
                             merge_layer(
                                 &layer,
                                 &label,
-                                &context,
                                 &mut stack,
                                 &mut merged,
                                 PolicySourceKind::RepositoryFragment,
@@ -948,7 +854,6 @@ impl LayeredPolicyLoader {
                     merge_layer(
                         &layer,
                         &label,
-                        &context,
                         &mut stack,
                         &mut merged,
                         PolicySourceKind::LocalOverride,
@@ -974,7 +879,6 @@ impl LayeredPolicyLoader {
                 merge_layer(
                     &layer,
                     &label,
-                    &context,
                     &mut stack,
                     &mut merged,
                     PolicySourceKind::CliExplicit,
@@ -1048,17 +952,10 @@ pub fn default_user_policy_path(home: &Path) -> Option<PathBuf> {
 pub fn merge_layer(
     layer: &RawLayer,
     source: &str,
-    context: &ConditionContext<'_>,
     stack: &mut Vec<String>,
     merged: &mut MergedPolicy,
     source_kind: PolicySourceKind,
 ) -> Result<()> {
-    if let Some(conditions) = &layer.conditions {
-        if !conditions::conditions_match(conditions, context) {
-            return Ok(());
-        }
-    }
-
     let parents = layer
         .metadata
         .as_ref()
@@ -1081,7 +978,6 @@ pub fn merge_layer(
         merge_layer(
             &parent_layer,
             &format!("inherited:{parent}"),
-            context,
             stack,
             merged,
             PolicySourceKind::BuiltinProfile,

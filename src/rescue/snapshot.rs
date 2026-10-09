@@ -212,7 +212,7 @@ pub fn create_snapshot(
             let name = entry.file_name().to_string_lossy().to_string();
 
             if path.is_dir() {
-                if !crate::policy::secretscan::is_ignored_directory(&name) {
+                if !crate::fs::is_ignored_directory(&name) {
                     queue.push(path);
                 }
             } else if path.is_file() {
@@ -507,7 +507,7 @@ pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
             let name = entry.file_name().to_string_lossy().to_string();
 
             if path.is_dir() {
-                if !crate::policy::secretscan::is_ignored_directory(&name) {
+                if !crate::fs::is_ignored_directory(&name) {
                     queue.push(path);
                 }
             } else if path.is_file() {

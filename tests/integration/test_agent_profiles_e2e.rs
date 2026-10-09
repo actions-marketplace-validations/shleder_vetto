@@ -392,7 +392,7 @@ fn test_agent_profiles_unblock_sockets_and_ipc_for_mcp_plugins() {
 
 #[test]
 fn test_loopback_hosts_recognized_for_agent_dev_servers() {
-    use vetto::verify_ng::network::eval_is_loopback_host;
+    use vetto::sandbox::capability::eval_is_loopback_host;
     assert!(eval_is_loopback_host("localhost"));
     assert!(eval_is_loopback_host("127.0.0.1"));
     assert!(eval_is_loopback_host("::1"));

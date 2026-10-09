@@ -14,23 +14,20 @@ use std::time::Duration;
 use vetto::config::NetMode;
 use vetto::policy::Policy;
 use vetto::policy_ir::compiler::{EffectivePolicyInput, PolicyCompiler};
-use vetto::verify_ng::evidence::ExecutionIdentity;
-use vetto::verify_ng::frozen::freeze_spec;
-use vetto::verify_ng::model::{Category, ClaimStrength, Verdict};
-use vetto::verify_ng::registry::{Scenario, Severity};
-use vetto::verify_ng::sandbox_backend::{
-    allows_pass, apply_backend_ceiling, select_backend, BackendKind, CanonicalPolicy,
-    EnforcementState, PlatformMatrix, SecurityCapability,
+use vetto::sandbox::capability::{
+    allows_pass, apply_backend_ceiling, freeze_spec, select_backend, BackendKind, CanonicalPolicy,
+    Category, ClaimStrength, EnforcementState, ExecutionIdentity, PlatformMatrix, Scenario,
+    SecurityCapability, Severity, Verdict,
 };
 
 #[cfg(target_os = "linux")]
 use vetto::policy::CgroupConfig;
 #[cfg(target_os = "linux")]
+use vetto::sandbox::capability::{HostVerification, LinuxBackend, SandboxBackend};
+#[cfg(target_os = "linux")]
 use vetto::sandbox::linux::cgroup::setup_cgroup;
 #[cfg(target_os = "linux")]
 use vetto::sandbox::linux::limits;
-#[cfg(target_os = "linux")]
-use vetto::verify_ng::sandbox_backend::{HostVerification, LinuxBackend, SandboxBackend};
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -440,7 +437,7 @@ fn test_platform_unsupported_status_differentiation_no_fake_pass() {
     assert!(!matrix.supports(BackendKind::Direct, SecurityCapability::SyscallRestriction));
 
     // Prepare a scenario that requires ResourceLimits
-    let target = vetto::verify_ng::engine::current_target(None);
+    let target = vetto::sandbox::capability::current_target(None);
     let scen = Scenario {
         id: "TEST-UNSUPPORTED-RESOURCE-LIMITS".to_string(),
         category: Category::Proc,
