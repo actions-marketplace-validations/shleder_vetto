@@ -247,6 +247,38 @@ pub fn normalize_net_target(raw: &str) -> String {
     s.trim().trim_end_matches('.').to_ascii_lowercase()
 }
 
+/// Normalize a path string for security validation by collapsing consecutive
+/// forward slashes (`//+` -> `/`) and resolving redundant `.` segments.
+pub fn normalize_path_for_validation(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let is_absolute = trimmed.starts_with('/');
+
+    // Collect non-empty components, filtering out redundant '.' segments
+    let mut parts: Vec<&str> = Vec::new();
+    for seg in trimmed.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        parts.push(seg);
+    }
+
+    if is_absolute {
+        if parts.is_empty() {
+            "/".to_string()
+        } else {
+            format!("/{}", parts.join("/"))
+        }
+    } else if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
+}
+
 /// Validate whether an allow path target contains dangerous patterns.
 pub fn validate_dangerous_path(raw: &str) -> Result<()> {
     let trimmed = raw.trim();
@@ -266,32 +298,67 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         }
     }
 
-    // 3. Blanket root check
-    if trimmed == "/" || trimmed == "/*" || trimmed == "*" || trimmed == "/*.*" {
+    // Normalize path by collapsing consecutive slashes and resolving redundant '.' segments
+    let normalized = normalize_path_for_validation(trimmed);
+    for segment in normalized.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in allow rules");
+        }
+    }
+
+    // 3. Blanket root check (evaluated against normalized and raw path)
+    if normalized == "/"
+        || normalized == "/*"
+        || normalized == "*"
+        || normalized == "/*.*"
+        || trimmed == "/"
+        || trimmed == "/*"
+        || trimmed == "*"
+        || trimmed == "/*.*"
+    {
         bail!("blanket root path is strictly prohibited in allow rules");
     }
 
     // 4. Entire home directory check
-    if trimmed == "~" || trimmed == "$HOME" || trimmed == "%USERPROFILE%" {
+    if normalized == "~"
+        || normalized == "$HOME"
+        || normalized == "%USERPROFILE%"
+        || trimmed == "~"
+        || trimmed == "$HOME"
+        || trimmed == "%USERPROFILE%"
+    {
         bail!("entire user home directory cannot be granted in allow rules");
     }
 
-    let lower = trimmed.to_ascii_lowercase();
+    let lower = normalized.to_ascii_lowercase();
+    let lower_raw = trimmed.to_ascii_lowercase();
 
     // 5. Critical system paths
-    if lower == "/etc/shadow"
+    let is_critical_shadow = lower == "/etc/shadow"
         || lower.starts_with("/etc/shadow/")
         || lower.starts_with("/etc/shadow-")
-    {
+        || lower_raw == "/etc/shadow"
+        || lower_raw.starts_with("/etc/shadow/")
+        || lower_raw.starts_with("/etc/shadow-");
+    if is_critical_shadow {
         bail!("access to critical system path '/etc/shadow' is strictly prohibited");
     }
-    if lower == "/etc/passwd" || lower.starts_with("/etc/passwd/") {
+
+    let is_critical_passwd = lower == "/etc/passwd"
+        || lower.starts_with("/etc/passwd/")
+        || lower_raw == "/etc/passwd"
+        || lower_raw.starts_with("/etc/passwd/");
+    if is_critical_passwd {
         bail!("access to critical system path '/etc/passwd' is strictly prohibited");
     }
-    if lower == "/etc/sudoers"
+
+    let is_critical_sudoers = lower == "/etc/sudoers"
         || lower.starts_with("/etc/sudoers/")
         || lower.starts_with("/etc/sudoers.d")
-    {
+        || lower_raw == "/etc/sudoers"
+        || lower_raw.starts_with("/etc/sudoers/")
+        || lower_raw.starts_with("/etc/sudoers.d");
+    if is_critical_sudoers {
         bail!("access to critical system path '/etc/sudoers' is strictly prohibited");
     }
 
@@ -302,7 +369,14 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         || lower.ends_with("/.ssh")
         || lower == "~/.ssh"
         || lower.starts_with("~/.ssh/")
-        || lower.contains("$home/.ssh");
+        || lower.contains("$home/.ssh")
+        || lower_raw == ".ssh"
+        || lower_raw.starts_with(".ssh/")
+        || lower_raw.contains("/.ssh/")
+        || lower_raw.ends_with("/.ssh")
+        || lower_raw == "~/.ssh"
+        || lower_raw.starts_with("~/.ssh/")
+        || lower_raw.contains("$home/.ssh");
     if is_ssh {
         bail!("credential directory '.ssh' is strictly prohibited in allow rules");
     }
@@ -313,7 +387,14 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         || lower.ends_with("/.aws")
         || lower == "~/.aws"
         || lower.starts_with("~/.aws/")
-        || lower.contains("$home/.aws");
+        || lower.contains("$home/.aws")
+        || lower_raw == ".aws"
+        || lower_raw.starts_with(".aws/")
+        || lower_raw.contains("/.aws/")
+        || lower_raw.ends_with("/.aws")
+        || lower_raw == "~/.aws"
+        || lower_raw.starts_with("~/.aws/")
+        || lower_raw.contains("$home/.aws");
     if is_aws {
         bail!("credential directory '.aws' is strictly prohibited in allow rules");
     }
@@ -323,12 +404,22 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         || lower.starts_with(".env_")
         || lower.ends_with("/.env")
         || lower.contains("/.env.")
-        || lower.contains("/.env_");
+        || lower.contains("/.env_")
+        || lower_raw == ".env"
+        || lower_raw.starts_with(".env.")
+        || lower_raw.starts_with(".env_")
+        || lower_raw.ends_with("/.env")
+        || lower_raw.contains("/.env.")
+        || lower_raw.contains("/.env_");
     if is_env {
         bail!("environment secret file '.env*' is strictly prohibited in allow rules");
     }
 
-    if lower.contains(".git-credentials") || lower.contains(".netrc") {
+    if lower.contains(".git-credentials")
+        || lower.contains(".netrc")
+        || lower_raw.contains(".git-credentials")
+        || lower_raw.contains(".netrc")
+    {
         bail!("credential file is strictly prohibited in allow rules");
     }
 
@@ -345,6 +436,12 @@ pub fn validate_deny_path_syntax(raw: &str) -> Result<()> {
         bail!("backslashes ('\\') are strictly prohibited; use standard '/' path separators");
     }
     for segment in trimmed.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in deny rules");
+        }
+    }
+    let normalized = normalize_path_for_validation(trimmed);
+    for segment in normalized.split('/') {
         if segment == ".." {
             bail!("directory traversal ('..') is strictly prohibited in deny rules");
         }
@@ -1191,6 +1288,10 @@ mod tests {
         assert!(validate_dangerous_path("/*").is_err());
         assert!(validate_dangerous_path("*").is_err());
         assert!(validate_dangerous_path("/*.*").is_err());
+        assert!(validate_dangerous_path("//").is_err());
+        assert!(validate_dangerous_path("///").is_err());
+        assert!(validate_dangerous_path("/./").is_err());
+        assert!(validate_dangerous_path("/.").is_err());
     }
 
     #[test]
@@ -1224,6 +1325,10 @@ mod tests {
         assert!(validate_dangerous_path("/etc/shadow").is_err());
         assert!(validate_dangerous_path("/etc/passwd").is_err());
         assert!(validate_dangerous_path("/etc/sudoers").is_err());
+        assert!(validate_dangerous_path("//etc/shadow").is_err());
+        assert!(validate_dangerous_path("//etc/passwd").is_err());
+        assert!(validate_dangerous_path("/etc//shadow").is_err());
+        assert!(validate_dangerous_path("/etc/./shadow").is_err());
     }
 
     #[test]

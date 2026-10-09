@@ -2331,6 +2331,12 @@ fn test_m4_policy_edit_ast_preservation_and_atomic_rollback() {
     assert!(validate_dangerous_path(".env").is_err());
     assert!(validate_dangerous_path("/etc/shadow").is_err());
     assert!(validate_dangerous_path("foo\\bar").is_err());
+    assert!(validate_dangerous_path("//").is_err());
+    assert!(validate_dangerous_path("///").is_err());
+    assert!(validate_dangerous_path("//etc/shadow").is_err());
+    assert!(validate_dangerous_path("//etc/passwd").is_err());
+    assert!(validate_dangerous_path("/etc//shadow").is_err());
+    assert!(validate_dangerous_path("/etc/./shadow").is_err());
 
     // 18.2: Initial policy with comments
     let initial_toml = r#"# Top comment
@@ -2384,6 +2390,21 @@ allow_write = ["src"]
     assert!(net_content.contains("evil.com"));
 
     let _ = std::fs::remove_dir_all(&test_dir);
+}
+
+// ----------------------------------------------------------------------------
+// Test 18-B: Milestone 4 - Policy Edit: Dangerous Paths Normalized & Rejected
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_edit_dangerous_paths_rejected() {
+    use vetto::policy::edit::validate_dangerous_path;
+
+    assert!(validate_dangerous_path("//").is_err());
+    assert!(validate_dangerous_path("///").is_err());
+    assert!(validate_dangerous_path("//etc/shadow").is_err());
+    assert!(validate_dangerous_path("//etc/passwd").is_err());
+    assert!(validate_dangerous_path("/etc//shadow").is_err());
+    assert!(validate_dangerous_path("/etc/./shadow").is_err());
 }
 
 // ----------------------------------------------------------------------------
