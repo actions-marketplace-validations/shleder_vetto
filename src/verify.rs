@@ -419,7 +419,8 @@ fn battery_contract(
         p == project || p == Path::new(".") || project.starts_with(p) || p.starts_with(project)
     }) || contract.filesystem.allow_write.iter().any(|p| {
         p == project || p == Path::new(".") || project.starts_with(p) || p.starts_with(project)
-    }) || pol.in_read_scope(project) || pol.in_write_scope(project);
+    }) || pol.in_read_scope(project)
+        || pol.in_write_scope(project);
     if ws_granted {
         script_args.push("READCHECK:.".to_string());
     }
