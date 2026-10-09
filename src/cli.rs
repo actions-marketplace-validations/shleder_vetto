@@ -290,10 +290,10 @@ pub enum Command {
         #[arg(long)]
         global: bool,
     },
-    /// Explicitly deny reads of a path (secret masking) in the policy
+    /// Explicitly deny reads of a path (secret masking) or network domain in the policy
     Deny {
-        /// Filesystem path to mask, e.g. ~/.aws/credentials
-        #[arg(value_name = "PATH")]
+        /// Filesystem path or network domain to deny, e.g. ~/.aws/credentials or evil.com
+        #[arg(value_name = "PATH|DOMAIN")]
         target: Option<String>,
         /// Deny preset name (ssh, aws, gcp, kube, docker, antigravity, etc.)
         #[arg(long, value_name = "NAME")]
@@ -301,6 +301,9 @@ pub enum Command {
         /// Treat target as a glob pattern (e.g. **/*.pem) and add to deny_glob
         #[arg(long = "glob")]
         glob: bool,
+        /// Treat target as a network domain to deny
+        #[arg(long = "net")]
+        net: bool,
         /// Edit ~/.vetto/config.toml instead of the project policy
         #[arg(long)]
         global: bool,
@@ -339,6 +342,18 @@ pub enum Command {
         /// Emit machine-readable JSON.
         #[arg(long)]
         json: bool,
+
+        /// Built-in policy profile to verify (e.g. claude, codex, default, strict)
+        #[arg(long, value_name = "NAME")]
+        profile: Option<String>,
+
+        /// Explicit policy TOML layer applied after the profile
+        #[arg(long, value_name = "PATH")]
+        policy: Option<PathBuf>,
+
+        /// Fast simulated verification mode (evaluates sealed contract without sandbox spawn)
+        #[arg(long)]
+        simulate: bool,
     },
     /// Run an agent command under the Vetto sandbox supervisor
     #[command(alias = "exec")]
@@ -610,6 +625,9 @@ pub enum PolicyCommand {
         /// Exit non-zero when any finding is reported.
         #[arg(long)]
         strict: bool,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Import permissions from external agent configurations (e.g. claude, codex)
     Import {

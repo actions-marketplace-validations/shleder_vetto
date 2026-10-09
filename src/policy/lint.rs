@@ -9,11 +9,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 
 use super::loader::{load_with_options, PolicyLoadOptions};
 use super::types::{Policy, Tier};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Misconfiguration that materially weakens the sandbox boundary.
     High,
@@ -22,19 +24,35 @@ pub enum Severity {
 }
 
 impl Severity {
-    fn label(&self) -> &'static str {
+    pub fn label(&self) -> &'static str {
         match self {
             Severity::High => "high",
             Severity::Warn => "warn",
         }
     }
+
+    pub fn display_badge(&self) -> (&'static str, &'static str) {
+        match self {
+            Severity::High => ("[ERROR]", "\x1b[1;31m"),
+            Severity::Warn => ("[WARN] ", "\x1b[1;33m"),
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
     pub severity: Severity,
     pub rule: &'static str,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LintReport {
+    pub success: bool,
+    pub findings_count: usize,
+    pub high_count: usize,
+    pub warn_count: usize,
+    pub findings: Vec<Finding>,
 }
 
 /// Load the effective policy (like a supervised session, network off), run
@@ -42,6 +60,7 @@ pub struct Finding {
 /// reported, or if `strict` is true and any finding is reported.
 pub fn run_cli(
     strict: bool,
+    json: bool,
     profile: &str,
     policy_path: Option<&Path>,
     tier: Option<Tier>,
@@ -69,8 +88,34 @@ pub fn run_cli(
     )?;
 
     let findings = evaluate_with_project(&policy, &home, Some(&project));
+    let has_high = findings.iter().any(|f| f.severity == Severity::High);
+    let success = !has_high && (!strict || findings.is_empty());
+
+    if json {
+        let high_count = findings.iter().filter(|f| f.severity == Severity::High).count();
+        let warn_count = findings.iter().filter(|f| f.severity == Severity::Warn).count();
+        let report = LintReport {
+            success,
+            findings_count: findings.len(),
+            high_count,
+            warn_count,
+            findings,
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        print_findings_terminal(&findings);
+    }
+
+    if !success {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// Print formatted findings to terminal.
+pub fn print_findings_terminal(findings: &[Finding]) {
     println!("vetto policy lint: {} finding(s)", findings.len());
-    for finding in &findings {
+    for finding in findings {
         println!(
             "  [{}] {}: {}",
             finding.severity.label(),
@@ -78,12 +123,6 @@ pub fn run_cli(
             finding.message
         );
     }
-
-    let has_high = findings.iter().any(|f| f.severity == Severity::High);
-    if has_high || (strict && !findings.is_empty()) {
-        std::process::exit(1);
-    }
-    Ok(())
 }
 
 /// Run every rule against a resolved policy. `home` is passed explicitly
@@ -133,6 +172,14 @@ pub fn evaluate_with_project(policy: &Policy, home: &Path, project: Option<&Path
             findings.push(finding);
         }
     }
+
+    // Milestone 4 security linter rules:
+    findings.extend(rule_root_wildcard(policy));
+    findings.extend(rule_dangerous_network_cidr(policy));
+    if let Some(finding) = rule_broad_tmp_write(policy) {
+        findings.push(finding);
+    }
+    findings.extend(rule_missing_secret_masking(policy, home, project));
 
     findings
 }
@@ -577,6 +624,167 @@ fn rule_workspace_outside_roots(policy: &Policy, project: &Path) -> Option<Findi
             project.display()
         ),
     })
+}
+
+fn is_root_pattern(p: &Path) -> bool {
+    let s = p.to_string_lossy().trim().to_string();
+    if s == "/" || s == "/*" || s == "\\" || s == "\\*" || s == "/*.*" {
+        return true;
+    }
+    if p == Path::new("/") {
+        return true;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if s.len() >= 2 && s.chars().nth(1) == Some(':') {
+            let rest = &s[2..];
+            if rest == "\\" || rest == "/" || rest == "\\*" || rest == "/*" || rest.is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// R13 (high): wildcard on root ('/', '/*', '\') granting entire host filesystem access.
+pub fn rule_root_wildcard(policy: &Policy) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for root in &policy.allow_write {
+        if is_root_pattern(root) {
+            findings.push(Finding {
+                severity: Severity::High,
+                rule: "root-wildcard-write",
+                message: format!(
+                    "write root '{}' grants root wildcard access: unrestricted modification \
+                     of host filesystem causes catastrophic sandbox collapse",
+                    root.display()
+                ),
+            });
+        }
+    }
+    for root in &policy.allow_read {
+        if is_root_pattern(root) {
+            findings.push(Finding {
+                severity: Severity::High,
+                rule: "root-wildcard-read",
+                message: format!(
+                    "read root '{}' grants root wildcard access: entire host filesystem \
+                     is exposed to unauthorized inspection",
+                    root.display()
+                ),
+            });
+        }
+    }
+    findings
+}
+
+/// R14 (high): dangerous network CIDR ('0.0.0.0/0', '::/0') destroying outbound network isolation.
+pub fn rule_dangerous_network_cidr(policy: &Policy) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for cidr in &policy.allow_cidr {
+        let trimmed = cidr.trim();
+        if trimmed == "0.0.0.0/0"
+            || trimmed == "::/0"
+            || trimmed.starts_with("0.0.0.0/0:")
+            || trimmed.starts_with("::/0:")
+        {
+            findings.push(Finding {
+                severity: Severity::High,
+                rule: "dangerous-network-cidr",
+                message: format!(
+                    "dangerous network CIDR '{trimmed}' permits outbound connections to any \
+                     destination on the internet, destroying network isolation"
+                ),
+            });
+        }
+    }
+    findings
+}
+
+/// R15 (warn): broad /tmp write rules without private tmpfs or subdirectory isolation.
+pub fn rule_broad_tmp_write(policy: &Policy) -> Option<Finding> {
+    for root in &policy.allow_write {
+        let is_bare_tmp = root == Path::new("/tmp")
+            || root == Path::new("/var/tmp")
+            || root == Path::new("/private/tmp");
+        if is_bare_tmp && !policy.tmpfs_tmp {
+            return Some(Finding {
+                severity: Severity::Warn,
+                rule: "broad-tmp-write",
+                message: format!(
+                    "write root '{}' is granted without subdirectory isolation or private tmpfs: \
+                     shared /tmp permits symlink races and socket tampering; use '--tmpfs-tmp' \
+                     or an isolated subdirectory",
+                    root.display()
+                ),
+            });
+        }
+    }
+    None
+}
+
+/// R16 (warn/high): missing secret masking for existing credential stores or workspace .env files.
+pub fn rule_missing_secret_masking(
+    policy: &Policy,
+    home: &Path,
+    project: Option<&Path>,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    let host_secrets = [".ssh", ".aws", ".gnupg", ".docker", ".netrc"];
+    for s in host_secrets {
+        let sec_path = home.join(s);
+        if sec_path.exists() {
+            let masked = policy.deny_resolved.iter().any(|d| {
+                d.path == sec_path
+                    || (d.path.is_relative() && home.join(&d.path) == sec_path)
+                    || sec_path.starts_with(&d.path)
+            }) || policy.deny_read.iter().any(|d| {
+                d == &sec_path
+                    || (d.is_relative() && home.join(d) == sec_path)
+                    || sec_path.starts_with(d)
+            });
+            if !masked {
+                findings.push(Finding {
+                    severity: Severity::Warn,
+                    rule: "missing-secret-masking",
+                    message: format!(
+                        "host credential store '{}' exists but is not masked in policy deny \
+                         rules: credentials may be exposed",
+                        sec_path.display()
+                    ),
+                });
+            }
+        }
+    }
+
+    if let Some(proj) = project {
+        for env_file in [".env", ".env.local", ".env.production", ".env.development"] {
+            let env_path = proj.join(env_file);
+            if env_path.exists() {
+                let masked = policy.deny_resolved.iter().any(|d| {
+                    d.path == env_path
+                        || (d.path.is_relative() && proj.join(&d.path) == env_path)
+                        || env_path.starts_with(&d.path)
+                }) || policy.deny_read.iter().any(|d| {
+                    d == &env_path
+                        || (d.is_relative() && proj.join(d) == env_path)
+                        || env_path.starts_with(d)
+                });
+                if !masked {
+                    findings.push(Finding {
+                        severity: Severity::High,
+                        rule: "missing-secret-masking",
+                        message: format!(
+                            "workspace secret file '{}' exists but is not masked by \
+                             display_only_deny or deny_read",
+                            env_path.display()
+                        ),
+                    });
+                }
+            }
+        }
+    }
+    findings
 }
 
 #[cfg(test)]
@@ -1055,5 +1263,72 @@ mod tests {
             !should_fail(&empty_findings, true),
             "Empty succeeds with strict"
         );
+    }
+
+    #[test]
+    fn test_unit_rule_root_wildcard() {
+        let mut policy = Policy::default();
+        policy.allow_write = vec![PathBuf::from("/")];
+        let f = rule_root_wildcard(&policy);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].severity, Severity::High);
+        assert_eq!(f[0].rule, "root-wildcard-write");
+
+        policy.allow_write.clear();
+        policy.allow_read = vec![PathBuf::from("/*")];
+        let f_read = rule_root_wildcard(&policy);
+        assert_eq!(f_read.len(), 1);
+        assert_eq!(f_read[0].severity, Severity::High);
+        assert_eq!(f_read[0].rule, "root-wildcard-read");
+
+        policy.allow_read = vec![PathBuf::from("/home/user/project")];
+        assert!(rule_root_wildcard(&policy).is_empty());
+    }
+
+    #[test]
+    fn test_unit_rule_dangerous_network_cidr() {
+        let mut policy = Policy::default();
+        policy.allow_cidr = vec!["0.0.0.0/0".to_string(), "::/0".to_string()];
+        let f = rule_dangerous_network_cidr(&policy);
+        assert_eq!(f.len(), 2);
+        assert_eq!(f[0].severity, Severity::High);
+        assert_eq!(f[0].rule, "dangerous-network-cidr");
+        assert_eq!(f[1].severity, Severity::High);
+
+        policy.allow_cidr = vec!["10.0.0.0/8".to_string()];
+        assert!(rule_dangerous_network_cidr(&policy).is_empty());
+    }
+
+    #[test]
+    fn test_unit_rule_broad_tmp_write() {
+        let mut policy = Policy::default();
+        policy.allow_write = vec![PathBuf::from("/tmp")];
+        policy.tmpfs_tmp = false;
+        let f = rule_broad_tmp_write(&policy);
+        assert!(f.is_some());
+        assert_eq!(f.unwrap().severity, Severity::Warn);
+
+        policy.tmpfs_tmp = true;
+        assert!(rule_broad_tmp_write(&policy).is_none());
+    }
+
+    #[test]
+    fn test_unit_lint_report_json() {
+        let report = LintReport {
+            success: false,
+            findings_count: 1,
+            high_count: 1,
+            warn_count: 0,
+            findings: vec![Finding {
+                severity: Severity::High,
+                rule: "root-wildcard-write",
+                message: "test message".to_string(),
+            }],
+        };
+        let json = serde_json::to_string(&report).expect("serialize report");
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse json");
+        assert_eq!(val["success"], false);
+        assert_eq!(val["high_count"], 1);
+        assert_eq!(val["findings"][0]["severity"], "high");
     }
 }

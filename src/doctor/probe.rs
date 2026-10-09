@@ -65,6 +65,16 @@ const PROBE_SCRIPT: &str = r##"for p in "$@"; do
         echo "WRITE|denied"
       fi
       ;;
+    READCHECK:*)
+      target=${p#READCHECK:}
+      if [ -d "$target" ] && ls "$target" >/dev/null 2>&1; then
+        echo "READ|$target|readable"
+      elif [ -f "$target" ] && dd if="$target" of=/dev/null bs=1 count=1 >/dev/null 2>&1; then
+        echo "READ|$target|readable"
+      else
+        echo "READ|$target|unreadable"
+      fi
+      ;;
     *)
       if [ -d "$p" ]; then
         leak=0

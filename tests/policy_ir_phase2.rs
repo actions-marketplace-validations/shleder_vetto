@@ -2176,3 +2176,387 @@ fn test_m3_schema_typo_matrix_fail_closed_coverage() {
         );
     }
 }
+
+// ----------------------------------------------------------------------------
+// Test 15: Milestone 4 - Security Linter: Root Wildcard Detection
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_linter_root_wildcard_detection() {
+    use std::path::PathBuf;
+    use vetto::policy::lint::{rule_root_wildcard, Severity};
+    use vetto::policy::types::Policy;
+
+    // 15.1: Write root "/" must trigger High severity root-wildcard-write
+    let mut policy = Policy::default();
+    policy.allow_write = vec![PathBuf::from("/")];
+    let findings = rule_root_wildcard(&policy);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::High);
+    assert_eq!(findings[0].rule, "root-wildcard-write");
+    assert!(findings[0].message.contains("root wildcard"));
+
+    // 15.2: Write root "/*" must also trigger
+    policy.allow_write = vec![PathBuf::from("/*")];
+    let findings_star = rule_root_wildcard(&policy);
+    assert_eq!(findings_star.len(), 1);
+    assert_eq!(findings_star[0].severity, Severity::High);
+
+    // 15.3: Read root "/" must trigger root-wildcard-read
+    policy.allow_write.clear();
+    policy.allow_read = vec![PathBuf::from("/")];
+    let findings_read = rule_root_wildcard(&policy);
+    assert_eq!(findings_read.len(), 1);
+    assert_eq!(findings_read[0].severity, Severity::High);
+    assert_eq!(findings_read[0].rule, "root-wildcard-read");
+
+    // 15.4: Normal scoped path must not trigger
+    policy.allow_read = vec![PathBuf::from("/home/user/project")];
+    assert!(rule_root_wildcard(&policy).is_empty());
+}
+
+// ----------------------------------------------------------------------------
+// Test 16: Milestone 4 - Security Linter: Dangerous Network CIDR & Broad /tmp
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_linter_dangerous_cidr_and_tmp_isolation() {
+    use std::path::PathBuf;
+    use vetto::policy::lint::{rule_broad_tmp_write, rule_dangerous_network_cidr, Severity};
+    use vetto::policy::types::Policy;
+
+    // 16.1: Dangerous CIDR 0.0.0.0/0 must trigger High severity
+    let mut policy = Policy::default();
+    policy.allow_cidr = vec!["0.0.0.0/0".to_string()];
+    let findings = rule_dangerous_network_cidr(&policy);
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::High);
+    assert_eq!(findings[0].rule, "dangerous-network-cidr");
+
+    // 16.2: Dangerous IPv6 CIDR ::/0 must trigger High severity
+    policy.allow_cidr = vec!["::/0".to_string()];
+    let findings_v6 = rule_dangerous_network_cidr(&policy);
+    assert_eq!(findings_v6.len(), 1);
+    assert_eq!(findings_v6[0].severity, Severity::High);
+
+    // 16.3: Safe scoped CIDR must not trigger
+    policy.allow_cidr = vec!["10.0.0.0/8".to_string(), "192.168.1.0/24".to_string()];
+    assert!(rule_dangerous_network_cidr(&policy).is_empty());
+
+    // 16.4: Broad /tmp write without tmpfs_tmp must trigger Warn
+    policy.allow_write = vec![PathBuf::from("/tmp")];
+    policy.tmpfs_tmp = false;
+    let finding_tmp = rule_broad_tmp_write(&policy);
+    assert!(finding_tmp.is_some());
+    let f = finding_tmp.unwrap();
+    assert_eq!(f.severity, Severity::Warn);
+    assert_eq!(f.rule, "broad-tmp-write");
+
+    // 16.5: /tmp write WITH tmpfs_tmp isolation must be clean
+    policy.tmpfs_tmp = true;
+    assert!(rule_broad_tmp_write(&policy).is_none());
+}
+
+// ----------------------------------------------------------------------------
+// Test 17: Milestone 4 - Security Linter: Missing Secret Masking & JSON Schema
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_linter_missing_secrets_and_json_serialization() {
+    use std::path::PathBuf;
+    use vetto::policy::lint::{rule_missing_secret_masking, Finding, LintReport, Severity};
+    use vetto::policy::types::Policy;
+
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp");
+    let test_home = temp_dir.join(format!("vetto_lint_home_{}", std::process::id()));
+    let test_proj = temp_dir.join(format!("vetto_lint_proj_{}", std::process::id()));
+    std::fs::create_dir_all(&test_home).expect("create test home");
+    std::fs::create_dir_all(&test_proj).expect("create test proj");
+
+    // Create host secret directory .ssh and project secret .env
+    std::fs::create_dir_all(test_home.join(".ssh")).expect("create fake .ssh");
+    std::fs::write(test_proj.join(".env"), "SECRET_KEY=12345").expect("create fake .env");
+
+    let policy = Policy::default();
+    let findings = rule_missing_secret_masking(&policy, &test_home, Some(&test_proj));
+    assert!(findings
+        .iter()
+        .any(|f| f.rule == "missing-secret-masking" && f.severity == Severity::Warn));
+    assert!(findings
+        .iter()
+        .any(|f| f.rule == "missing-secret-masking" && f.severity == Severity::High));
+
+    // Test LintReport JSON serialization schema
+    let report = LintReport {
+        success: false,
+        findings_count: findings.len(),
+        high_count: 1,
+        warn_count: 1,
+        findings: findings.clone(),
+    };
+    let json_str = serde_json::to_string(&report).expect("serialize report");
+    let json_val: serde_json::Value = serde_json::from_str(&json_str).expect("parse json");
+    assert_eq!(json_val["success"], false);
+    assert_eq!(json_val["findings_count"], findings.len());
+    assert!(json_val["findings"].is_array());
+
+    let _ = std::fs::remove_dir_all(&test_home);
+    let _ = std::fs::remove_dir_all(&test_proj);
+}
+
+// ----------------------------------------------------------------------------
+// Test 18: Milestone 4 - Policy Edit: AST Preservation, Dangerous Paths, Atomic .bak
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_edit_ast_preservation_and_atomic_rollback() {
+    use std::path::Path;
+    use vetto::policy::edit::{
+        allow_domain, allow_path, deny_domain, deny_path, validate_dangerous_path,
+    };
+
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp");
+    let test_dir = temp_dir.join(format!("vetto_m4_edit_{}", std::process::id()));
+    std::fs::create_dir_all(&test_dir).expect("create test dir");
+    let policy_path = test_dir.join("policy.toml");
+
+    // 18.1: Dangerous paths must be rejected by validator
+    assert!(validate_dangerous_path("/").is_err());
+    assert!(validate_dangerous_path("/*").is_err());
+    assert!(validate_dangerous_path("..").is_err());
+    assert!(validate_dangerous_path("../foo").is_err());
+    assert!(validate_dangerous_path("~/.ssh").is_err());
+    assert!(validate_dangerous_path(".env").is_err());
+    assert!(validate_dangerous_path("/etc/shadow").is_err());
+    assert!(validate_dangerous_path("foo\\bar").is_err());
+
+    // 18.2: Initial policy with comments
+    let initial_toml = r#"# Top comment
+[metadata]
+name = "test-edit-profile" # inline comment
+
+[filesystem]
+# Allowed paths
+allow_write = ["src"]
+"#;
+    std::fs::write(&policy_path, initial_toml).expect("write initial toml");
+
+    // 18.3: allow_path creates .bak and preserves comments
+    let updated = allow_path("target", false, false, Some(&policy_path))
+        .expect("allow_path must succeed");
+    assert_eq!(updated, policy_path);
+    let bak_path = Path::new(&format!("{}.bak", policy_path.display())).to_path_buf();
+    assert!(bak_path.exists(), ".bak backup file must be created");
+    let bak_content = std::fs::read_to_string(&bak_path).expect("read bak");
+    assert_eq!(bak_content, initial_toml);
+
+    let new_content = std::fs::read_to_string(&policy_path).expect("read new");
+    assert!(new_content.contains("# Top comment"), "Comments must be preserved");
+    assert!(new_content.contains("# inline comment"));
+    assert!(new_content.contains("\"target\""));
+
+    // 18.4: allow_path rejects dangerous path
+    assert!(allow_path("/etc/shadow", false, false, Some(&policy_path)).is_err());
+
+    // 18.5: deny_path adds to display_only_deny
+    deny_path("~/.aws/credentials", false, Some(&policy_path))
+        .expect("deny_path must succeed");
+    let content_after_deny = std::fs::read_to_string(&policy_path).expect("read after deny");
+    assert!(content_after_deny.contains("display_only_deny"));
+    assert!(content_after_deny.contains("~/.aws/credentials"));
+
+    // 18.6: allow_domain and deny_domain
+    allow_domain("api.anthropic.com", Some("100mb"), false, Some(&policy_path))
+        .expect("allow_domain must succeed");
+    deny_domain("evil.com", false, Some(&policy_path))
+        .expect("deny_domain must succeed");
+
+    let net_content = std::fs::read_to_string(&policy_path).expect("read net content");
+    assert!(net_content.contains("api.anthropic.com"));
+    assert!(net_content.contains("evil.com"));
+
+    let _ = std::fs::remove_dir_all(&test_dir);
+}
+
+// ----------------------------------------------------------------------------
+// Test 19: Milestone 4 - Sandbox Preflight Verify: Fast Simulated Verify & JSON
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
+    use std::path::PathBuf;
+    use vetto::policy::types::{NetMode, Policy};
+    use vetto::verify::battery_simulated;
+
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp");
+    let ws = temp_dir.join(format!("vetto_m4_verify_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let mut policy = Policy::default();
+    policy.name = "verify-test".to_string();
+    policy.allow_write = vec![ws.clone()];
+    policy.allow_read = vec![PathBuf::from("/usr")];
+
+    let net = NetMode::Off;
+    let contract_input = vetto::policy_ir::compiler::EffectivePolicyInput {
+        policy: &policy,
+        argv: &["verify-probe".to_string()],
+        cwd: &ws,
+        env: &std::collections::BTreeMap::new(),
+        net: &net,
+        nonce: "verify-test-nonce",
+        timeout: None,
+        tier: None,
+        backend: "simulated".to_string(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let contract = vetto::policy_ir::compiler::PolicyCompiler::compile_effective(contract_input)
+        .expect("compile effective contract");
+
+    // 19.1: Fast simulated battery execution (<15ms, in practice <1ms)
+    let start = std::time::Instant::now();
+    let report = battery_simulated(&contract, &net, start);
+    assert_eq!(report.status(), "pass");
+    assert_eq!(report.tier, "simulated");
+    assert_eq!(report.leaks(), 0);
+    assert!(report.duration_ms < 15, "Duration must be < 15ms");
+    assert_eq!(report.sealed_contract_hash, contract.sealed_contract_hash);
+
+    // 19.2: JSON Schema validation
+    let json = report.to_json();
+    assert_eq!(json["status"], "pass");
+    assert_eq!(json["sealed_contract_hash"], contract.sealed_contract_hash);
+    let checks = json["checks"].as_array().expect("checks array");
+    assert_eq!(checks.len(), 4);
+    assert_eq!(checks[0]["name"], "workspace-read");
+    assert_eq!(checks[1]["name"], "secret-mask-deny");
+    assert_eq!(checks[2]["name"], "network-block");
+    assert_eq!(checks[3]["name"], "write-outside");
+
+    // 19.3: SHA-256 sealed contract integrity verification (INV-36)
+    assert!(contract.verify_sha256(), "Contract SHA-256 seal must verify");
+    let mut tampered = contract.clone();
+    tampered.resources.max_pids = 999999;
+    assert!(
+        !tampered.verify_sha256(),
+        "Tampered contract must fail SHA-256 seal verification (INV-36)"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Test 20: Milestone 4 - Policy Explain: Effective Rights Tree & explain_why
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m4_policy_explain_effective_rights_and_why_remediation() {
+    use std::path::PathBuf;
+    use vetto::policy::explain::explain_why;
+    use vetto::policy::types::{DenyEntry, NetMode, Policy};
+    use vetto::policy_ir::compiler::{EffectivePolicyInput, PolicyCompiler};
+
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp");
+    let ws = temp_dir.join(format!("vetto_m4_explain_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let mut policy = Policy::default();
+    policy.name = "explain-m4".to_string();
+    policy.allow_write = vec![ws.clone()];
+    policy.allow_read = vec![PathBuf::from("/usr")];
+    policy.deny_write = vec![ws.join("locked.txt")];
+    policy.deny_resolved = vec![DenyEntry {
+        path: ws.join(".env"),
+        is_dir: false,
+    }];
+    policy.network_allow = vec!["api.anthropic.com".to_string()];
+    policy.net_connect_ports = vec![443];
+    policy.limits.cpu_seconds = Some(60);
+
+    let net_mode = NetMode::Allowlist(policy.network_allow.clone());
+    let contract = PolicyCompiler::compile_effective(EffectivePolicyInput {
+        policy: &policy,
+        argv: &["agent".to_string()],
+        cwd: &ws,
+        env: &std::collections::BTreeMap::new(),
+        net: &net_mode,
+        nonce: "test-nonce-m4",
+        timeout: None,
+        tier: None,
+        backend: "none".to_string(),
+        observe_seccomp: false,
+        debug_ports: None,
+    })
+    .expect("compile contract");
+
+    // 20.1: explain_why remediation
+    let exp_ws = explain_why(&policy, &ws.join("file.rs"), &ws);
+    assert_eq!(exp_ws.access, "WRITABLE");
+
+    let exp_lock = explain_why(&policy, &ws.join("locked.txt"), &ws);
+    assert_eq!(exp_lock.access, "READ_ONLY");
+    assert_eq!(exp_lock.rule_type, "deny_write");
+
+    let exp_sec = explain_why(&policy, &ws.join(".env"), &ws);
+    assert_eq!(exp_sec.access, "DENIED");
+    assert_eq!(exp_sec.rule_type, "display_only_deny");
+
+    let exp_out = explain_why(&policy, &PathBuf::from("/var/log/secret.log"), &ws);
+    assert_eq!(exp_out.access, "BLOCKED");
+
+    // 20.2: Structured Rights Hierarchy in JSON
+    let masked_json = policy
+        .deny_resolved
+        .iter()
+        .map(|e| serde_json::json!({ "path": e.path.display().to_string(), "is_dir": e.is_dir }))
+        .collect::<Vec<_>>();
+
+    let explain_json = serde_json::json!({
+        "filesystem": {
+            "workspace_root": contract.filesystem.workspace_root.display().to_string(),
+            "allow_write": policy
+                .allow_write
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+            "allow_read": policy
+                .allow_read
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+            "masked_secrets": masked_json,
+        },
+        "process_execution": {
+            "invoked_binary": contract.agent_identity.invoked_binary.display().to_string(),
+            "allowed_binaries": contract
+                .filesystem
+                .allow_execute
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+        },
+        "network": {
+            "mode": net_mode.label(),
+            "allowed_domains": policy.network_allow.clone(),
+            "allowed_ports": policy.net_connect_ports.clone(),
+        },
+        "quotas": {
+            "cpu": {
+                "rlimit_seconds": policy.limits.cpu_seconds,
+                "effective_percent": contract.resources.max_cpu_percent,
+            },
+            "memory": { "effective_bytes": contract.resources.max_memory_bytes },
+            "pids": { "effective_pids": contract.resources.max_pids },
+        }
+    });
+
+    assert_eq!(explain_json["network"]["mode"], "allowlist");
+    assert_eq!(explain_json["filesystem"]["workspace_root"], ws.display().to_string());
+    assert_eq!(explain_json["quotas"]["cpu"]["rlimit_seconds"], 60);
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
