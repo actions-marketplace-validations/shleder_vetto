@@ -56,3 +56,9 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.codeium.com",
+    "windsurf.codeium.com",
+]

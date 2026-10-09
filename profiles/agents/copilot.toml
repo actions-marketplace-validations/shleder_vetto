@@ -41,3 +41,9 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.github.com",
+    "copilot-proxy.githubusercontent.com",
+]

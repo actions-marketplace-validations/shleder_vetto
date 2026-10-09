@@ -1763,3 +1763,416 @@ fn test_verdict_shadow_mode_severed_evidence_priority() {
     assert_eq!(verdict.security_badge(), "INCONCLUSIVE [STRONG]");
     assert!(verdict.reason.contains("dropped events"));
 }
+
+// ============================================================================
+// Milestone 3: Fail-Closed Loader, Schema & Real Agent Presets
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Test 8: Preset Resolution For All 32 Known Agents (Goal 2.6 / R6)
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_preset_resolution_all_32_agents() {
+    for agent_name in vetto::policy::defaults::AGENT_PROFILE_NAMES {
+        // 1. resolve_preset must resolve agent to path patterns
+        let resolved = vetto::policy::presets::resolve_preset(agent_name);
+        assert!(
+            resolved.is_some(),
+            "Agent preset '{agent_name}' must be resolved by resolve_preset"
+        );
+        let paths = resolved.unwrap();
+        assert!(
+            !paths.is_empty(),
+            "Agent preset '{agent_name}' must resolve to at least one path pattern"
+        );
+        for path in paths {
+            assert!(
+                path.starts_with("$HOME") || path.starts_with("/"),
+                "Path pattern '{path}' for agent '{agent_name}' must be formatted properly"
+            );
+        }
+
+        // 2. Must be present in KNOWN_PRESETS
+        assert!(
+            vetto::policy::presets::KNOWN_PRESETS.contains(&agent_name),
+            "Agent preset '{agent_name}' must be registered in KNOWN_PRESETS"
+        );
+
+        // 3. Builtin embedded TOML profile must be non-empty
+        let toml_str = vetto::policy::defaults::agent_builtin(agent_name);
+        assert!(
+            toml_str.is_some(),
+            "Agent preset '{agent_name}' must have embedded TOML profile"
+        );
+        let toml_content = toml_str.unwrap();
+        assert!(
+            !toml_content.trim().is_empty(),
+            "Agent preset '{agent_name}' TOML profile must not be empty"
+        );
+
+        // 4. Case-insensitivity check
+        let upper_name = agent_name.to_ascii_uppercase();
+        let upper_resolved = vetto::policy::presets::resolve_preset(&upper_name);
+        assert!(
+            upper_resolved.is_some(),
+            "Agent preset '{agent_name}' must resolve case-insensitively"
+        );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Test 9: deny_unknown_fields Enforced With Exit Code 125 (Goal 2.7 / R7)
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_deny_unknown_fields_typo_fails_closed_exit_125() {
+    // 9.1: Typo in filesystem section (`allow_reads` instead of `allow_read`)
+    let bad_toml_fs = r#"
+[metadata]
+name = "typo-fs-test"
+
+[filesystem]
+allow_reads = ["/tmp"]
+allow_write = ["/tmp"]
+"#;
+    let err_fs =
+        vetto::policy::loader::schema::parse_layer(bad_toml_fs, "test-bad-fs").unwrap_err();
+    let msg_fs = err_fs.to_string();
+    assert!(
+        msg_fs.contains("unknown field `allow_reads`"),
+        "Deserializer must reject unknown field `allow_reads`: {msg_fs}"
+    );
+    let exit_code_fs = vetto::exit_codes::map_error_to_exit_code(&err_fs);
+    assert_eq!(
+        exit_code_fs,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Typo in filesystem schema must yield exit code 125, got {exit_code_fs}"
+    );
+
+    // 9.2: Typo at root level (`[filesystems]` instead of `[filesystem]`)
+    let bad_toml_root = r#"
+[filesystems]
+allow_write = ["/tmp"]
+"#;
+    let err_root =
+        vetto::policy::loader::schema::parse_layer(bad_toml_root, "test-bad-root").unwrap_err();
+    let msg_root = err_root.to_string();
+    assert!(
+        msg_root.contains("unknown field `filesystems`"),
+        "Deserializer must reject unknown root field `filesystems`: {msg_root}"
+    );
+    let exit_code_root = vetto::exit_codes::map_error_to_exit_code(&err_root);
+    assert_eq!(
+        exit_code_root,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Typo in root section must yield exit code 125"
+    );
+
+    // 9.3: Typo in network section (`allowed_domains` instead of `allow_domains`)
+    let bad_toml_net = r#"
+[network]
+mode = "allowlist"
+allowed_domains = ["api.anthropic.com"]
+"#;
+    let err_net =
+        vetto::policy::loader::schema::parse_layer(bad_toml_net, "test-bad-net").unwrap_err();
+    let msg_net = err_net.to_string();
+    assert!(
+        msg_net.contains("unknown field `allowed_domains`"),
+        "Deserializer must reject unknown field `allowed_domains`: {msg_net}"
+    );
+    let exit_code_net = vetto::exit_codes::map_error_to_exit_code(&err_net);
+    assert_eq!(
+        exit_code_net,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Typo in network section must yield exit code 125"
+    );
+
+    // 9.4: Typo in limits section (`memory_limit` instead of `address_space_bytes`)
+    let bad_toml_limits = r#"
+[limits]
+memory_limit = 536870912
+"#;
+    let err_limits =
+        vetto::policy::loader::schema::parse_layer(bad_toml_limits, "test-bad-limits").unwrap_err();
+    let msg_limits = err_limits.to_string();
+    assert!(
+        msg_limits.contains("unknown field `memory_limit`"),
+        "Deserializer must reject unknown field `memory_limit`: {msg_limits}"
+    );
+    let exit_code_limits = vetto::exit_codes::map_error_to_exit_code(&err_limits);
+    assert_eq!(
+        exit_code_limits,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Typo in limits section must yield exit code 125"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Test 10: Unknown Profile or Agent Preset Fails Closed With Exit 125
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_unknown_profile_or_preset_fails_closed_exit_125() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m3_unk_{}", std::process::id()));
+    let home = temp_dir.join(format!("vetto_m3_home_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&ws);
+    let _ = std::fs::create_dir_all(&home);
+
+    // 10.1: Non-existent profile fails closed
+    let err_prof = vetto::policy::loader::load(
+        "totally_unknown_profile_xyz",
+        None,
+        &ws,
+        &home,
+        vetto::policy::Tier::Full,
+    )
+    .unwrap_err();
+    let msg_prof = err_prof.to_string();
+    assert!(
+        msg_prof.contains("unknown profile 'totally_unknown_profile_xyz'"),
+        "Must explicitly report unknown profile: {msg_prof}"
+    );
+    let exit_prof = vetto::exit_codes::map_error_to_exit_code(&err_prof);
+    assert_eq!(
+        exit_prof,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Unknown profile must yield exit code 125 fail-closed, got {exit_prof}"
+    );
+
+    // 10.2: Non-existent agent preset fails closed
+    let options = vetto::policy::loader::PolicyLoadOptions {
+        agent: Some("unknown_agent_vendor".to_string()),
+        ..Default::default()
+    };
+    let err_agent = vetto::policy::loader::load_with_options(
+        "default",
+        None,
+        &ws,
+        &home,
+        vetto::policy::Tier::Full,
+        &options,
+    )
+    .unwrap_err();
+    let msg_agent = err_agent.to_string();
+    assert!(
+        msg_agent.contains("unknown agent 'unknown_agent_vendor'"),
+        "Must explicitly report unknown agent: {msg_agent}"
+    );
+    let exit_agent = vetto::exit_codes::map_error_to_exit_code(&err_agent);
+    assert_eq!(
+        exit_agent,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Unknown agent preset must yield exit code 125 fail-closed, got {exit_agent}"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+// ----------------------------------------------------------------------------
+// Test 11: Explicit Permissive Profile vs Default Without Permissive Fallback
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_permissive_profile_explicit_vs_default_fail_closed() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m3_perm_{}", std::process::id()));
+    let home = temp_dir.join(format!("vetto_m3_perm_home_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&ws);
+    let _ = std::fs::create_dir_all(&home);
+
+    // 11.1: Explicit --profile permissive allows permissive execution
+    let perm_policy =
+        vetto::policy::loader::load("permissive", None, &ws, &home, vetto::policy::Tier::Full)
+            .expect("explicit permissive profile must load cleanly");
+    assert!(
+        perm_policy
+            .allow_read
+            .iter()
+            .any(|p| p.to_string_lossy() == "/etc"),
+        "Permissive policy must contain /etc in allow_read"
+    );
+
+    // 11.2: Default profile ("default") restricts /etc
+    let default_policy =
+        vetto::policy::loader::load("default", None, &ws, &home, vetto::policy::Tier::Full)
+            .expect("default profile must load cleanly");
+    assert!(
+        !default_policy
+            .allow_read
+            .iter()
+            .any(|p| p.to_string_lossy() == "/etc"),
+        "Default profile must NOT grant unrestricted /etc in allow_read"
+    );
+
+    // 11.3: Error during policy loading never falls back to permissive profile
+    let err = vetto::policy::loader::load(
+        "invalid_nonexistent_profile",
+        None,
+        &ws,
+        &home,
+        vetto::policy::Tier::Full,
+    );
+    assert!(
+        err.is_err(),
+        "Non-existent profile must error without permissive fallback"
+    );
+    let exit_code = vetto::exit_codes::map_error_to_exit_code(&err.unwrap_err());
+    assert_eq!(
+        exit_code,
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "Failed profile must produce exit code 125 fail-closed"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+// ----------------------------------------------------------------------------
+// Test 12: Deserialization of All 10 Profiles With [network] Sections
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_all_10_profiles_network_sections_deserialize() {
+    let target_10 = [
+        "antigravity",
+        "claude",
+        "codex",
+        "copilot",
+        "cursor",
+        "custom",
+        "devin",
+        "goose",
+        "openhands",
+        "windsurf",
+    ];
+
+    for agent in target_10 {
+        let toml_content = vetto::policy::defaults::agent_builtin(agent)
+            .unwrap_or_else(|| panic!("Built-in TOML profile for '{agent}' must exist"));
+
+        let layer = vetto::policy::loader::schema::parse_layer(
+            toml_content,
+            &format!("agent_profile:{agent}"),
+        )
+        .unwrap_or_else(|e| {
+            panic!("Profile '{agent}' must deserialize into RawLayer without error: {e}")
+        });
+
+        assert!(
+            layer.network.is_some(),
+            "Agent profile '{agent}' must have an explicit [network] section"
+        );
+        let net = layer.network.as_ref().unwrap();
+        let has_mode = net.mode.is_some();
+        let has_allow_domains = net.allow_domains.is_some() || net.allow.is_some();
+        let has_net_presets = net.net_presets.is_some() || net.net_preset.is_some();
+        assert!(
+            has_mode || has_allow_domains || has_net_presets,
+            "Agent profile '{agent}' [network] section must specify mode, \
+             allow_domains, or net_presets"
+        );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Test 13: Typed VettoError::Policy(PolicyError) Exit Code 125 Mapping
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_vetto_error_policy_exit_code_125_mapping() {
+    // 13.1: PolicyError::CompilationFailed must yield 125
+    let comp_err =
+        vetto::policy::types::PolicyError::CompilationFailed("syntax error in schema".to_string());
+    assert_eq!(comp_err.exit_code(), 125);
+    let vetto_err = vetto::error::VettoError::Policy(comp_err);
+    assert_eq!(
+        vetto_err.exit_code(),
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "VettoError::Policy(CompilationFailed) must yield EXIT_FAIL_CLOSED (125)"
+    );
+
+    // 13.2: PolicyError::VerificationFailed must yield 125
+    let verif_err = vetto::policy::types::PolicyError::VerificationFailed(
+        "tampered sealed contract hash mismatch".to_string(),
+    );
+    assert_eq!(verif_err.exit_code(), 125);
+    let vetto_verif = vetto::error::VettoError::Policy(verif_err);
+    assert_eq!(
+        vetto_verif.exit_code(),
+        vetto::exit_codes::EXIT_FAIL_CLOSED,
+        "VettoError::Policy(VerificationFailed) must yield EXIT_FAIL_CLOSED (125)"
+    );
+
+    // 13.3: PolicyError::LockdownViolation must yield 126
+    let lock_err = vetto::policy::types::PolicyError::LockdownViolation(
+        "attempt to override immutable root".to_string(),
+    );
+    assert_eq!(lock_err.exit_code(), 126);
+    let vetto_lock = vetto::error::VettoError::Policy(lock_err);
+    assert_eq!(
+        vetto_lock.exit_code(),
+        vetto::exit_codes::EXIT_POLICY_BLOCKED,
+        "VettoError::Policy(LockdownViolation) must yield EXIT_POLICY_BLOCKED (126)"
+    );
+
+    // 13.4: Downcast in exit_codes::map_error_to_exit_code
+    let boxed_anyhow: anyhow::Error = vetto::error::VettoError::Policy(
+        vetto::policy::types::PolicyError::CompilationFailed("bad schema".into()),
+    )
+    .into();
+    assert_eq!(
+        vetto::exit_codes::map_error_to_exit_code(&boxed_anyhow),
+        125,
+        "map_error_to_exit_code must downcast VettoError::Policy and return 125"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Test 14: Comprehensive Schema Typo Matrix For All RawLayer Structs
+// ----------------------------------------------------------------------------
+#[test]
+fn test_m3_schema_typo_matrix_fail_closed_coverage() {
+    let test_cases = [
+        // (section, invalid_key, expected_error_substring)
+        (
+            "security",
+            "git_guards = true",
+            "unknown field `git_guards`",
+        ),
+        (
+            "secrets",
+            "auto_denies = true",
+            "unknown field `auto_denies`",
+        ),
+        (
+            "display_only_deny",
+            "denied_paths = []",
+            "unknown field `denied_paths`",
+        ),
+        (
+            "environment",
+            "passthrough = []",
+            "unknown field `passthrough`",
+        ),
+        ("unix_sockets", "allowed = []", "unknown field `allowed`"),
+        ("cgroup", "memory = \"1G\"", "unknown field `memory`"),
+    ];
+
+    for (section, invalid_field, expected_sub) in test_cases {
+        let toml_snippet = format!("[{section}]\n{invalid_field}\n");
+        let err = vetto::policy::loader::schema::parse_layer(&toml_snippet, section).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains(expected_sub),
+            "Section [{section}] must reject '{invalid_field}': {msg}"
+        );
+        let exit_code = vetto::exit_codes::map_error_to_exit_code(&err);
+        assert_eq!(
+            exit_code,
+            vetto::exit_codes::EXIT_FAIL_CLOSED,
+            "Section [{section}] schema violation must map to exit code 125"
+        );
+    }
+}

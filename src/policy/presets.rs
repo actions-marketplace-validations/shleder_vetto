@@ -288,6 +288,7 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "dashscope.aliyuncs.com".into(),
             "api.deepseek.com".into(),
             "api.openai.com".into(),
+            "api.anthropic.com".into(),
             "openrouter.ai".into(),
             "huggingface.co".into(),
             "hf.co".into(),
@@ -565,35 +566,86 @@ pub fn resolve_preset(name: &str) -> Option<&'static [&'static str]> {
         "git" => Some(&["$HOME/.git-credentials", "$HOME/.netrc"]),
         "npm" => Some(&["$HOME/.npmrc"]),
         "cargo" => Some(&["$HOME/.cargo/credentials", "$HOME/.cargo/credentials.toml"]),
-        "claude" => Some(&["$HOME/.claude"]),
-        "codex" => Some(&["$HOME/.codex"]),
-        "antigravity" | "agy" => Some(&["$HOME/.gemini", "$HOME/.config/Antigravity"]),
-        "omp" => Some(&["$HOME/.omp", "$HOME/.config/omp"]),
-        "zcode" => Some(&["$HOME/.zcode", "$HOME/.config/zcode"]),
-        "kimi" => Some(&["$HOME/.kimi", "$HOME/.config/kimi"]),
-        "grok" => Some(&["$HOME/.grok", "$HOME/.config/grok"]),
-        "hermes" => Some(&["$HOME/.hermes", "$HOME/.config/hermes"]),
-        "kilo" => Some(&["$HOME/.kilo", "$HOME/.config/kilo"]),
-        "pi" => Some(&["$HOME/.pi", "$HOME/.config/pi"]),
-        "command_code" | "command-code" => {
+        // 32 agent presets & canonical aliases
+        "codex" | "codex-cli" => Some(&["$HOME/.codex", "$HOME/.config/codex"]),
+        "claude" | "claude-code" => Some(&[
+            "$HOME/.claude",
+            "$HOME/.config/claude",
+            "$HOME/.claude.json",
+        ]),
+        "antigravity" | "antigravity-cli" | "agy" => {
+            Some(&["$HOME/.gemini", "$HOME/.config/Antigravity"])
+        }
+        "aider" | "aider-chat" => Some(&[
+            "$HOME/.aider",
+            "$HOME/.config/aider",
+            "$HOME/.aider.conf.yml",
+        ]),
+        "cursor" | "cursor-agent" | "cursor-server" => {
+            Some(&["$HOME/.cursor", "$HOME/.config/Cursor"])
+        }
+        "cline" | "cline-cli" => Some(&["$HOME/.cline", "$HOME/.config/cline"]),
+        "opencode" | "opencode-ai" => Some(&["$HOME/.opencode", "$HOME/.config/opencode"]),
+        "copilot" | "github-copilot-cli" | "gh-copilot" => {
+            Some(&["$HOME/.copilot", "$HOME/.config/github-copilot"])
+        }
+        "windsurf" | "windsurf-cli" => Some(&[
+            "$HOME/.windsurf",
+            "$HOME/.codeium",
+            "$HOME/.config/windsurf",
+        ]),
+        "goose" | "goose-ai" => Some(&["$HOME/.goose", "$HOME/.config/goose"]),
+        "openhands" | "all-hands" => Some(&["$HOME/.openhands", "$HOME/.config/openhands"]),
+        "devin" | "devin-cli" => Some(&["$HOME/.devin", "$HOME/.config/devin"]),
+        "smolagents" | "smol-agents" | "smolagent" => Some(&[
+            "$HOME/.smolagents",
+            "$HOME/.cache/huggingface",
+            "$HOME/.cache/smolagents",
+        ]),
+        "omp" | "omp-cli" => Some(&["$HOME/.omp", "$HOME/.config/omp"]),
+        "zcode" | "zcode-cli" => Some(&["$HOME/.zcode", "$HOME/.config/zcode"]),
+        "kimi" | "kimi-code" | "kimi-cli" => Some(&["$HOME/.kimi", "$HOME/.config/kimi"]),
+        "grok" | "grok-build" | "grok-cli" => Some(&["$HOME/.grok", "$HOME/.config/grok"]),
+        "hermes" | "hermes-agent" => Some(&["$HOME/.hermes", "$HOME/.config/hermes"]),
+        "kilo" | "kilo-code" => Some(&["$HOME/.kilo", "$HOME/.config/kilo"]),
+        "pi" | "pi-agent" => Some(&["$HOME/.pi", "$HOME/.config/pi"]),
+        "command_code" | "command-code" | "commandcode" => {
             Some(&["$HOME/.command-code", "$HOME/.config/command-code"])
         }
-        "freebuff" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
-        "deepseek" | "deepseek_harness" => Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"]),
-        "omnigent" => Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"]),
-        "crewai" => Some(&["$HOME/.crewai", "$HOME/.config/crewai"]),
-        "autogen" => Some(&[
+        "freebuff" | "freebuff-agent" => Some(&["$HOME/.freebuff", "$HOME/.config/freebuff"]),
+        "deepseek" | "deepseek_harness" | "deepseek-harness" => {
+            Some(&["$HOME/.deepseek", "$HOME/.config/deepseek"])
+        }
+        "omnigent" | "omnigent-ai" | "omnigent-cli" => {
+            Some(&["$HOME/.omnigent", "$HOME/.config/omnigent"])
+        }
+        "crewai" | "crew-ai" => Some(&["$HOME/.crewai", "$HOME/.config/crewai"]),
+        "autogen" | "autogen-studio" | "autogenstudio" => Some(&[
             "$HOME/.autogen",
             "$HOME/.autogenstudio",
             "$HOME/.config/autogen",
         ]),
-        "amp" => Some(&["$HOME/.amp", "$HOME/.config/amp"]),
+        "amp" | "amp-cli" => Some(&["$HOME/.amp", "$HOME/.config/amp"]),
+        "custom" => Some(&["$HOME/.config/vetto/agents/custom"]),
+        "swebench" => Some(&["$HOME/.swebench"]),
+        "qwen_code" | "qwen-code" | "qwencode" | "qwen" => Some(&[
+            "$HOME/.qwen",
+            "$HOME/.config/qwen",
+            "$HOME/.config/qwen-code",
+        ]),
+        "roo_code" | "roo-code" | "roocode" | "roo" => {
+            Some(&["$HOME/.roo", "$HOME/.config/roo", "$HOME/.config/roo-code"])
+        }
+        "browser_use" | "browser-use" | "browseruse" => {
+            Some(&["$HOME/.browser-use", "$HOME/.config/browser-use"])
+        }
         _ => None,
     }
 }
 
 /// Known preset names for validation and diagnostics.
 pub const KNOWN_PRESETS: &[&str] = &[
+    // System presets & aliases
     "ssh",
     "aws",
     "gcp",
@@ -606,27 +658,91 @@ pub const KNOWN_PRESETS: &[&str] = &[
     "git",
     "npm",
     "cargo",
-    "claude",
+    // All 32 real agent profiles & aliases
     "codex",
+    "codex-cli",
+    "claude",
+    "claude-code",
     "antigravity",
+    "antigravity-cli",
     "agy",
+    "aider",
+    "aider-chat",
+    "cursor",
+    "cursor-agent",
+    "cursor-server",
+    "cline",
+    "cline-cli",
+    "opencode",
+    "opencode-ai",
+    "copilot",
+    "github-copilot-cli",
+    "gh-copilot",
+    "windsurf",
+    "windsurf-cli",
+    "goose",
+    "goose-ai",
+    "openhands",
+    "all-hands",
+    "devin",
+    "devin-cli",
+    "smolagents",
+    "smol-agents",
+    "smolagent",
     "omp",
+    "omp-cli",
     "zcode",
+    "zcode-cli",
     "kimi",
+    "kimi-code",
+    "kimi-cli",
     "grok",
+    "grok-build",
+    "grok-cli",
     "hermes",
+    "hermes-agent",
     "kilo",
+    "kilo-code",
     "pi",
+    "pi-agent",
     "command_code",
     "command-code",
+    "commandcode",
     "freebuff",
+    "freebuff-agent",
     "deepseek",
     "deepseek_harness",
+    "deepseek-harness",
     "omnigent",
+    "omnigent-ai",
+    "omnigent-cli",
     "crewai",
+    "crew-ai",
     "autogen",
+    "autogen-studio",
+    "autogenstudio",
     "amp",
+    "amp-cli",
+    "custom",
+    "swebench",
+    "qwen_code",
+    "qwen-code",
+    "qwencode",
+    "qwen",
+    "roo_code",
+    "roo-code",
+    "roocode",
+    "roo",
+    "browser_use",
+    "browser-use",
+    "browseruse",
 ];
+
+/// Resolve any preset/agent name (case-insensitive or canonical lowercase)
+/// to its embedded TOML definition.
+pub fn resolve_preset_toml(name: &str) -> Option<&'static str> {
+    crate::policy::defaults::agent_builtin(name).or_else(|| crate::policy::defaults::builtin(name))
+}
 
 #[cfg(test)]
 mod tests {
@@ -1133,6 +1249,63 @@ mod tests {
             assert!(
                 domains.iter().any(|item| item == d),
                 "aider allowlist missing expected domain: {d}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_preset_expands_all_32_agents() {
+        assert_eq!(
+            resolve_preset("cursor"),
+            Some(&["$HOME/.cursor", "$HOME/.config/Cursor"][..])
+        );
+        assert_eq!(
+            resolve_preset("cline"),
+            Some(&["$HOME/.cline", "$HOME/.config/cline"][..])
+        );
+        assert_eq!(
+            resolve_preset("windsurf"),
+            Some(
+                &[
+                    "$HOME/.windsurf",
+                    "$HOME/.codeium",
+                    "$HOME/.config/windsurf"
+                ][..]
+            )
+        );
+        assert_eq!(resolve_preset("swebench"), Some(&["$HOME/.swebench"][..]));
+        assert_eq!(
+            resolve_preset("qwen_code"),
+            Some(
+                &[
+                    "$HOME/.qwen",
+                    "$HOME/.config/qwen",
+                    "$HOME/.config/qwen-code"
+                ][..]
+            )
+        );
+        assert_eq!(
+            resolve_preset("roo_code"),
+            Some(&["$HOME/.roo", "$HOME/.config/roo", "$HOME/.config/roo-code"][..])
+        );
+        assert_eq!(
+            resolve_preset("browser_use"),
+            Some(&["$HOME/.browser-use", "$HOME/.config/browser-use"][..])
+        );
+    }
+
+    #[test]
+    fn resolve_preset_toml_resolves_all_agents_and_base_profiles() {
+        for agent in crate::policy::defaults::AGENT_PROFILE_NAMES {
+            assert!(
+                resolve_preset_toml(agent).is_some(),
+                "agent preset '{agent}' must resolve to embedded TOML"
+            );
+        }
+        for profile in crate::policy::defaults::PROFILE_NAMES {
+            assert!(
+                resolve_preset_toml(profile).is_some(),
+                "profile '{profile}' must resolve to embedded TOML"
             );
         }
     }

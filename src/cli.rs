@@ -723,7 +723,7 @@ impl Cli {
 
         let fail_on_block = cli.fail_on_block.or(global.fail_on_block);
         if fail_on_block == Some(0) {
-            return Err(anyhow::Error::new(crate::error::VettoError::Policy(
+            return Err(anyhow::Error::new(crate::error::VettoError::Cli(
                 "--fail-on-block threshold must be greater than zero".into(),
             )));
         }
