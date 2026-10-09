@@ -3,8 +3,10 @@
 //! Rule #1 of vetto: if no enforcement backend can be established, the agent
 //! does NOT run. There is never an unsandboxed fallback.
 
+pub mod capability;
 pub mod envfilter;
 pub mod handle;
+pub mod killer;
 #[cfg(target_os = "linux")]
 pub mod linux;
 pub mod production;
@@ -21,9 +23,21 @@ pub use macos::net_proxy as macos_net_proxy;
 #[cfg(target_os = "windows")]
 pub mod windows;
 
+pub use capability::{
+    allows_pass, apply_backend_ceiling, current_target, eval_is_loopback_host, freeze_spec,
+    required_capabilities, select_backend, BackendKind, CanonicalPolicy, CapabilityRecord,
+    Category, ChildEnforcementPlan, ClaimStrength, EnforcementReport, EnforcementState,
+    ExecutionIdentity, FrozenSpec, HostVerification, LinuxBackend, MacosBackend, PlatformMatrix,
+    PreparationFailureKind, SandboxBackend, Scenario, SecurityCapability, Severity, Target,
+    Verdict, WindowsBackend,
+};
 #[cfg(unix)]
 pub use handle::create_cloexec_pipe;
-pub use handle::{SandboxHandle, SpawnOptions, StdioMode};
+pub use handle::{spawn_serial, SandboxHandle, SpawnOptions, StdioMode};
+pub use killer::{
+    kill_on_deadline, kill_on_deadline_with, kill_on_deadline_with_grace, CleanupExpectation,
+    KillOutcome, WaitKill,
+};
 
 #[cfg(target_os = "linux")]
 pub use linux::audit_reader::{

@@ -653,28 +653,6 @@ pub enum PolicyCommand {
         #[arg(long, short = 'o', value_name = "PATH", default_value = "policy.toml")]
         output: PathBuf,
     },
-    /// Cryptographically sign a policy file using Ed25519
-    Sign {
-        /// Policy file to sign
-        file: PathBuf,
-        /// Custom private signing key path (default: ~/.vetto/signing.key)
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Custom signature output path (default: <file>.sig)
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
-    /// Verify the cryptographic Ed25519 signature of a policy file
-    Verify {
-        /// Policy file to verify
-        file: PathBuf,
-        /// Signature file path (default: <file>.sig)
-        #[arg(long)]
-        sig: Option<PathBuf>,
-        /// Public key file path (default: ~/.vetto/signing.pub)
-        #[arg(long)]
-        key: Option<PathBuf>,
-    },
     /// Adopt a community policy into the current project
     Use {
         /// Community policy name (e.g. python-dev, node-dev, rust-dev)
@@ -1412,15 +1390,6 @@ mod tests {
             Some(Command::Mcp {
                 command: Some(McpCommand::Wrap(ref args))
             }) if args.allow == vec!["/tmp"] && args.command == vec!["node", "server.js"]
-        ));
-
-        let policy_sign = Cli::try_parse_from(["vetto", "policy", "sign", "vetto.toml"])
-            .expect("policy sign syntax");
-        assert!(matches!(
-            policy_sign.command,
-            Some(Command::Policy {
-                command: PolicyCommand::Sign { ref file, .. }
-            }) if file == &PathBuf::from("vetto.toml")
         ));
 
         let policy_use = Cli::try_parse_from(["vetto", "policy", "use", "python-dev"])

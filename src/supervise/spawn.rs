@@ -355,7 +355,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
 
     // 7. Git-guard verification on protected branches
     if (pol.git_guard || cfg.git_guard) && !pol.allow_write.is_empty() {
-        if let Some(branch) = policy::conditions::detect_git_branch(&project) {
+        if let Some(branch) = crate::git::detect_git_branch(&project) {
             if branch == "main" || branch == "master" {
                 return Err(SuperviseError::Fatal(anyhow::anyhow!(
                     "git_guard: working copy is on branch '{branch}'; refusing to run with write permissions (create a feature branch, e.g. 'git checkout -b feature/...')"
@@ -945,7 +945,7 @@ pub fn execute_dry_run(cfg: &RunConfig) -> Result<(), SuperviseError> {
 
     // Git-guard verification on protected branches
     if (pol.git_guard || cfg.git_guard) && !pol.allow_write.is_empty() {
-        if let Some(branch) = policy::conditions::detect_git_branch(&project) {
+        if let Some(branch) = crate::git::detect_git_branch(&project) {
             if branch == "main" || branch == "master" {
                 return Err(SuperviseError::Fatal(anyhow::anyhow!(
                     "git_guard: working copy is on branch '{branch}'; refusing to run with write permissions (create a feature branch, e.g. 'git checkout -b feature/...')"

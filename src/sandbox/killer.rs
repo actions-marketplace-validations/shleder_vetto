@@ -66,10 +66,8 @@ pub enum KillOutcome {
 }
 
 /// Minimal wait/kill surface the deadline loop needs. Implemented by
-/// [`crate::sandbox::SandboxHandle`] (sandboxed runs) and by the
-/// direct-exec child handle in [`super::runner`] (plumbing runs): both go
-/// through the same [`kill_on_deadline_with`] code path, never blocking
-/// `wait()`.
+/// [`crate::sandbox::SandboxHandle`] (sandboxed runs) and other handles:
+/// both go through the same [`kill_on_deadline_with`] code path, never blocking `wait()`.
 pub trait WaitKill {
     /// Non-blocking poll: `Some(code)` once the child is reaped.
     fn try_wait(&mut self) -> Option<i32>;

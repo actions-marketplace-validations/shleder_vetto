@@ -43,6 +43,7 @@ use crate::sandbox::Spawned;
 // changes persistent host configuration.
 pub mod appcontainer;
 pub mod job_object;
+pub mod prod_verify;
 
 type Handle = *mut c_void;
 type Hmodule = *mut c_void;

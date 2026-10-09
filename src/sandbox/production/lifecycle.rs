@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use crate::audit::record::{TierClassification, VettoAuditRecord};
 use crate::audit::verdict::{EvidenceStrength, FinalVerdict, VerdictStatus};
+use crate::audit::AuditLedger;
 use crate::config::NetMode;
-use crate::crypto::attest::AuditLedger;
 use crate::policy::{Policy, Tier};
 use crate::policy_ir::{
     ExecutionState, ExecutionStateMachine, SecurityContract, StateTransitionError,
@@ -21,14 +21,12 @@ use crate::policy_ir::{
 use crate::proctree::{
     ExtinctionVerifier, PlatformExtinctionTier, FAIL_CLOSED_EXTINCTION_EXIT_CODE,
 };
-use crate::sandbox::{Backend, SandboxHandle, SpawnOptions, StdioMode};
-use crate::verify_ng::engine;
-use crate::verify_ng::evidence::ExecutionIdentity;
-use crate::verify_ng::frozen;
-use crate::verify_ng::killer::{self, KillOutcome};
-use crate::verify_ng::sandbox_backend::{
-    select_backend, BackendKind, CanonicalPolicy, EnforcementReport, PrepareContext, SandboxBackend,
+use crate::sandbox::capability::{
+    select_backend, BackendKind, CanonicalPolicy, EnforcementReport, ExecutionIdentity,
+    PrepareContext, SandboxBackend,
 };
+use crate::sandbox::killer::{self, KillOutcome};
+use crate::sandbox::{Backend, SandboxHandle, SpawnOptions, StdioMode};
 
 use super::context::ProductionSessionContext;
 use super::drain::StreamCollector;
@@ -90,6 +88,26 @@ pub fn build_production_env(
     out
 }
 
+pub fn new_nonce() -> String {
+    let mut bytes = [0u8; 16];
+    let read_ok = std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| {
+            use std::io::Read;
+            f.read_exact(&mut bytes).map(|_| ())
+        })
+        .is_ok();
+    if !read_ok {
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = ((t >> (8 * (i % 8))) ^ (std::process::id() as u128) ^ (i as u128 * 0x9E37)) as u8;
+        }
+    }
+    crate::sandbox::capability::hex_encode(&bytes)
+}
+
 /// Project a verified production contract into the existing capability API.
 pub fn freeze_production_contract(
     scenario: &str,
@@ -140,7 +158,7 @@ pub fn freeze_production_contract(
         ));
     }
 
-    let mut spec = frozen::freeze_spec(
+    let mut spec = crate::sandbox::capability::freeze_spec(
         scenario,
         PROD_REGISTRY,
         &production.installation_policy,
@@ -306,7 +324,7 @@ impl UnpreparedProductionExecution {
             .map(|t| t.label().to_string())
             .unwrap_or_else(|| "none".to_string());
 
-        let nonce = engine::new_nonce();
+        let nonce = new_nonce();
         let mut env_extra = self.env_extra;
         env_extra.insert(PROD_NONCE_ENV.to_string(), nonce.clone());
         env_extra.insert(RUN_NONCE_ENV.to_string(), nonce.clone());
@@ -521,7 +539,7 @@ impl PreparedProductionExecution {
 
         let policy = &production.installation_policy;
         let spawned = {
-            let _serial = engine::spawn_serial()
+            let _serial = crate::sandbox::spawn_serial()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             self.fsm.transition(ExecutionState::Spawn).map_err(|_| {
@@ -555,16 +573,16 @@ impl PreparedProductionExecution {
         {
             let verification = match spawned.handle.windows_raw_handles() {
                 Some((process, job)) => unsafe {
-                    crate::verify_ng::windows_enforce::verify_production_child(process, job)
+                    crate::sandbox::windows::prod_verify::verify_production_child(process, job)
                 },
-                None => crate::verify_ng::sandbox_backend::HostVerification::none(),
+                None => crate::sandbox::capability::HostVerification::none(),
             };
             self.capability.note_host_verified(&verification);
         }
 
         #[cfg(target_os = "linux")]
         {
-            use crate::verify_ng::linux_enforce as le;
+            use crate::sandbox::linux::proctrack as le;
             let mut verification = le::verify_child_host(pid);
             if let Ok(limits_body) = std::fs::read_to_string(format!("/proc/{pid}/limits")) {
                 let lim = &policy.limits;
@@ -743,7 +761,7 @@ impl SpawnedProductionExecution {
         #[cfg(target_os = "windows")]
         {
             use crate::proctree::MAX_EXTINCTION_DEADLINE_MS;
-            use crate::verify_ng::windows_enforce as we;
+            use crate::sandbox::windows::prod_verify as we;
             let members = match self.handle.windows_raw_handles() {
                 Some((_, job)) => unsafe { we::job_assigned_pids(job) },
                 None => Vec::new(),
@@ -792,10 +810,10 @@ impl SpawnedProductionExecution {
                         _ => false,
                     } {
                         if let Ok(env) = std::fs::read(format!("/proc/{pid}/environ")) {
-                            crate::verify_ng::linux_enforce::contains_slice(
+                            crate::sandbox::linux::proctrack::contains_slice(
                                 &env,
                                 needle_run.as_bytes(),
-                            ) || crate::verify_ng::linux_enforce::contains_slice(
+                            ) || crate::sandbox::linux::proctrack::contains_slice(
                                 &env,
                                 needle_prod.as_bytes(),
                             )
@@ -823,7 +841,7 @@ impl SpawnedProductionExecution {
         #[cfg(target_os = "linux")]
         {
             if let Some(sweep) =
-                crate::verify_ng::linux_enforce::sweep_tree_by_nonce(self.nonce.as_str(), self.pid)
+                crate::sandbox::linux::proctrack::sweep_tree_by_nonce(self.nonce.as_str(), self.pid)
             {
                 let clean = sweep.clean && !sweep.blind && sweep.residual.is_empty();
                 surviving_processes = if clean {
@@ -1151,10 +1169,10 @@ pub fn wait_for_exit(handle: &mut SandboxHandle, timeout: Option<Duration>) -> (
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::capability::{EnforcementState, SecurityCapability};
     use crate::sandbox::production::{
         execute_with_backend, prod_tier_mapping, ProdSpawnLog, PROD_SCENARIO_ID,
     };
-    use crate::verify_ng::sandbox_backend::{EnforcementState, SecurityCapability};
 
     fn test_policy() -> Policy {
         Policy::default()
@@ -1479,8 +1497,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn phase1_contract_tamper_rejected_before_spawn() {
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-contract-tamper-{}", engine::new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-contract-tamper-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let marker = tmp.join("child-started");
         let base_backend = Backend::detect(NetMode::Off, false).expect("detect mechanics");
@@ -1570,8 +1587,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn phase2_contract_tamper_all_field_classes_rejected_no_spawn() {
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-tamper-full-matrix-{}", engine::new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-tamper-full-matrix-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let marker = tmp.join("child-started");
         let base_backend = Backend::detect(NetMode::Off, false).expect("detect mechanics");
@@ -2024,8 +2040,7 @@ mod tests {
                 return;
             }
         };
-        let tmp =
-            std::env::temp_dir().join(format!("vetto-contract-audit-{}", engine::new_nonce()));
+        let tmp = std::env::temp_dir().join(format!("vetto-contract-audit-{}", new_nonce()));
         std::fs::create_dir_all(&tmp).unwrap();
         let prepared = UnpreparedProductionExecution::new(
             base_backend,

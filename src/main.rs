@@ -506,6 +506,7 @@ fn run() -> Result<()> {
                 &net,
             )
         }
+
         Some(cli::Command::Redteam { json }) => {
             let report = vetto::redteam::run_redteam_battery();
             if *json {
@@ -611,24 +612,6 @@ fn run() -> Result<()> {
                     &home,
                 )?;
                 println!("vetto: imported policy written to {}", output.display());
-                Ok(())
-            }
-            cli::PolicyCommand::Sign { file, key, out } => {
-                let sig_path =
-                    policy::crypto::sign_policy_file(file, key.as_deref(), out.as_deref())?;
-                println!(
-                    "Successfully signed policy file {} -> {}",
-                    file.display(),
-                    sig_path.display()
-                );
-                Ok(())
-            }
-            cli::PolicyCommand::Verify { file, sig, key } => {
-                policy::crypto::verify_policy_file(file, sig.as_deref(), key.as_deref())?;
-                println!(
-                    "Policy cryptographic verification SUCCESS for {}",
-                    file.display()
-                );
                 Ok(())
             }
             cli::PolicyCommand::Use { name, force } => {
@@ -815,7 +798,7 @@ fn scan_secrets_cli(
     max_files: Option<usize>,
 ) -> Result<()> {
     let target = path.unwrap_or(Path::new("."));
-    let mut options = policy::secretscan::SecretScanOptions::default();
+    let mut options = vetto::fs::SecretScanOptions::default();
     if let Some(ms) = max_size {
         options.max_file_size_bytes = ms;
     }
@@ -824,16 +807,16 @@ fn scan_secrets_cli(
     }
 
     let result = if target.is_file() {
-        let findings = policy::secretscan::scan_file(target, options.max_file_size_bytes);
+        let findings = vetto::fs::scan_file(target, options.max_file_size_bytes);
         let bytes_scanned = std::fs::metadata(target).map(|m| m.len()).unwrap_or(0);
-        policy::secretscan::SecretScanResult {
+        vetto::fs::SecretScanResult {
             findings,
             files_scanned: 1,
             bytes_scanned,
             timed_out: false,
         }
     } else {
-        policy::secretscan::scan_directory(target, &options)
+        vetto::fs::scan_directory(target, &options)
     };
 
     if json {

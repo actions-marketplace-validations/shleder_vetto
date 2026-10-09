@@ -642,7 +642,7 @@ pub fn is_doh_endpoint(host: &str) -> bool {
         .any(|&d| d == host_lower || host_lower.ends_with(&format!(".{d}")))
 }
 
-pub(crate) fn is_loopback_host(host: &str) -> bool {
+pub fn is_loopback_host(host: &str) -> bool {
     let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
     if h == "localhost" {
         return true;
@@ -670,6 +670,10 @@ pub(crate) fn is_loopback_host(host: &str) -> bool {
     } else {
         false
     }
+}
+
+pub fn eval_is_loopback_host(host: &str) -> bool {
+    is_loopback_host(host)
 }
 
 fn request_allowed(

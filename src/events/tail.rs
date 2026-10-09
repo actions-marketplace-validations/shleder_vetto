@@ -49,7 +49,6 @@ impl EventTailFilter {
             Self::Deny => {
                 matches!(event, Event::BlockedAttempt { .. })
                     || matches!(event, Event::NetRequest { allowed: false, .. })
-                    || crate::classifier::classify_event(event).is_some()
             }
             Self::Network => matches!(event, Event::NetRequest { .. }),
             Self::Files => {

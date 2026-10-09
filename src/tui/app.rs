@@ -51,7 +51,7 @@ impl EventFilter {
             }
             Self::Files => matches!(event, Event::FileObserved { .. }),
             Self::Network => matches!(event, Event::NetRequest { .. }),
-            Self::Suspicious => crate::classifier::classify_event(event).is_some(),
+            Self::Suspicious => matches!(event, Event::BlockedAttempt { .. }),
             Self::Notices => matches!(event, Event::Notice { .. }),
             Self::Search(query) => {
                 let q = query.trim().to_ascii_lowercase();
@@ -126,7 +126,7 @@ impl LiveEventAggregator {
     }
 
     pub fn ingest(&mut self, event: &Event) {
-        if crate::classifier::classify_event(event).is_some() {
+        if matches!(event, Event::BlockedAttempt { .. }) {
             self.counters.suspicious = self.counters.suspicious.saturating_add(1);
         }
 
@@ -260,7 +260,7 @@ impl AppState {
             at: ev.ts(),
             ..ActivitySample::default()
         };
-        if crate::classifier::classify_event(&ev).is_some() {
+        if matches!(&ev, Event::BlockedAttempt { .. }) {
             self.suspicious = self.suspicious.saturating_add(1);
             sample.suspicious = 1;
         }

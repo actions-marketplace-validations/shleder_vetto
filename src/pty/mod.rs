@@ -156,6 +156,15 @@ pub fn set_nonblocking(fd: RawFd, on: bool) -> std::io::Result<()> {
 /// Read whatever is ready on a nonblocking fd (empty slice when nothing).
 #[cfg(unix)]
 pub fn read_ready(fd: RawFd, buf: &mut [u8]) -> usize {
+    let mut pfd = libc::pollfd {
+        fd,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let r = unsafe { libc::poll(&mut pfd, 1, 0) };
+    if r <= 0 || (pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR)) == 0 {
+        return 0;
+    }
     // SAFETY: raw read into the caller's buffer.
     let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
     if n > 0 {
