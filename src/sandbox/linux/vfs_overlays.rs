@@ -112,7 +112,9 @@ pub fn mount_root_cow_overlay(ephemeral_dir: Option<&Path>) -> VettoResult<()> {
             work.display()
         );
         let Ok(opts_c) = CString::new(opts_str) else {
-            return Err(crate::error::VettoError::Mount("invalid overlayfs options".into()));
+            return Err(crate::error::VettoError::Mount(
+                "invalid overlayfs options".into(),
+            ));
         };
         let Ok(fstype) = CString::new("overlay") else {
             return Err(crate::error::VettoError::Mount("invalid fstype".into()));
@@ -324,7 +326,8 @@ mod tests {
 
     #[test]
     fn test_mask_mandatory_secrets_expands_to_npmrc_docker_and_gh() {
-        let temp_home = std::env::temp_dir().join(format!("vetto_fake_home_{}", std::process::id()));
+        let temp_home =
+            std::env::temp_dir().join(format!("vetto_fake_home_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&temp_home);
         let res = mask_mandatory_secrets(&temp_home, None);
         let _ = std::fs::remove_dir_all(&temp_home);

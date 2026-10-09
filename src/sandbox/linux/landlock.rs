@@ -477,7 +477,10 @@ pub fn open_landlock_path_fd_beneath(
 
     let err = std::io::Error::last_os_error();
     if matches!(err.raw_os_error(), Some(libc::ENOSYS) | Some(libc::EPERM)) {
-        if path.components().any(|c| c == std::path::Component::ParentDir) {
+        if path
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
             return Err(std::io::Error::from_raw_os_error(libc::EXDEV));
         }
         let fallback_fd = unsafe {
@@ -806,7 +809,13 @@ pub fn apply_policy_advanced(
 
     // Add network port rules if requested and supported
     if net_active {
-        apply_net_port_rules(&ruleset, effective_abi, bind_ports, connect_ports, strict_net)?;
+        apply_net_port_rules(
+            &ruleset,
+            effective_abi,
+            bind_ports,
+            connect_ports,
+            strict_net,
+        )?;
     }
 
     // SAFETY: prctl with scalar args only.
@@ -1079,8 +1088,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let base_dir = std::env::temp_dir()
-            .join(format!("vetto_beneath_test_{}_{nanos}", std::process::id()));
+        let base_dir =
+            std::env::temp_dir().join(format!("vetto_beneath_test_{}_{nanos}", std::process::id()));
         std::fs::create_dir_all(&base_dir).expect("create test dir");
 
         let inner_file = base_dir.join("inner.txt");
@@ -1091,7 +1100,8 @@ mod tests {
             .expect("open beneath should succeed for inner.txt");
         assert!(beneath_fd.as_raw_fd() >= 0);
 
-        let parent_escape = open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("../escaped.txt"));
+        let parent_escape =
+            open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("../escaped.txt"));
         assert!(parent_escape.is_err(), "resolving outside dirfd must fail");
 
         let _ = std::fs::remove_dir_all(&base_dir);

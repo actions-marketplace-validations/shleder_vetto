@@ -133,11 +133,7 @@ pub fn generate(policy: &Policy, net: &NetMode, proxy_port: Option<u16>) -> Stri
 /// Generate strict Shape D AST SBPL profile:
 /// `(allow file-read* (require-any ...))` granting access only to essential Cryptex OS Shared Cache,
 /// dyld cache, system pseudodevices, and workspace paths, with trailing denies on secret files.
-pub fn generate_sbpl_shape_d(
-    policy: &Policy,
-    net: &NetMode,
-    proxy_port: Option<u16>,
-) -> String {
+pub fn generate_sbpl_shape_d(policy: &Policy, net: &NetMode, proxy_port: Option<u16>) -> String {
     let mut sb = String::with_capacity(4096);
     sb.push_str("(version 1)\n(deny default)\n");
     sb.push_str("(allow process-exec)\n(allow process-fork)\n");
@@ -155,22 +151,37 @@ pub fn generate_sbpl_shape_d(
     sb.push_str("    (literal \"/dev/random\")\n");
     sb.push_str("    (literal \"/dev/urandom\")\n");
     for p in &policy.allow_read {
-        sb.push_str(&format!("    (subpath \"{}\")\n", sb_escape(&p.display().to_string())));
+        sb.push_str(&format!(
+            "    (subpath \"{}\")\n",
+            sb_escape(&p.display().to_string())
+        ));
     }
     for p in &policy.allow_write {
-        sb.push_str(&format!("    (subpath \"{}\")\n", sb_escape(&p.display().to_string())));
+        sb.push_str(&format!(
+            "    (subpath \"{}\")\n",
+            sb_escape(&p.display().to_string())
+        ));
     }
     sb.push_str("  )\n)\n");
 
     // File-write*
     for p in &policy.allow_write {
-        sb.push_str(&format!("(allow file-write* (subpath \"{}\"))\n", sb_escape(&p.display().to_string())));
+        sb.push_str(&format!(
+            "(allow file-write* (subpath \"{}\"))\n",
+            sb_escape(&p.display().to_string())
+        ));
     }
 
     // Trailing secret denies (last matching rule wins)
     for d in &policy.deny_resolved {
-        sb.push_str(&format!("(deny file-read* (subpath \"{}\"))\n", sb_escape(&d.path.display().to_string())));
-        sb.push_str(&format!("(deny file-write* (subpath \"{}\"))\n", sb_escape(&d.path.display().to_string())));
+        sb.push_str(&format!(
+            "(deny file-read* (subpath \"{}\"))\n",
+            sb_escape(&d.path.display().to_string())
+        ));
+        sb.push_str(&format!(
+            "(deny file-write* (subpath \"{}\"))\n",
+            sb_escape(&d.path.display().to_string())
+        ));
     }
 
     // Network isolation
@@ -500,8 +511,12 @@ mod tests {
     #[test]
     fn shape_d_profile_contains_require_any_and_secret_denies() {
         let mut policy = Policy::default();
-        policy.allow_read.push(PathBuf::from("/test/workspace/read"));
-        policy.allow_write.push(PathBuf::from("/test/workspace/write"));
+        policy
+            .allow_read
+            .push(PathBuf::from("/test/workspace/read"));
+        policy
+            .allow_write
+            .push(PathBuf::from("/test/workspace/write"));
         policy.deny_resolved.push(crate::policy::DenyEntry {
             path: PathBuf::from("/test/workspace/write/.env"),
             is_dir: false,

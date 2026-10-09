@@ -211,8 +211,9 @@ pub fn write_id_maps_with_target(
 
     let setgroups_path = base.join("setgroups");
     if setgroups_path.exists() {
-        fs::write(&setgroups_path, "deny")
-            .map_err(|e| VettoError::Namespace(format!("write {}: {e}", setgroups_path.display())))?;
+        fs::write(&setgroups_path, "deny").map_err(|e| {
+            VettoError::Namespace(format!("write {}: {e}", setgroups_path.display()))
+        })?;
     }
 
     let w = |name: &str, content: String| -> VettoResult<()> {
