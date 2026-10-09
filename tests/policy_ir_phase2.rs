@@ -1,9 +1,9 @@
 //! Integration tests for Phase 2: Tri-Plane Policy IR & Canonical Security Contract.
 
 use vetto::policy_ir::{
-    compile as legacy_compile, validate as legacy_validate, CompilerError, ExecutionState,
-    ExecutionStateMachine, NetworkMode, PolicyCompiler, RequestedPolicy, SecurityContract,
-    SecurityLevel, StateTransitionError,
+    compile as legacy_compile, validate as legacy_validate, authorize_action, Action,
+    ActionVerdict, CompilerError, ExecutionState, ExecutionStateMachine, NetworkMode,
+    PolicyCompiler, RequestedPolicy, SecurityContract, SecurityLevel, StateTransitionError,
 };
 
 #[test]
@@ -261,3 +261,782 @@ fn test_execution_state_machine_fail_closed_idempotent() {
     fsm.transition(ExecutionState::Terminal).unwrap();
     assert!(fsm.is_terminal());
 }
+
+// ============================================================================
+// Milestone 1 Integration Tests: Capability Gate, SHA-256 (INV-36) & 4 Phases
+// ============================================================================
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::time::Duration;
+use vetto::config::NetMode as CliNetMode;
+use vetto::policy::types::{DenyEntry, Policy, ResourceLimits};
+use vetto::policy_ir::compiler::{EffectivePolicyInput, LoweredEnforcementMetadata};
+
+// ----------------------------------------------------------------------------
+// Group 1: Action Authorization Integration Tests (Capability Gate)
+// ----------------------------------------------------------------------------
+
+#[test]
+fn test_action_authorization_allowed_workspace_io() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_action_ok_{}", std::process::id()));
+    std::fs::create_dir_all(ws.join("src")).expect("create test workspace");
+    let test_file = ws.join("src/main.rs");
+    std::fs::write(&test_file, b"fn main() {}").expect("write test file");
+
+    let contract = PolicyCompiler::compile(
+        "claude",
+        &ws,
+        Some(NetworkMode::Allowlist),
+        std::slice::from_ref(&ws),
+        std::slice::from_ref(&ws),
+    )
+    .expect("compile contract");
+
+    // Workspace reads must be Allowed
+    let read_verdict = authorize_action(&contract, &Action::FsRead(test_file.clone()));
+    assert_eq!(read_verdict, ActionVerdict::Allowed);
+
+    // Workspace writes must be Allowed
+    let write_verdict = authorize_action(&contract, &Action::FsWrite(test_file));
+    assert_eq!(write_verdict, ActionVerdict::Allowed);
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_action_authorization_blocked_secret_masks() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_action_secrets_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile(
+        "codex",
+        &ws,
+        None,
+        std::slice::from_ref(&ws),
+        std::slice::from_ref(&ws),
+    )
+    .expect("compile contract");
+
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/root"));
+
+    let secret_probes = vec![
+        ws.join(".env"),
+        ws.join(".git/config"),
+        home.join(".ssh/id_rsa"),
+        home.join(".aws/credentials"),
+        home.join(".gnupg/secring.gpg"),
+    ];
+
+    for secret in secret_probes {
+        // Read must be Denied
+        let read_v = authorize_action(&contract, &Action::FsRead(secret.clone()));
+        assert!(
+            matches!(read_v, ActionVerdict::Denied { .. }),
+            "reading secret {:?} must be denied",
+            secret
+        );
+
+        // Write must be Denied
+        let write_v = authorize_action(&contract, &Action::FsWrite(secret.clone()));
+        assert!(
+            matches!(write_v, ActionVerdict::Denied { .. }),
+            "writing secret {:?} must be denied",
+            secret
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_action_authorization_unallowed_paths() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_action_unallowed_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile(
+        "aider",
+        &ws,
+        None,
+        std::slice::from_ref(&ws),
+        std::slice::from_ref(&ws),
+    )
+    .expect("compile contract");
+
+    // Unallowed host write paths must be Denied
+    let write_v = authorize_action(&contract, &Action::FsWrite(PathBuf::from("/etc/passwd")));
+    assert!(
+        matches!(write_v, ActionVerdict::Denied { .. }),
+        "unallowed write to /etc/passwd must be denied"
+    );
+
+    // Unallowed read path must be Denied
+    let read_v = authorize_action(&contract, &Action::FsRead(PathBuf::from("/root/shadow")));
+    assert!(
+        matches!(read_v, ActionVerdict::Denied { .. }),
+        "unallowed read outside contract must be denied"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_action_authorization_network_modes() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_action_net_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    // 1. NetworkMode::Off -> All network connections Denied
+    let contract_off = PolicyCompiler::compile("claude", &ws, Some(NetworkMode::Off), &[], &[])
+        .expect("compile contract off");
+
+    let net_v = authorize_action(
+        &contract_off,
+        &Action::NetConnect {
+            domain: "api.anthropic.com".into(),
+            port: 443,
+        },
+    );
+    assert!(
+        matches!(net_v, ActionVerdict::Denied { .. }),
+        "connections in NetMode::Off must be denied"
+    );
+
+    // 2. NetworkMode::Allowlist with explicit domains
+    let mut contract_allow = contract_off.clone();
+    contract_allow.network.mode = NetworkMode::Allowlist;
+    contract_allow.network.allowed_domains = vec!["api.anthropic.com".into()];
+    contract_allow.network.allowed_ports = vec![443];
+
+    // Allowed domain + port
+    let net_allowed = authorize_action(
+        &contract_allow,
+        &Action::NetConnect {
+            domain: "api.anthropic.com".into(),
+            port: 443,
+        },
+    );
+    assert_eq!(net_allowed, ActionVerdict::Allowed);
+
+    // Disallowed domain
+    let net_denied = authorize_action(
+        &contract_allow,
+        &Action::NetConnect {
+            domain: "evil.attacker.com".into(),
+            port: 443,
+        },
+    );
+    assert!(
+        matches!(net_denied, ActionVerdict::Denied { .. }),
+        "unlisted domain must be denied"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_action_authorization_process_exec() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_action_exec_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let mut contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
+        .expect("compile contract");
+    contract.filesystem.allow_execute = vec![PathBuf::from("/bin/sh"), PathBuf::from("/usr/bin")];
+
+    // Allowed binary
+    let exec_ok = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("/bin/sh"),
+            args: vec!["-c".into(), "echo 1".into()],
+        },
+    );
+    assert_eq!(exec_ok, ActionVerdict::Allowed);
+
+    // Disallowed binary outside allowed paths
+    let exec_bad = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("/tmp/malware"),
+            args: vec![],
+        },
+    );
+    assert!(
+        matches!(exec_bad, ActionVerdict::Denied { .. }),
+        "binary not in allow_execute must be denied"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Group 2: Sealed Contract SHA-256 Verification & Determinism (INV-36)
+// ----------------------------------------------------------------------------
+
+#[test]
+fn test_sealed_contract_sha256_hash_structure() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_sha256_struct_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("claude", &ws, Some(NetworkMode::Allowlist), &[], &[])
+        .expect("compile contract");
+
+    // SHA-256 hash must be exactly 64 lowercase hex characters
+    assert_eq!(
+        contract.sealed_contract_hash.len(),
+        64,
+        "sealed_contract_hash must be a 64-character SHA-256 hex string"
+    );
+    assert!(
+        contract
+            .sealed_contract_hash
+            .chars()
+            .all(|c| c.is_ascii_hexdigit()),
+        "sealed_contract_hash must be valid hexadecimal"
+    );
+
+    // Self-verification must succeed
+    assert!(contract.verify_sha256(), "verify_sha256 must pass on clean contract");
+    assert!(contract.verify_sealed().is_ok(), "verify_sealed must pass");
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_sealed_contract_sha256_determinism() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_sha256_det_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let policy = Policy {
+        name: "test-deterministic".into(),
+        allow_read: vec![ws.clone()],
+        limits: ResourceLimits {
+            processes: Some(64),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let argv = vec!["/bin/true".to_string()];
+    let env = BTreeMap::new();
+    let net = CliNetMode::Off;
+
+    let input1 = EffectivePolicyInput {
+        policy: &policy,
+        argv: &argv,
+        cwd: &ws,
+        env: &env,
+        net: &net,
+        nonce: "deterministic-fixed-nonce",
+        timeout: None,
+        tier: None,
+        backend: "deterministic-backend".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let contract1 = PolicyCompiler::compile_effective(input1).expect("compile contract 1");
+
+    let input2 = EffectivePolicyInput {
+        policy: &policy,
+        argv: &argv,
+        cwd: &ws,
+        env: &env,
+        net: &net,
+        nonce: "deterministic-fixed-nonce",
+        timeout: None,
+        tier: None,
+        backend: "deterministic-backend".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let contract2 = PolicyCompiler::compile_effective(input2).expect("compile contract 2");
+
+    // Deterministic hashing invariant INV-36: identical inputs produce identical hash
+    assert_eq!(contract1.sealed_contract_hash, contract2.sealed_contract_hash);
+    assert_eq!(contract1.contract_digest_blake3, contract2.contract_digest_blake3);
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_sealed_contract_sha256_dual_digest_integrity() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_dual_digest_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
+        .expect("compile contract");
+
+    // Both BLAKE3 and SHA-256 digests must independently verify
+    assert!(contract.verify_digest(), "BLAKE3 digest verification must pass");
+    assert!(contract.verify_sha256(), "SHA-256 digest verification must pass");
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Group 3: 5-Vector Anti-Tamper Detection Tests
+// ----------------------------------------------------------------------------
+
+#[test]
+fn test_anti_tamper_resources_mutation() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_tamper_res_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("codex", &ws, None, &[], &[])
+        .expect("compile contract");
+
+    // Vector 1: Tamper with resource ceilings
+    let mut tampered = contract.clone();
+    tampered.resources.max_pids = 99999;
+
+    assert!(
+        !tampered.verify_sha256(),
+        "SHA-256 verification must detect max_pids tampering"
+    );
+    assert!(
+        !tampered.verify_digest(),
+        "BLAKE3 verification must detect max_pids tampering"
+    );
+    assert!(
+        tampered.verify_sealed().is_err(),
+        "verify_sealed must return Err on tampered contract"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_anti_tamper_filesystem_mutation() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_tamper_fs_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("aider", &ws, None, &[], &[])
+        .expect("compile contract");
+
+    // Vector 2: Tamper with filesystem allow_write by adding an unauthorized root
+    let mut tampered = contract.clone();
+    tampered.filesystem.allow_write.push(PathBuf::from("/etc"));
+
+    assert!(
+        !tampered.verify_sha256(),
+        "SHA-256 verification must detect allow_write injection"
+    );
+    assert!(
+        !tampered.verify_digest(),
+        "BLAKE3 verification must detect allow_write injection"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_anti_tamper_secret_mask_removal() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_tamper_mask_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
+        .expect("compile contract");
+
+    // Vector 3: Tamper with secret mask paths (strip protections)
+    let mut tampered = contract.clone();
+    tampered.filesystem.mask_paths.clear();
+
+    assert!(
+        !tampered.verify_sha256(),
+        "SHA-256 verification must detect mask_paths removal"
+    );
+    assert!(
+        !tampered.verify_digest(),
+        "BLAKE3 verification must detect mask_paths removal"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_anti_tamper_network_mutation() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_tamper_net_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("cursor", &ws, Some(NetworkMode::Off), &[], &[])
+        .expect("compile contract");
+
+    // Vector 4: Tamper with network mode or domain allowlist
+    let mut tampered = contract.clone();
+    tampered.network.mode = NetworkMode::Direct;
+
+    assert!(
+        !tampered.verify_sha256(),
+        "SHA-256 verification must detect network mode elevation"
+    );
+
+    let mut tampered_domains = contract.clone();
+    tampered_domains
+        .network
+        .allowed_domains
+        .push("attacker.example.com".into());
+    assert!(
+        !tampered_domains.verify_sha256(),
+        "SHA-256 verification must detect domain injection"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_anti_tamper_env_injection() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_tamper_env_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
+        .expect("compile contract");
+
+    // Vector 5: Tamper with environment variables (leaking secrets)
+    let mut tampered = contract.clone();
+    tampered
+        .environment
+        .pass_through_vars
+        .push("AWS_SECRET_ACCESS_KEY".into());
+
+    assert!(
+        !tampered.verify_sha256(),
+        "SHA-256 verification must detect credential variable pass-through injection"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Group 4: 4-Phase PolicyCompiler::compile_effective Validation Tests
+// ----------------------------------------------------------------------------
+
+#[test]
+fn test_compile_effective_phase1_traversal_rejection() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_eff_p1_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    // 1. Path traversal in allow_read
+    let policy_read_trav = Policy {
+        allow_read: vec![PathBuf::from("subdir/../../leak")],
+        ..Default::default()
+    };
+    let input = EffectivePolicyInput {
+        policy: &policy_read_trav,
+        argv: &["/bin/true".into()],
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Off,
+        nonce: "test-eff-p1-1",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let res = PolicyCompiler::compile_effective(input);
+    assert!(
+        matches!(res, Err(CompilerError::ConflictingPermissions(_))),
+        "read path traversal must be rejected"
+    );
+
+    // 2. Path traversal in allow_write
+    let policy_write_trav = Policy {
+        allow_write: vec![PathBuf::from("../escape_write")],
+        ..Default::default()
+    };
+    let input2 = EffectivePolicyInput {
+        policy: &policy_write_trav,
+        argv: &["/bin/true".into()],
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Off,
+        nonce: "test-eff-p1-2",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let res2 = PolicyCompiler::compile_effective(input2);
+    assert!(
+        matches!(res2, Err(CompilerError::ConflictingPermissions(_))),
+        "write path traversal must be rejected"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_compile_effective_phase2_ancestor_containment_and_escape() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_eff_p2_esc_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    // Relative path climbing out of workspace
+    let policy_rel = Policy {
+        allow_write: vec![PathBuf::from("../outside_escape.txt")],
+        ..Default::default()
+    };
+    let input_rel = EffectivePolicyInput {
+        policy: &policy_rel,
+        argv: &["/bin/true".into()],
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Off,
+        nonce: "test-eff-p2-esc",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let res_rel = PolicyCompiler::compile_effective(input_rel);
+    assert!(
+        matches!(res_rel, Err(CompilerError::ConflictingPermissions(_))),
+        "relative write escaping workspace must be rejected"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_compile_effective_phase2_system_root_protection() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_eff_p2_sys_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    for bad_path in &[
+        PathBuf::from("/"),
+        PathBuf::from("/etc"),
+        PathBuf::from("/etc/shadow"),
+        PathBuf::from("/usr/bin/hack"),
+        PathBuf::from("/bin/evil"),
+    ] {
+        let policy = Policy {
+            allow_write: vec![bad_path.clone()],
+            ..Default::default()
+        };
+        let input = EffectivePolicyInput {
+            policy: &policy,
+            argv: &["/bin/true".into()],
+            cwd: &ws,
+            env: &BTreeMap::new(),
+            net: &CliNetMode::Off,
+            nonce: "test-eff-p2-sys",
+            timeout: None,
+            tier: None,
+            backend: "test".into(),
+            observe_seccomp: false,
+            debug_ports: None,
+        };
+        let res = PolicyCompiler::compile_effective(input);
+        assert!(
+            matches!(res, Err(CompilerError::ConflictingPermissions(_))),
+            "write target {:?} exposing system root must be rejected",
+            bad_path
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_compile_effective_phase3_secret_mask_precedence() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_eff_p3_mask_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    // 1. Direct collision with .env mask
+    let policy_env = Policy {
+        allow_write: vec![ws.join(".env")],
+        ..Default::default()
+    };
+    let input = EffectivePolicyInput {
+        policy: &policy_env,
+        argv: &["/bin/true".into()],
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Off,
+        nonce: "test-eff-p3-1",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let res = PolicyCompiler::compile_effective(input);
+    assert!(
+        matches!(res, Err(CompilerError::ConflictingPermissions(_))),
+        "colliding write with .env mask must be rejected"
+    );
+
+    // 2. Collision with policy.deny_resolved
+    let custom_secret = ws.join("custom_secret.key");
+    let policy_deny = Policy {
+        allow_write: vec![custom_secret.clone()],
+        deny_resolved: vec![DenyEntry {
+            path: custom_secret,
+            is_dir: false,
+        }],
+        ..Default::default()
+    };
+    let input2 = EffectivePolicyInput {
+        policy: &policy_deny,
+        argv: &["/bin/true".into()],
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Off,
+        nonce: "test-eff-p3-2",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
+    };
+    let res2 = PolicyCompiler::compile_effective(input2);
+    assert!(
+        matches!(res2, Err(CompilerError::ConflictingPermissions(_))),
+        "write target colliding with deny_resolved must be rejected"
+    );
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_compile_effective_phase4_sealed_lowering() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_m1_eff_p4_lowering_{}", std::process::id()));
+    std::fs::create_dir_all(&ws).expect("create test workspace");
+
+    let policy = Policy {
+        name: "test-phase4".into(),
+        allow_read: vec![ws.clone(), PathBuf::from("/usr")],
+        allow_write: vec![ws.clone()],
+        net_connect_ports: vec![443, 8080],
+        ..Default::default()
+    };
+
+    let argv = vec!["/bin/sh".to_string(), "-c".to_string(), "ls".to_string()];
+    let input = EffectivePolicyInput {
+        policy: &policy,
+        argv: &argv,
+        cwd: &ws,
+        env: &BTreeMap::new(),
+        net: &CliNetMode::Allowlist(vec!["api.anthropic.com".into()]),
+        nonce: "test-phase4-sealed-nonce",
+        timeout: Some(Duration::from_secs(60)),
+        tier: None,
+        backend: "linux-enforce".into(),
+        observe_seccomp: true,
+        debug_ports: None,
+    };
+
+    let contract = PolicyCompiler::compile_effective(input).expect("compile effective contract");
+
+    // Verify dual sealing
+    assert!(!contract.contract_digest_blake3.is_empty());
+    assert!(!contract.sealed_contract_hash.is_empty());
+    assert!(contract.verify_digest());
+    assert!(contract.verify_sha256());
+
+    // Verify lowering metadata structure
+    let lowering: LoweredEnforcementMetadata = contract.lower_enforcement_metadata(4);
+    assert_eq!(lowering.landlock_abi, 4);
+    assert!(lowering.read_paths.contains(&ws));
+    assert!(lowering.write_paths.contains(&ws));
+    assert!(lowering.network_connect_ports.contains(&443));
+    assert!(lowering.network_connect_ports.contains(&8080));
+    assert!(lowering.observe_seccomp);
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_capability_gate_action_authorization_e2e() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_gate_e2e_{}", std::process::id()));
+    std::fs::create_dir_all(ws.join("src")).expect("create workspace");
+
+    let contract = PolicyCompiler::compile(
+        "claude",
+        &ws,
+        Some(NetworkMode::Allowlist),
+        &[ws.join("src")],
+        &[ws.join("src/generated.rs")],
+    )
+    .expect("compile contract");
+
+    // FsRead allowed in workspace
+    assert_eq!(
+        authorize_action(&contract, &Action::FsRead(ws.join("src/lib.rs"))),
+        ActionVerdict::Allowed
+    );
+
+    // FsWrite allowed in designated target
+    assert_eq!(
+        authorize_action(&contract, &Action::FsWrite(ws.join("src/generated.rs"))),
+        ActionVerdict::Allowed
+    );
+
+    // FsWrite denied to unlisted path
+    assert!(authorize_action(&contract, &Action::FsWrite(ws.join("src/other.rs"))).is_denied());
+
+    // FsRead denied to secret .env
+    assert!(authorize_action(&contract, &Action::FsRead(ws.join(".env"))).is_denied());
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
