@@ -272,7 +272,6 @@ pub fn run(
     stdout_writer.set_scroll_region(outer.1.saturating_sub(1).max(1));
 
     let mut last_paint = Instant::now() - REPAINT_INTERVAL;
-    let mut painted_generation = u64::MAX;
     let mut replay: Vec<u8> = Vec::new();
 
     let mut redactor = pty::AnsiRedactor::new();
@@ -344,7 +343,6 @@ pub fn run(
         if last_paint.elapsed() >= REPAINT_INTERVAL {
             app_state.ram_bytes = sample_process_memory(handle.root_pid);
             draw_status_buffered(&mut stdout_writer, outer.1, &app_state.status_text(outer.0));
-            painted_generation = app_state.generation;
             last_paint = Instant::now();
         }
         stdout_writer.flush_nonblocking();

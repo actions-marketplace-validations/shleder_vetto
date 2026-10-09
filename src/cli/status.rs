@@ -65,6 +65,7 @@ impl SessionRegistry {
     }
 
     /// Register a newly started session with optional cgroup path.
+    #[allow(clippy::too_many_arguments)]
     pub fn register_with_cgroup(
         &self,
         session_id: &str,
