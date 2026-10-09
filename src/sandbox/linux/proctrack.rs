@@ -524,8 +524,14 @@ fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -
             && pid != root_pid as i32
             && !crate::sandbox::handle::is_active_root(pid as u32)
         {
+            let my_sid = session_of(0);
+            let their_sid = session_of(pid);
             let their_pgid = unsafe { libc::getpgid(pid) };
-            if their_pgid == root_pid as i32 {
+            let is_orphan = match (my_sid, their_sid) {
+                (Some(mine), Some(theirs)) if mine != theirs => true,
+                _ => their_pgid == root_pid as i32,
+            };
+            if is_orphan {
                 blind = true;
                 matched.push(pid);
             }
@@ -616,7 +622,7 @@ pub fn verify_child_host(pid: u32) -> crate::sandbox::capability::HostVerificati
 #[cfg(target_os = "linux")]
 fn verify_child_host_linux(pid: u32) -> crate::sandbox::capability::HostVerification {
     use crate::sandbox::capability::HostVerification;
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + Duration::from_millis(150);
     let mut out = HostVerification::none();
     loop {
         let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok();
@@ -645,10 +651,10 @@ fn verify_child_host_linux(pid: u32) -> crate::sandbox::capability::HostVerifica
             Some(body) => pid_is_zombie(body),
             None => false,
         };
-        if out.all_observed() || Instant::now() >= deadline || !pid_alive(pid) || zombie {
+        if status.is_some() || Instant::now() >= deadline || !pid_alive(pid) || zombie {
             return out;
         }
-        std::thread::sleep(Duration::from_millis(25));
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 
