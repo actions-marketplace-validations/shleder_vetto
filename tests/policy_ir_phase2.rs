@@ -2186,8 +2186,10 @@ fn test_m4_policy_linter_root_wildcard_detection() {
     use vetto::policy::types::Policy;
 
     // 15.1: Write root "/" must trigger High severity root-wildcard-write
-    let mut policy = Policy::default();
-    policy.allow_write = vec![PathBuf::from("/")];
+    let mut policy = Policy {
+        allow_write: vec![PathBuf::from("/")],
+        ..Default::default()
+    };
     let findings = rule_root_wildcard(&policy);
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].severity, Severity::High);
@@ -2223,8 +2225,10 @@ fn test_m4_policy_linter_dangerous_cidr_and_tmp_isolation() {
     use vetto::policy::types::Policy;
 
     // 16.1: Dangerous CIDR 0.0.0.0/0 must trigger High severity
-    let mut policy = Policy::default();
-    policy.allow_cidr = vec!["0.0.0.0/0".to_string()];
+    let mut policy = Policy {
+        allow_cidr: vec!["0.0.0.0/0".to_string()],
+        ..Default::default()
+    };
     let findings = rule_dangerous_network_cidr(&policy);
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].severity, Severity::High);
@@ -2259,8 +2263,7 @@ fn test_m4_policy_linter_dangerous_cidr_and_tmp_isolation() {
 // ----------------------------------------------------------------------------
 #[test]
 fn test_m4_policy_linter_missing_secrets_and_json_serialization() {
-    use std::path::PathBuf;
-    use vetto::policy::lint::{rule_missing_secret_masking, Finding, LintReport, Severity};
+    use vetto::policy::lint::{rule_missing_secret_masking, LintReport, Severity};
     use vetto::policy::types::Policy;
 
     let temp_dir = std::env::temp_dir()
@@ -2398,10 +2401,12 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
     let ws = temp_dir.join(format!("vetto_m4_verify_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let mut policy = Policy::default();
-    policy.name = "verify-test".to_string();
-    policy.allow_write = vec![ws.clone()];
-    policy.allow_read = vec![PathBuf::from("/usr")];
+    let policy = Policy {
+        name: "verify-test".to_string(),
+        allow_write: vec![ws.clone()],
+        allow_read: vec![PathBuf::from("/usr")],
+        ..Default::default()
+    };
 
     let net = NetMode::Off;
     let contract_input = vetto::policy_ir::compiler::EffectivePolicyInput {
@@ -2471,18 +2476,23 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     let ws = temp_dir.join(format!("vetto_m4_explain_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let mut policy = Policy::default();
-    policy.name = "explain-m4".to_string();
-    policy.allow_write = vec![ws.clone()];
-    policy.allow_read = vec![PathBuf::from("/usr")];
-    policy.deny_write = vec![ws.join("locked.txt")];
-    policy.deny_resolved = vec![DenyEntry {
-        path: ws.join(".env"),
-        is_dir: false,
-    }];
-    policy.network_allow = vec!["api.anthropic.com".to_string()];
-    policy.net_connect_ports = vec![443];
-    policy.limits.cpu_seconds = Some(60);
+    let policy = Policy {
+        name: "explain-m4".to_string(),
+        allow_write: vec![ws.clone()],
+        allow_read: vec![PathBuf::from("/usr")],
+        deny_write: vec![ws.join("locked.txt")],
+        deny_resolved: vec![DenyEntry {
+            path: ws.join(".env"),
+            is_dir: false,
+        }],
+        network_allow: vec!["api.anthropic.com".to_string()],
+        net_connect_ports: vec![443],
+        limits: vetto::policy::ResourceLimits {
+            cpu_seconds: Some(60),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
 
     let net_mode = NetMode::Allowlist(policy.network_allow.clone());
     let contract = PolicyCompiler::compile_effective(EffectivePolicyInput {
