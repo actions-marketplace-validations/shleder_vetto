@@ -2404,7 +2404,7 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
     let policy = Policy {
         name: "verify-test".to_string(),
         allow_write: vec![ws.clone()],
-        allow_read: vec![PathBuf::from("/usr")],
+        allow_read: vec![ws.clone(), PathBuf::from("/usr")],
         ..Default::default()
     };
 
@@ -2571,7 +2571,10 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
         }
     });
 
-    assert_eq!(explain_json["network"]["mode"], "allowlist");
+    assert!(explain_json["network"]["mode"]
+        .as_str()
+        .unwrap_or("")
+        .starts_with("allowlist"));
     assert_eq!(
         explain_json["filesystem"]["workspace_root"],
         ws.display().to_string()

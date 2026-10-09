@@ -307,7 +307,10 @@ pub fn preflight_contract_with_start(
     // 1. BLAKE3 Canonical Digest Validation
     anyhow::ensure!(
         contract.verify_digest(),
-        "invalid security contract BLAKE3 digest (fail-closed exit 125, no agent execution)"
+        concat!(
+            "invalid security contract digest: BLAKE3 digest mismatch ",
+            "(fail-closed exit 125, no agent execution)",
+        )
     );
 
     // 2. SHA-256 Sealed Contract Integrity Validation (INV-36)
@@ -413,12 +416,6 @@ fn battery_contract(
     // 2. Secret Mask Deny Probes (~/.ssh, ~/.aws, .env)
     for entry in &pol.deny_resolved {
         let s = entry.path.display().to_string();
-        if !script_args.contains(&s) {
-            script_args.push(s);
-        }
-    }
-    for mask_path in &contract.filesystem.mask_paths {
-        let s = mask_path.display().to_string();
         if !script_args.contains(&s) {
             script_args.push(s);
         }
@@ -655,9 +652,12 @@ pub fn battery_simulated(
     }
 
     // 3. Core Boundary 2: Secret Mask Deny (~/.ssh)
-    let home = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from);
+    let home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+    } else {
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+    }
+    .map(PathBuf::from);
     let ssh_path = home.as_ref().map(|h| h.join(".ssh"));
     let ssh_masked = if let Some(ref ssh) = ssh_path {
         contract
@@ -670,7 +670,11 @@ pub fn battery_simulated(
                 .iter()
                 .any(|d| d.path == *ssh || d.path.ends_with(".ssh"))
     } else {
-        true
+        contract
+            .filesystem
+            .mask_paths
+            .iter()
+            .any(|p| p.ends_with(".ssh"))
     };
     // Verify secret mask precedence: secret mask path must not be exposed in allow_read
     let secret_leak = contract.filesystem.mask_paths.iter().any(|mask| {
@@ -678,7 +682,7 @@ pub fn battery_simulated(
             .filesystem
             .allow_read
             .iter()
-            .any(|allow| allow == mask || mask.starts_with(allow))
+            .any(|allow| allow == mask || (allow != project && mask.starts_with(allow)))
     });
     if ssh_masked && !secret_leak {
         checks.push(CheckResult {

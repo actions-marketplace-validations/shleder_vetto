@@ -70,6 +70,9 @@ else
 fi
 "#;
 
+    let isolated_home = proj.path().join("home");
+    let _ = std::fs::create_dir_all(&isolated_home);
+
     let out = Command::new(vetto_bin())
         .args([
             "--tui=none",
@@ -82,7 +85,7 @@ fi
             test_script,
         ])
         .current_dir(proj.path())
-        .env("HOME", test_home())
+        .env("HOME", &isolated_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
         .output()
         .expect("exec vetto for computer use display sockets");
