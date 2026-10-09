@@ -18,6 +18,7 @@ use anyhow::Context;
 use crate::config::NetMode;
 use crate::policy;
 use crate::policy::Policy;
+#[cfg(unix)]
 use crate::policy::Tier;
 use crate::sandbox;
 
@@ -372,6 +373,7 @@ fn unavailable(
     }
 }
 
+#[cfg(unix)]
 fn pass(name: &'static str, detail: String) -> CheckResult {
     CheckResult {
         name,
@@ -380,6 +382,7 @@ fn pass(name: &'static str, detail: String) -> CheckResult {
     }
 }
 
+#[cfg(unix)]
 fn leak(name: &'static str, detail: String) -> CheckResult {
     CheckResult {
         name,
@@ -388,6 +391,7 @@ fn leak(name: &'static str, detail: String) -> CheckResult {
     }
 }
 
+#[cfg(unix)]
 fn skipped(name: &'static str, detail: String) -> CheckResult {
     CheckResult {
         name,
@@ -410,8 +414,15 @@ fn battery_contract(
     let mut checks: Vec<CheckResult> = Vec::new();
     let mut script_args: Vec<String> = Vec::new();
 
-    // 1. Workspace Read Probe (.)
-    script_args.push("READCHECK:.".to_string());
+    // 1. Workspace Read Probe (.) - probe when workspace read/write is granted
+    let ws_granted = contract.filesystem.allow_read.iter().any(|p| {
+        p == project || p == Path::new(".") || project.starts_with(p) || p.starts_with(project)
+    }) || contract.filesystem.allow_write.iter().any(|p| {
+        p == project || p == Path::new(".") || project.starts_with(p) || p.starts_with(project)
+    }) || pol.in_read_scope(project) || pol.in_write_scope(project);
+    if ws_granted {
+        script_args.push("READCHECK:.".to_string());
+    }
 
     // 2. Secret Mask Deny Probes (~/.ssh, ~/.aws, .env)
     for entry in &pol.deny_resolved {
