@@ -250,7 +250,10 @@ mod tests {
 
         assert_eq!(fs::read_to_string(&file_a).unwrap(), "original content a");
         assert_eq!(fs::read_to_string(&file_b).unwrap(), "original content b");
-        assert!(!rogue_file.exists(), "rogue file should be deleted on rollback");
+        assert!(
+            !rogue_file.exists(),
+            "rogue file should be deleted on rollback"
+        );
 
         if let Some(h) = old_home {
             std::env::set_var("HOME", h);

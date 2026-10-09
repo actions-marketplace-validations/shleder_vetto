@@ -360,11 +360,26 @@ mod tests {
         let _ = handle.join();
 
         let content = fs::read_to_string(&log_path).expect("read sink log");
-        assert!(content.contains("\"_vetto\":\"jsonl-sink\""), "missing header");
-        assert!(!content.contains(secret_aws), "AWS secret leaked into jsonl");
-        assert!(!content.contains(secret_ghp), "GitHub token leaked into jsonl");
-        assert!(content.contains("AKIA[REDACTED]"), "redaction marker missing");
-        assert!(content.contains("ghp_[REDACTED]"), "redaction marker missing");
+        assert!(
+            content.contains("\"_vetto\":\"jsonl-sink\""),
+            "missing header"
+        );
+        assert!(
+            !content.contains(secret_aws),
+            "AWS secret leaked into jsonl"
+        );
+        assert!(
+            !content.contains(secret_ghp),
+            "GitHub token leaked into jsonl"
+        );
+        assert!(
+            content.contains("AKIA[REDACTED]"),
+            "redaction marker missing"
+        );
+        assert!(
+            content.contains("ghp_[REDACTED]"),
+            "redaction marker missing"
+        );
 
         fs::remove_dir_all(dir).expect("remove test directory");
     }

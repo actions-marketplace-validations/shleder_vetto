@@ -631,7 +631,9 @@ mod tests {
 
         let mut initial_files = BTreeMap::new();
         initial_files.insert(PathBuf::from("script.sh"), initial_fp);
-        let initial = ProjectManifest { files: initial_files };
+        let initial = ProjectManifest {
+            files: initial_files,
+        };
 
         let mut final_files = BTreeMap::new();
         final_files.insert(PathBuf::from("script.sh"), final_fp);
@@ -778,8 +780,14 @@ mod tests {
         // 2500 + 2500 = 5000 > 4000: triggers DoS guard block replacement
         let ops = compute_diff_ops(&old_refs, &new_refs);
         assert_eq!(ops.len(), 5000);
-        let del_count = ops.iter().filter(|op| matches!(op, DiffOp::Delete(_))).count();
-        let ins_count = ops.iter().filter(|op| matches!(op, DiffOp::Insert(_))).count();
+        let del_count = ops
+            .iter()
+            .filter(|op| matches!(op, DiffOp::Delete(_)))
+            .count();
+        let ins_count = ops
+            .iter()
+            .filter(|op| matches!(op, DiffOp::Insert(_)))
+            .count();
         assert_eq!(del_count, 2500);
         assert_eq!(ins_count, 2500);
     }

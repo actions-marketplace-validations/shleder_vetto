@@ -217,7 +217,11 @@ impl AuditLedger {
                 return Ok(LedgerVerificationResult {
                     is_valid: false,
                     records_verified,
-                    last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                    last_seq: if expected_seq > 0 {
+                        Some(expected_seq - 1)
+                    } else {
+                        None
+                    },
                     last_hash,
                     has_terminal_record,
                     has_signature: true,
@@ -237,7 +241,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash,
                         has_terminal_record,
                         has_signature: seen_signature,
@@ -258,7 +266,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash,
                         has_terminal_record,
                         has_signature: seen_signature,
@@ -280,7 +292,11 @@ impl AuditLedger {
                         return Ok(LedgerVerificationResult {
                             is_valid: false,
                             records_verified,
-                            last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                            last_seq: if expected_seq > 0 {
+                                Some(expected_seq - 1)
+                            } else {
+                                None
+                            },
                             last_hash,
                             has_terminal_record,
                             has_signature: seen_signature,
@@ -300,7 +316,11 @@ impl AuditLedger {
                         return Ok(LedgerVerificationResult {
                             is_valid: false,
                             records_verified,
-                            last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                            last_seq: if expected_seq > 0 {
+                                Some(expected_seq - 1)
+                            } else {
+                                None
+                            },
                             last_hash,
                             has_terminal_record,
                             has_signature: seen_signature,
@@ -342,7 +362,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash: Some(expected_prev.to_string()),
                         has_terminal_record,
                         has_signature: false,
@@ -372,7 +396,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash,
                         has_terminal_record,
                         has_signature: seen_signature,
@@ -396,7 +424,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash,
                         has_terminal_record,
                         has_signature: seen_signature,
@@ -420,7 +452,11 @@ impl AuditLedger {
                     return Ok(LedgerVerificationResult {
                         is_valid: false,
                         records_verified,
-                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_seq: if expected_seq > 0 {
+                            Some(expected_seq - 1)
+                        } else {
+                            None
+                        },
                         last_hash,
                         has_terminal_record,
                         has_signature: seen_signature,
@@ -439,7 +475,11 @@ impl AuditLedger {
                 return Ok(LedgerVerificationResult {
                     is_valid: false,
                     records_verified,
-                    last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                    last_seq: if expected_seq > 0 {
+                        Some(expected_seq - 1)
+                    } else {
+                        None
+                    },
                     last_hash,
                     has_terminal_record,
                     has_signature: seen_signature,
@@ -457,7 +497,11 @@ impl AuditLedger {
                 return Ok(LedgerVerificationResult {
                     is_valid: false,
                     records_verified,
-                    last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                    last_seq: if expected_seq > 0 {
+                        Some(expected_seq - 1)
+                    } else {
+                        None
+                    },
                     last_hash,
                     has_terminal_record,
                     has_signature: seen_signature,
@@ -466,7 +510,8 @@ impl AuditLedger {
                         seq: Some(seq),
                         expected_hash: Some(expected_prev),
                         actual_hash: Some(prev_hash),
-                        reason: "Hash chain break: prev_hash does not match previous entry's hash".to_string(),
+                        reason: "Hash chain break: prev_hash does not match previous entry's hash"
+                            .to_string(),
                     }),
                 });
             }
@@ -481,7 +526,11 @@ impl AuditLedger {
                 return Ok(LedgerVerificationResult {
                     is_valid: false,
                     records_verified,
-                    last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                    last_seq: if expected_seq > 0 {
+                        Some(expected_seq - 1)
+                    } else {
+                        None
+                    },
                     last_hash,
                     has_terminal_record,
                     has_signature: seen_signature,
@@ -490,7 +539,8 @@ impl AuditLedger {
                         seq: Some(seq),
                         expected_hash: Some(recomputed),
                         actual_hash: Some(hash),
-                        reason: "Cryptographic hash mismatch: record payload was tampered".to_string(),
+                        reason: "Cryptographic hash mismatch: record payload was tampered"
+                            .to_string(),
                     }),
                 });
             }
@@ -518,14 +568,19 @@ impl AuditLedger {
                 seq: Some(expected_seq - 1),
                 expected_hash: None,
                 actual_hash: None,
-                reason: "Missing terminal record (SESSION_VERDICT) or signature envelope".to_string(),
+                reason: "Missing terminal record (SESSION_VERDICT) or signature envelope"
+                    .to_string(),
             })
         };
 
         Ok(LedgerVerificationResult {
             is_valid,
             records_verified,
-            last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+            last_seq: if expected_seq > 0 {
+                Some(expected_seq - 1)
+            } else {
+                None
+            },
             last_hash,
             has_terminal_record,
             has_signature: seen_signature,
@@ -692,8 +747,10 @@ mod tests {
 
     #[test]
     fn test_audit_ledger_signature_tamper_detection() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("vetto-test-ledger-sigtamper-{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-sigtamper-{}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&temp_dir);
         let ledger_path = temp_dir.join("ledger.jsonl");
 
@@ -712,7 +769,10 @@ mod tests {
         let content = std::fs::read_to_string(&ledger_path).expect("read");
         let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         assert_eq!(lines.len(), 2);
-        lines[1] = lines[1].replace("\"signature\":\"", "\"signature\":\"00000000000000000000000000000000");
+        lines[1] = lines[1].replace(
+            "\"signature\":\"",
+            "\"signature\":\"00000000000000000000000000000000",
+        );
         std::fs::write(&ledger_path, lines.join("\n") + "\n").expect("write");
 
         let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
@@ -725,8 +785,10 @@ mod tests {
 
     #[test]
     fn test_audit_ledger_creates_parent_directory() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("vetto-test-ledger-parent-{}/nested/sub", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-parent-{}/nested/sub",
+            std::process::id()
+        ));
         let ledger_path = temp_dir.join("ledger.jsonl");
         assert!(!temp_dir.exists());
 

@@ -70,7 +70,8 @@ pub fn atomic_commit_bytes_with_mode(
         Ok(f) => f,
         Err(e) => {
             let _ = fs::remove_file(&tmp_path);
-            return Err(e).with_context(|| format!("create atomic tmp file {}", tmp_path.display()));
+            return Err(e)
+                .with_context(|| format!("create atomic tmp file {}", tmp_path.display()));
         }
     };
 
@@ -243,7 +244,9 @@ pub fn rollback_session(
                 if let Ok(rel) = path.strip_prefix(dest) {
                     let rel_norm = rel.to_string_lossy().replace('\\', "/");
                     let is_tracked = snapshot_files.contains(rel)
-                        || snapshot_files.iter().any(|p| p.to_string_lossy().replace('\\', "/") == rel_norm);
+                        || snapshot_files
+                            .iter()
+                            .any(|p| p.to_string_lossy().replace('\\', "/") == rel_norm);
                     if !is_tracked {
                         let _ = fs::remove_file(&path);
                         files_deleted += 1;
@@ -511,7 +514,10 @@ mod tests {
 
             let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
             assert_eq!(res.files_deleted, 1);
-            assert!(!rogue_link.exists() && !rogue_link.is_symlink(), "symlink must be deleted");
+            assert!(
+                !rogue_link.exists() && !rogue_link.is_symlink(),
+                "symlink must be deleted"
+            );
         }
 
         let _ = fs::remove_dir_all(&proj);
@@ -540,7 +546,10 @@ mod tests {
         let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
         assert_eq!(res.files_restored, 1);
         assert!(file1.is_file(), "file must replace rogue directory tree");
-        assert_eq!(fs::read_to_string(&file1).unwrap(), "file content before conflict\n");
+        assert_eq!(
+            fs::read_to_string(&file1).unwrap(),
+            "file content before conflict\n"
+        );
 
         let _ = fs::remove_dir_all(&proj);
     }

@@ -437,8 +437,8 @@ mod tests {
             let res2 = resolve_session_path(Path::new(&s2)).expect("resolve s2");
             assert_eq!(res2, log2);
 
-            let res2_prefixed =
-                resolve_session_path(Path::new(&format!("session-{s2}"))).expect("resolve prefixed");
+            let res2_prefixed = resolve_session_path(Path::new(&format!("session-{s2}")))
+                .expect("resolve prefixed");
             assert_eq!(res2_prefixed, log2);
 
             let _ = std::fs::remove_file(log1);

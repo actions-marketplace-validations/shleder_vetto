@@ -289,7 +289,8 @@ impl SandboxHandle {
         {
             match self.strategy.as_ref() {
                 #[cfg(target_os = "linux")]
-                Some(KillStrategy::PidNsPipe(_)) => {
+                Some(KillStrategy::PidNsPipe(_)) =>
+                {
                     #[cfg(target_os = "linux")]
                     if self.pidfd.is_none() {
                         unsafe {

@@ -24,7 +24,9 @@ pub struct SnapshotMetadata {
     pub total_size_bytes: u64,
 }
 
-pub use super::rollback::{rollback_session, rollback_session as rollback_snapshot, RollbackResult};
+pub use super::rollback::{
+    rollback_session, rollback_session as rollback_snapshot, RollbackResult,
+};
 
 /// Resolves the snapshots root directory (`~/.vetto/snapshots`).
 pub fn snapshots_root_dir() -> Result<PathBuf> {
@@ -315,7 +317,11 @@ pub fn try_reflink_clone(src: &Path, dst: &Path) -> std::io::Result<()> {
         let dst_c = CString::new(dst.as_os_str().as_bytes())
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         extern "C" {
-            fn clonefile(src: *const libc::c_char, dst: *const libc::c_char, flags: libc::c_int) -> libc::c_int;
+            fn clonefile(
+                src: *const libc::c_char,
+                dst: *const libc::c_char,
+                flags: libc::c_int,
+            ) -> libc::c_int;
         }
         let ret = unsafe { clonefile(src_c.as_ptr(), dst_c.as_ptr(), 0) };
         if ret == 0 {
@@ -431,7 +437,9 @@ pub fn read_tar_archive_with_modes(path: &Path) -> Result<BTreeMap<String, (Vec<
 }
 
 /// Read tar entries and POSIX modes from an arbitrary byte reader.
-pub fn read_tar_entries_with_modes<R: Read>(mut reader: R) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
+pub fn read_tar_entries_with_modes<R: Read>(
+    mut reader: R,
+) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
     let mut entries = BTreeMap::new();
     loop {
         let mut header = [0u8; 512];
@@ -633,7 +641,10 @@ mod tests {
         let session_id = format!("test-session-ignored-{}", std::process::id());
         let meta = create_snapshot(&src_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
 
-        assert_eq!(meta.file_count, 1, "only legit src/main.rs should be included");
+        assert_eq!(
+            meta.file_count, 1,
+            "only legit src/main.rs should be included"
+        );
         let entries = inspect_snapshot_archive(&session_id).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, "src/main.rs");

@@ -136,7 +136,10 @@ impl EphemeralGuard {
 impl Drop for EphemeralGuard {
     fn drop(&mut self) {
         if !self.completed {
-            let _ = crate::rescue::snapshot::rollback_snapshot(&self.session_id, Some(&self.project_dir));
+            let _ = crate::rescue::snapshot::rollback_snapshot(
+                &self.session_id,
+                Some(&self.project_dir),
+            );
             if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
                 let _ = std::fs::remove_dir_all(root.join(&self.session_id));
             }
