@@ -39,14 +39,14 @@ impl Severity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Finding {
     pub severity: Severity,
     pub rule: &'static str,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct LintReport {
     pub success: bool,
     pub findings_count: usize,
@@ -92,8 +92,14 @@ pub fn run_cli(
     let success = !has_high && (!strict || findings.is_empty());
 
     if json {
-        let high_count = findings.iter().filter(|f| f.severity == Severity::High).count();
-        let warn_count = findings.iter().filter(|f| f.severity == Severity::Warn).count();
+        let high_count = findings
+            .iter()
+            .filter(|f| f.severity == Severity::High)
+            .count();
+        let warn_count = findings
+            .iter()
+            .filter(|f| f.severity == Severity::Warn)
+            .count();
         let report = LintReport {
             success,
             findings_count: findings.len(),

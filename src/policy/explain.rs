@@ -389,13 +389,20 @@ fn print_text(
     // Render structured Effective Rights Tree view
     println!("  Effective Rights Tree:");
     println!("  ├── Filesystem");
-    println!("  │   ├── Workspace: {}", contract.filesystem.workspace_root.display());
+    println!(
+        "  │   ├── Workspace: {}",
+        contract.filesystem.workspace_root.display()
+    );
     println!("  │   ├── Write Roots ({}):", policy.allow_write.len());
     if policy.allow_write.is_empty() {
         println!("  │   │   └── (none)");
     } else {
         for (i, root) in policy.allow_write.iter().enumerate() {
-            let prefix = if i == policy.allow_write.len() - 1 { "└──" } else { "├──" };
+            let prefix = if i == policy.allow_write.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
             println!("  │   │   {} {}", prefix, root.display());
         }
     }
@@ -403,15 +410,18 @@ fn print_text(
     if policy.allow_read.is_empty() {
         println!("  │   │   └── (none)");
     } else {
-        let listed = policy.allow_read.iter().take(MAX_LISTED_READ_ROOTS).collect::<Vec<_>>();
+        let listed = policy
+            .allow_read
+            .iter()
+            .take(MAX_LISTED_READ_ROOTS)
+            .collect::<Vec<_>>();
         for (i, root) in listed.iter().enumerate() {
-            let prefix = if i == listed.len() - 1
-                && policy.allow_read.len() <= MAX_LISTED_READ_ROOTS
-            {
-                "└──"
-            } else {
-                "├──"
-            };
+            let prefix =
+                if i == listed.len() - 1 && policy.allow_read.len() <= MAX_LISTED_READ_ROOTS {
+                    "└──"
+                } else {
+                    "├──"
+                };
             println!("  │   │   {} {}", prefix, root.display());
         }
         if policy.allow_read.len() > MAX_LISTED_READ_ROOTS {
@@ -430,7 +440,11 @@ fn print_text(
         println!("  │       └── (none)");
     } else {
         for (i, entry) in policy.deny_resolved.iter().enumerate() {
-            let prefix = if i == policy.deny_resolved.len() - 1 { "└──" } else { "├──" };
+            let prefix = if i == policy.deny_resolved.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
             println!(
                 "  │       {} {}{}",
                 prefix,
@@ -441,24 +455,29 @@ fn print_text(
     }
 
     println!("  ├── Process Execution");
-    println!(
-        "  │   ├── Invoked Binary: {}",
-        if contract.agent_identity.invoked_binary.as_os_str().is_empty() {
-            "(default)"
-        } else {
-            &contract.agent_identity.invoked_binary.display().to_string()
-        }
-    );
+    let invoked_bin = if contract.agent_identity.invoked_binary.as_os_str().is_empty() {
+        "(default)".to_string()
+    } else {
+        contract.agent_identity.invoked_binary.display().to_string()
+    };
+    println!("  │   ├── Invoked Binary: {}", invoked_bin);
     println!("  │   └── Execution Policy: restricted to allow roots");
 
     println!("  ├── Network");
     println!("  │   ├── Mode: {}", net.label());
-    println!("  │   ├── Allowed Domains ({}):", policy.network_allow.len());
+    println!(
+        "  │   ├── Allowed Domains ({}):",
+        policy.network_allow.len()
+    );
     if policy.network_allow.is_empty() {
         println!("  │   │   └── (none)");
     } else {
         for (i, d) in policy.network_allow.iter().enumerate() {
-            let prefix = if i == policy.network_allow.len() - 1 { "└──" } else { "├──" };
+            let prefix = if i == policy.network_allow.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
             println!("  │   │   {} {}", prefix, d);
         }
     }
@@ -487,7 +506,11 @@ fn print_text(
     println!("  └── Resource Quotas");
     println!(
         "      ├── CPU: rlimit={}, cpu_max={}, effective={}%",
-        policy.limits.cpu_seconds.map(|s| format!("{s}s")).unwrap_or_else(|| "(none)".into()),
+        policy
+            .limits
+            .cpu_seconds
+            .map(|s| format!("{s}s"))
+            .unwrap_or_else(|| "(none)".into()),
         policy
             .cpu_max
             .as_deref()
@@ -497,8 +520,16 @@ fn print_text(
     );
     println!(
         "      ├── Memory: rlimit={}, memory_max={}, effective={}",
-        policy.limits.address_space_bytes.map(human_bytes).unwrap_or_else(|| "(none)".into()),
-        policy.cgroup.as_ref().and_then(|c| c.memory_max.as_deref()).unwrap_or("(none)"),
+        policy
+            .limits
+            .address_space_bytes
+            .map(human_bytes)
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .cgroup
+            .as_ref()
+            .and_then(|c| c.memory_max.as_deref())
+            .unwrap_or("(none)"),
         if contract.resources.max_memory_bytes > 0 {
             human_bytes(contract.resources.max_memory_bytes)
         } else {
@@ -507,8 +538,16 @@ fn print_text(
     );
     println!(
         "      ├── PIDs: rlimit={}, pids_max={}, effective={}",
-        policy.limits.processes.map(|p| p.to_string()).unwrap_or_else(|| "(none)".into()),
-        policy.cgroup.as_ref().and_then(|c| c.pids_max.as_deref()).unwrap_or("(none)"),
+        policy
+            .limits
+            .processes
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .cgroup
+            .as_ref()
+            .and_then(|c| c.pids_max.as_deref())
+            .unwrap_or("(none)"),
         if contract.resources.max_pids > 0 {
             contract.resources.max_pids.to_string()
         } else {
@@ -517,8 +556,16 @@ fn print_text(
     );
     println!(
         "      └── Files: open_files={}, file_size={}",
-        policy.limits.open_files.map(|f| f.to_string()).unwrap_or_else(|| "(none)".into()),
-        policy.limits.file_size_bytes.map(human_bytes).unwrap_or_else(|| "(none)".into())
+        policy
+            .limits
+            .open_files
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .limits
+            .file_size_bytes
+            .map(human_bytes)
+            .unwrap_or_else(|| "(none)".into())
     );
 
     println!("  Resources:");

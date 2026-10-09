@@ -18,7 +18,6 @@ fn test_legacy_policy_ir_compatibility() {
     assert_eq!(compiled.level, SecurityLevel::Standard);
     assert!(legacy_validate(&compiled).is_ok());
 }
-
 #[test]
 fn test_policy_compiler_contract_sealing() {
     let temp_dir = std::env::temp_dir()
@@ -2342,8 +2341,8 @@ allow_write = ["src"]
     std::fs::write(&policy_path, initial_toml).expect("write initial toml");
 
     // 18.3: allow_path creates .bak and preserves comments
-    let updated = allow_path("target", false, false, Some(&policy_path))
-        .expect("allow_path must succeed");
+    let updated =
+        allow_path("target", false, false, Some(&policy_path)).expect("allow_path must succeed");
     assert_eq!(updated, policy_path);
     let bak_path = Path::new(&format!("{}.bak", policy_path.display())).to_path_buf();
     assert!(bak_path.exists(), ".bak backup file must be created");
@@ -2351,7 +2350,10 @@ allow_write = ["src"]
     assert_eq!(bak_content, initial_toml);
 
     let new_content = std::fs::read_to_string(&policy_path).expect("read new");
-    assert!(new_content.contains("# Top comment"), "Comments must be preserved");
+    assert!(
+        new_content.contains("# Top comment"),
+        "Comments must be preserved"
+    );
     assert!(new_content.contains("# inline comment"));
     assert!(new_content.contains("\"target\""));
 
@@ -2359,17 +2361,20 @@ allow_write = ["src"]
     assert!(allow_path("/etc/shadow", false, false, Some(&policy_path)).is_err());
 
     // 18.5: deny_path adds to display_only_deny
-    deny_path("~/.aws/credentials", false, Some(&policy_path))
-        .expect("deny_path must succeed");
+    deny_path("~/.aws/credentials", false, Some(&policy_path)).expect("deny_path must succeed");
     let content_after_deny = std::fs::read_to_string(&policy_path).expect("read after deny");
     assert!(content_after_deny.contains("display_only_deny"));
     assert!(content_after_deny.contains("~/.aws/credentials"));
 
     // 18.6: allow_domain and deny_domain
-    allow_domain("api.anthropic.com", Some("100mb"), false, Some(&policy_path))
-        .expect("allow_domain must succeed");
-    deny_domain("evil.com", false, Some(&policy_path))
-        .expect("deny_domain must succeed");
+    allow_domain(
+        "api.anthropic.com",
+        Some("100mb"),
+        false,
+        Some(&policy_path),
+    )
+    .expect("allow_domain must succeed");
+    deny_domain("evil.com", false, Some(&policy_path)).expect("deny_domain must succeed");
 
     let net_content = std::fs::read_to_string(&policy_path).expect("read net content");
     assert!(net_content.contains("api.anthropic.com"));
@@ -2436,7 +2441,10 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
     assert_eq!(checks[3]["name"], "write-outside");
 
     // 19.3: SHA-256 sealed contract integrity verification (INV-36)
-    assert!(contract.verify_sha256(), "Contract SHA-256 seal must verify");
+    assert!(
+        contract.verify_sha256(),
+        "Contract SHA-256 seal must verify"
+    );
     let mut tampered = contract.clone();
     tampered.resources.max_pids = 999999;
     assert!(
@@ -2554,7 +2562,10 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     });
 
     assert_eq!(explain_json["network"]["mode"], "allowlist");
-    assert_eq!(explain_json["filesystem"]["workspace_root"], ws.display().to_string());
+    assert_eq!(
+        explain_json["filesystem"]["workspace_root"],
+        ws.display().to_string()
+    );
     assert_eq!(explain_json["quotas"]["cpu"]["rlimit_seconds"], 60);
 
     let _ = std::fs::remove_dir_all(&ws);

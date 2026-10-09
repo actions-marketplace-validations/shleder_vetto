@@ -391,8 +391,7 @@ pub fn apply_with_quota_atomic(
 
     let bak_path = if path.exists() {
         let bak = PathBuf::from(format!("{}.bak", path.display()));
-        std::fs::copy(&path, &bak)
-            .with_context(|| format!("create backup {}", bak.display()))?;
+        std::fs::copy(&path, &bak).with_context(|| format!("create backup {}", bak.display()))?;
         Some(bak)
     } else {
         None
@@ -474,11 +473,7 @@ pub fn allow_path(
 }
 
 /// Public API: deny/mask a filesystem path in display_only_deny.
-pub fn deny_path(
-    path: &str,
-    global: bool,
-    custom_policy: Option<&Path>,
-) -> Result<PathBuf> {
+pub fn deny_path(path: &str, global: bool, custom_policy: Option<&Path>) -> Result<PathBuf> {
     validate_deny_path_syntax(path)?;
     apply_with_quota_atomic(Grant::Deny, path, None, global, custom_policy)
 }
@@ -503,11 +498,7 @@ pub fn allow_domain(
 }
 
 /// Public API: deny network domain in [network].deny.
-pub fn deny_domain(
-    domain: &str,
-    global: bool,
-    custom_policy: Option<&Path>,
-) -> Result<PathBuf> {
+pub fn deny_domain(domain: &str, global: bool, custom_policy: Option<&Path>) -> Result<PathBuf> {
     let clean = domain.trim();
     let normalized = normalize_net_target(clean);
     if normalized.is_empty() {
@@ -1105,15 +1096,13 @@ mod tests {
         let custom = dir.join("policy.toml");
 
         // Test --preset ssh
-        run_deny(None, Some("ssh"), false, false, false, Some(&custom))
-            .expect("deny ssh preset");
+        run_deny(None, Some("ssh"), false, false, false, Some(&custom)).expect("deny ssh preset");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("[display_only_deny]"));
         assert!(content.contains("\"$HOME/.ssh\""));
 
         // Test --preset aws
-        run_deny(None, Some("aws"), false, false, false, Some(&custom))
-            .expect("deny aws preset");
+        run_deny(None, Some("aws"), false, false, false, Some(&custom)).expect("deny aws preset");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("\"$HOME/.aws\""));
 
@@ -1162,8 +1151,7 @@ mod tests {
         let custom = dir.join("policy.toml");
 
         // Test --glob positional pattern
-        run_deny(Some("**/*.pem"), None, true, false, false, Some(&custom))
-            .expect("deny glob");
+        run_deny(Some("**/*.pem"), None, true, false, false, Some(&custom)).expect("deny glob");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("[filesystem]"));
         assert!(
@@ -1304,8 +1292,7 @@ mod tests {
 
         allow_domain("api.anthropic.com", Some("100mb"), false, Some(&custom))
             .expect("allow domain");
-        deny_domain("malicious.example.com", false, Some(&custom))
-            .expect("deny domain");
+        deny_domain("malicious.example.com", false, Some(&custom)).expect("deny domain");
 
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("mode = \"allowlist\""));

@@ -18,7 +18,6 @@ use anyhow::Context;
 use crate::config::NetMode;
 use crate::policy;
 use crate::policy::Policy;
-use crate::policy::Tier;
 use crate::sandbox;
 
 #[cfg(unix)]
@@ -134,8 +133,8 @@ pub fn run_cli_with_options(
     simulate: bool,
 ) -> anyhow::Result<()> {
     let start_instant = std::time::Instant::now();
-    let project = std::env::current_dir()
-        .context("failed to determine current working directory")?;
+    let project =
+        std::env::current_dir().context("failed to determine current working directory")?;
     let home = std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -144,7 +143,7 @@ pub fn run_cli_with_options(
     let report = if simulate {
         let tier = policy::Tier::Full;
         let pol = policy::loader::load(profile, policy_path, &project, &home, tier)?;
-        let nonce = crate::sandbox::production::new_nonce();
+        let nonce = crate::sandbox::production::lifecycle::new_nonce();
         let env_extra = std::collections::HashMap::new();
         let env = crate::sandbox::production::build_production_env(&pol, &env_extra);
         let contract = crate::policy_ir::compiler::PolicyCompiler::compile_effective(
@@ -198,7 +197,7 @@ pub fn run_cli_with_options(
                         return Ok(());
                     }
                 };
-                let nonce = crate::sandbox::production::new_nonce();
+                let nonce = crate::sandbox::production::lifecycle::new_nonce();
                 let env_extra = std::collections::HashMap::new();
                 let env = crate::sandbox::production::build_production_env(&pol, &env_extra);
                 let contract = crate::policy_ir::compiler::PolicyCompiler::compile_effective(
@@ -633,23 +632,26 @@ fn battery_simulated(
     // 2. Core Boundary 1: Workspace Read (.)
     let project = &contract.filesystem.workspace_root;
     let ws_in_allow_read = contract.filesystem.allow_read.iter().any(|p| {
-        p == project
-            || p == Path::new(".")
-            || project.starts_with(p)
-            || p.starts_with(project)
+        p == project || p == Path::new(".") || project.starts_with(p) || p.starts_with(project)
     });
     let host_ws_readable = std::fs::read_dir(project).is_ok() || project.exists();
     if ws_in_allow_read && host_ws_readable {
         checks.push(CheckResult {
             name: "workspace-read",
             status: STATUS_PASS,
-            detail: format!("{}: workspace read permitted and verified", project.display()),
+            detail: format!(
+                "{}: workspace read permitted and verified",
+                project.display()
+            ),
         });
     } else {
         checks.push(CheckResult {
             name: "workspace-read",
             status: STATUS_LEAK,
-            detail: format!("{}: workspace read not granted in contract", project.display()),
+            detail: format!(
+                "{}: workspace read not granted in contract",
+                project.display()
+            ),
         });
     }
 
@@ -695,9 +697,11 @@ fn battery_simulated(
     }
 
     // 4. Core Boundary 3: Network Block (Out-of-allowlist Egress)
-    let net_blocked = match &contract.network.mode {
+    let net_blocked = match contract.network.mode {
         crate::policy_ir::contract::NetworkMode::Off => true,
-        crate::policy_ir::contract::NetworkMode::Allowlist(domains) => !domains.is_empty(),
+        crate::policy_ir::contract::NetworkMode::Allowlist => {
+            !contract.network.allowed_domains.is_empty()
+        }
         _ => false,
     };
     if net_blocked {
@@ -705,8 +709,8 @@ fn battery_simulated(
             name: "network-block",
             status: STATUS_PASS,
             detail: format!(
-                "out-of-allowlist egress blocked (mode={})",
-                contract.network.mode.label()
+                "out-of-allowlist egress blocked (mode={:?})",
+                contract.network.mode
             ),
         });
     } else {
