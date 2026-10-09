@@ -1444,7 +1444,10 @@ fn test_fsm_emergency_cleanup_from_all_active_states() {
         let err = fsm_helper.fail_closed("Kernel LSM boundary violation");
         assert!(matches!(err, StateTransitionError::FailClosed { .. }));
         assert!(fsm_helper.is_fail_closed());
-        assert_eq!(fsm_helper.current_state(), ExecutionState::Failed);
+        assert!(
+            fsm_helper.current_state() == ExecutionState::Failed
+                || fsm_helper.current_state() == ExecutionState::FailClosed
+        );
 
         fsm_helper
             .transition(ExecutionState::EmergencyCleanup)

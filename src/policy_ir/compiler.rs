@@ -1446,10 +1446,8 @@ mod compiler_tests {
             PolicyCompiler::compile("claude", &ws, Some(NetworkMode::Allowlist), &[], &[])
                 .expect("compile contract");
 
-        contract.network.allowed_domains = vec![
-            "api.anthropic.com".to_string(),
-            "*.github.com".to_string(),
-        ];
+        contract.network.allowed_domains =
+            vec!["api.anthropic.com".to_string(), "*.github.com".to_string()];
         contract.network.allowed_ports = vec![443];
 
         // 1. Exact domain match on port 443 is allowed
