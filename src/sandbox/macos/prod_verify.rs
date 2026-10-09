@@ -1,6 +1,6 @@
 //! macOS host-observed verification + tree sweep for the production boundary.
 //!
-//! The [`SandboxBackend`](crate::verify_ng::sandbox_backend::SandboxBackend)
+//! The [`SandboxBackend`](crate::sandbox::capability::SandboxBackend)
 //! boundary only *reports* enforcement; this module *observes* it from the
 //! host without trusting any child output:
 //!
@@ -20,7 +20,7 @@
 //! Best-effort signals (`kill` on an already-dead tree) are harmless and
 //! ignored; only the post-sweep liveness check decides clean vs. dirty.
 
-use crate::verify_ng::sandbox_backend::HostVerification;
+use crate::sandbox::capability::HostVerification;
 
 /// Host-observed state of a live macOS production child.
 ///

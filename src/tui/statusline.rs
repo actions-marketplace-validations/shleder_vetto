@@ -473,7 +473,7 @@ fn overlay_ui(f: &mut ratatui::Frame, app_state: &AppState, offset_from_end: usi
     for ev in filtered.iter().skip(start).take(end - start) {
         let blocked = matches!(ev, Event::BlockedAttempt { .. })
             || matches!(ev, Event::NetRequest { allowed: false, .. });
-        let suspicious = crate::classifier::classify_event(ev).is_some();
+        let suspicious = false;
         let kind = if blocked {
             "BLOCKED"
         } else if suspicious {

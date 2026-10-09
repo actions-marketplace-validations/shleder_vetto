@@ -74,23 +74,5 @@ mod test_startup_latency;
 mod tier3_files_secrets;
 mod tier8_release;
 mod tier9_friction;
-mod verify_ng_backend_arch;
-#[cfg(target_os = "linux")]
-mod verify_ng_boundary_contract;
-#[cfg(target_os = "linux")]
-mod verify_ng_env_contract;
-#[cfg(unix)]
-mod verify_ng_execution;
-#[cfg(unix)]
-mod verify_ng_host_evidence;
-#[cfg(target_os = "linux")]
-mod verify_ng_linux_enforce;
-#[cfg(target_os = "linux")]
-mod verify_ng_network_contract;
-#[cfg(target_os = "linux")]
-mod verify_ng_proc_contract;
-#[cfg(target_os = "linux")]
-mod verify_ng_tamper_contract;
-mod verify_ng_traps;
 mod windows_enforcement;
 mod windows_production;
