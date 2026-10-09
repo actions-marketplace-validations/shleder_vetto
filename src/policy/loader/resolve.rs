@@ -11,7 +11,6 @@ use crate::policy::checker;
 use crate::policy::defaults;
 use crate::policy::glob_resolve::{self, Vars};
 use crate::policy::presets;
-use crate::policy::secretscan;
 use crate::policy::types::{
     lexical_normalize, DenyEntry, EnvironmentPolicy, Policy, SeccompProfile, Tier,
 };
@@ -164,22 +163,6 @@ pub fn build_policy(
                         is_dir: meta.is_dir(),
                     });
                 }
-            }
-        }
-    }
-
-    if merged.auto_deny_secrets {
-        let scan_result =
-            secretscan::scan_directory(project, &secretscan::SecretScanOptions::default());
-        if scan_result.timed_out {
-            warnings.push("auto_deny_secrets scan timed out; partial scan completed".to_string());
-        }
-        for secret_path in scan_result.unique_paths() {
-            if deny_set.insert(secret_path.clone()) {
-                deny_resolved.push(DenyEntry {
-                    path: secret_path,
-                    is_dir: false,
-                });
             }
         }
     }

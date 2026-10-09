@@ -7,7 +7,7 @@
 //!   sandbox stack exists; elsewhere they skip with an explicit reason
 //!   instead of asserting against a run the fail-closed backend refuses.
 //! - Every spawn test goes through `vetto::sandbox::production` (the
-//!   authoritative boundary), never `verify_ng::runner` directly.
+//!   authoritative boundary).
 
 use std::collections::BTreeMap;
 #[cfg(target_os = "windows")]
@@ -17,6 +17,14 @@ use std::time::{Duration, Instant};
 
 use vetto::config::NetMode;
 use vetto::policy::Policy;
+use vetto::sandbox::capability::{
+    allows_pass, apply_backend_ceiling, required_capabilities, BackendKind, CanonicalPolicy,
+    Category, ClaimStrength, ExecutionIdentity, Scenario, SecurityCapability, Severity, Verdict,
+};
+#[cfg(target_os = "windows")]
+use vetto::sandbox::capability::{
+    EnforcementReport, EnforcementState, PreparationFailureKind, SandboxBackend,
+};
 #[cfg(target_os = "windows")]
 use vetto::sandbox::production::{
     execute_simple, execute_with_backend, ProdSpawnLog, UnpreparedProductionExecution,
@@ -26,17 +34,6 @@ use vetto::sandbox::production::{
 };
 #[cfg(target_os = "windows")]
 use vetto::sandbox::{Backend, StdioMode};
-use vetto::verify_ng::evidence::ExecutionIdentity;
-use vetto::verify_ng::model::{Category, ClaimStrength, Verdict};
-use vetto::verify_ng::registry::{Scenario, Severity};
-use vetto::verify_ng::sandbox_backend::{
-    allows_pass, apply_backend_ceiling, required_capabilities, BackendKind, CanonicalPolicy,
-    SecurityCapability,
-};
-#[cfg(target_os = "windows")]
-use vetto::verify_ng::sandbox_backend::{
-    EnforcementReport, EnforcementState, PreparationFailureKind, SandboxBackend,
-};
 
 /// Serializes the Windows production-spawn tests: spawn-counter deltas and
 /// the Job Object tree assertions stay exact under the harness's default
@@ -112,7 +109,7 @@ extern "system" {
 #[test]
 fn test_win_prod_job_001_kill_on_close_kills_tree() {
     use vetto::sandbox::windows::job_object::JobObject;
-    use vetto::verify_ng::windows_enforce as we;
+    use vetto::sandbox::windows::prod_verify as we;
 
     let _guard = win_prod_serial().lock().unwrap();
     let job = match JobObject::new_kill_on_close() {
@@ -724,8 +721,8 @@ fn test_win_prod_tier_001_mapping_honest() {
 fn test_win_prod_ceiling_001_unsupported_never_passes() {
     let scenario = test_scenario("TEST-WIN-PROD-CEILING-001", Category::FsRead);
     assert!(required_capabilities(&scenario).contains(&SecurityCapability::FilesystemIsolation));
-    let mut backend = vetto::verify_ng::sandbox_backend::select_backend(BackendKind::Windows);
-    let policy = CanonicalPolicy::from_frozen(&vetto::verify_ng::frozen::FrozenSpec {
+    let mut backend = vetto::sandbox::capability::select_backend(BackendKind::Windows);
+    let policy = CanonicalPolicy::from_frozen(&vetto::sandbox::capability::FrozenSpec {
         scenario_id: scenario.id.clone(),
         registry_hash: "reg-test".to_string(),
         tier: "none".to_string(),

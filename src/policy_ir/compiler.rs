@@ -458,10 +458,24 @@ fn get_home_dir() -> Option<PathBuf> {
 }
 
 fn generate_session_nonce() -> String {
-    use rand_core::RngCore;
-    let mut bytes = [0u8; 16];
-    rand_core::OsRng.fill_bytes(&mut bytes);
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    use sha2::{Digest, Sha256};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::SystemTime;
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
+
+    let mut hasher = Sha256::new();
+    hasher.update(now.to_le_bytes());
+    hasher.update(pid.to_le_bytes());
+    hasher.update(count.to_le_bytes());
+    let res = hasher.finalize();
+    res[0..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]

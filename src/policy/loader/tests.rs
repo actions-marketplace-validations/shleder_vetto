@@ -275,64 +275,6 @@ allow = ["$PROJECT/test.sock"]
 }
 
 #[test]
-fn test_require_signed_policy_enforcement() {
-    let root = std::env::temp_dir().join(format!("vetto-signed-test-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).unwrap();
-
-    let policy_path = root.join("vetto.toml");
-    let content = r#"
-[metadata]
-name = "signed-test"
-
-[filesystem]
-allow_write = ["${PROJECT}"]
-allow_read = ["/usr", "${PROJECT}"]
-"#;
-    std::fs::write(&policy_path, content).unwrap();
-
-    let mut loader = LayeredPolicyLoader::new();
-    loader.require_signed = true;
-    let options = PolicyLoadOptions {
-        require_signed: true,
-        ..Default::default()
-    };
-
-    let err = loader.load(
-        "default",
-        Some(&policy_path),
-        &root,
-        &root,
-        Tier::Full,
-        &options,
-    );
-    assert!(
-        err.is_err(),
-        "unsigned policy must fail when require_signed=true"
-    );
-
-    use ed25519_dalek::Signer;
-    let keys_dir = root.join(".vetto");
-    let (signing_key, verifying_key) =
-        crate::policy::crypto::ensure_signing_keypair(&keys_dir).unwrap();
-    let sig = signing_key.sign(content.as_bytes());
-    let sig_text = crate::policy::crypto::create_signature_file_content(&sig, &verifying_key);
-    std::fs::write(root.join("vetto.toml.sig"), sig_text).unwrap();
-
-    let loaded = loader.load(
-        "default",
-        Some(&policy_path),
-        &root,
-        &root,
-        Tier::Full,
-        &options,
-    );
-    assert!(loaded.is_ok(), "signed policy must load successfully");
-
-    let _ = std::fs::remove_dir_all(root);
-}
-
-#[test]
 fn claude_agent_preset_policy_loading() {
     let root = std::env::temp_dir().join(format!("vetto-claude-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);

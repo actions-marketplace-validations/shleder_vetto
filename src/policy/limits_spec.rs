@@ -231,7 +231,7 @@ fn parse_value(key: &LimitKey, value: &str, pair: &str) -> Result<u64> {
 /// case-insensitive suffix. Suffix math is checked for overflow so a
 /// nonsensical value cannot wrap into a small (weaker) ceiling.
 fn parse_byte_value(value: &str, pair: &str) -> Result<u64> {
-    crate::policy::units::parse_bytes(value).map_err(|e| {
+    crate::policy::types::parse_bytes(value).map_err(|e| {
         anyhow::anyhow!(
             "invalid --limits value '{value}' in pair '{pair}': {e} ({BYTE_SUFFIX_DOC})"
         )

@@ -6,15 +6,15 @@
 //! the same policy, sandbox, observation, PTY, and report code as the CLI.
 
 pub mod audit;
-pub mod classifier;
 pub mod cli;
 pub mod config;
 pub mod cred_broker;
-pub mod crypto;
 pub mod doctor;
 pub mod error;
 pub mod events;
 pub mod exit_codes;
+pub mod fs;
+pub mod git;
 pub mod history;
 pub mod init;
 pub mod logger;
@@ -34,6 +34,5 @@ pub mod supervise;
 #[cfg(unix)]
 pub mod tui;
 pub mod verify;
-pub mod verify_ng;
 pub mod version;
 pub mod watchdog;

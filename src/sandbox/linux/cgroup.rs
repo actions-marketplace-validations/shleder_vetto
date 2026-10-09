@@ -94,8 +94,8 @@ impl Drop for CgroupHandle {
     }
 }
 
+use crate::policy::types::parse_cgroup_memory;
 pub use crate::policy::types::{parse_cpu_max, parse_memory_bytes};
-use crate::policy::units::parse_cgroup_memory;
 
 /// Read available cgroup v2 controllers from the cgroup root if mounted.
 pub fn available_controllers() -> Vec<String> {
@@ -351,6 +351,21 @@ pub fn setup_cgroup(
         path: cgroup_dir,
         cleaned: Arc::new(AtomicBool::new(false)),
     }))
+}
+
+/// Resolve the cgroup v2 directory for a given process PID.
+pub fn child_cgroup_dir(pid: u32) -> Option<PathBuf> {
+    let content = fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
+    for line in content.lines() {
+        if let Some(path_part) = line.strip_prefix("0::") {
+            let rel = path_part.trim().trim_start_matches('/');
+            let cgroup_dir = Path::new("/sys/fs/cgroup").join(rel);
+            if cgroup_dir.exists() && cgroup_dir.join("cgroup.procs").exists() {
+                return Some(cgroup_dir);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

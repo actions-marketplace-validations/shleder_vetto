@@ -36,8 +36,7 @@ pub use resolve::{
 pub use schema::{
     expand_net_preset, parse_layer, parse_quota_bytes, RawCgroup, RawDeny, RawEnvironment,
     RawFilesystem, RawIoRate, RawLayer, RawLimits, RawMetadata, RawNetPorts, RawNetwork,
-    RawObservability, RawPlatform, RawSeccompNotify, RawSecrets, RawSecurity, RawStringList,
-    RawUnixSockets, RawValueOrString,
+    RawSeccompNotify, RawSecrets, RawSecurity, RawStringList, RawUnixSockets, RawValueOrString,
 };
 
 /// Load a policy either from a built-in profile name or a custom TOML path,

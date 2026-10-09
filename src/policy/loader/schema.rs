@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use crate::policy::conditions::RawConditions;
 use crate::policy::types::{IoRateLimit, ResourceLimits};
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -30,15 +29,9 @@ pub struct RawLayer {
     #[serde(default)]
     pub net_ports: Option<RawNetPorts>,
     #[serde(default)]
-    pub conditions: Option<RawConditions>,
-    #[serde(default)]
     pub limits: Option<RawLimits>,
     #[serde(default)]
     pub cgroup: Option<RawCgroup>,
-    #[serde(default)]
-    pub platform: Option<RawPlatform>,
-    #[serde(default)]
-    pub observability: Option<RawObservability>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -64,17 +57,9 @@ pub struct RawSecurity {
     #[serde(default)]
     pub git_guard: Option<bool>,
     #[serde(default)]
-    pub snapshot: Option<bool>,
-    #[serde(default)]
     pub seccomp_profile: Option<String>,
     #[serde(default)]
     pub seccomp_notify: Option<RawSeccompNotify>,
-    #[serde(default)]
-    pub lpac: Option<bool>,
-    #[serde(default)]
-    pub oslog: Option<bool>,
-    #[serde(default)]
-    pub require_signed: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -86,24 +71,6 @@ pub struct RawSeccompNotify {
     pub default_action: Option<String>,
     #[serde(default)]
     pub allow_syscalls: Option<RawStringList>,
-}
-
-#[derive(Deserialize, Debug, Clone, Default)]
-#[serde(deny_unknown_fields)]
-pub struct RawPlatform {
-    #[serde(default)]
-    pub oslog: Option<bool>,
-    #[serde(default)]
-    pub lpac: Option<bool>,
-    #[serde(default)]
-    pub io_rate: Option<RawIoRate>,
-}
-
-#[derive(Deserialize, Debug, Clone, Default)]
-#[serde(deny_unknown_fields)]
-pub struct RawObservability {
-    #[serde(default)]
-    pub oslog: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -198,8 +165,6 @@ pub struct RawNetwork {
 pub struct RawNetPorts {
     #[serde(default)]
     pub allow_tcp_connect: Option<Vec<u16>>,
-    #[serde(default)]
-    pub allow_tcp_bind: Option<Vec<u16>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
@@ -241,37 +206,20 @@ pub struct RawLimits {
     pub io_priority: Option<String>,
     #[serde(default)]
     pub io_rate: Option<RawIoRate>,
-    #[serde(default)]
-    pub max_iops: Option<u64>,
-    #[serde(default)]
-    pub max_bandwidth: Option<String>,
 }
 
 impl RawLimits {
     pub fn to_resource_limits(&self) -> ResourceLimits {
-        let mut io_rate = None;
-        if let Some(rate) = &self.io_rate {
+        let io_rate = self.io_rate.as_ref().map(|rate| {
             let max_bandwidth = rate
                 .max_bandwidth
                 .as_deref()
                 .and_then(crate::policy::types::parse_byte_size);
-            io_rate = Some(IoRateLimit {
+            IoRateLimit {
                 max_iops: rate.max_iops,
                 max_bandwidth,
-            });
-        }
-        if self.max_iops.is_some() || self.max_bandwidth.is_some() {
-            let mut io = io_rate.unwrap_or_default();
-            if let Some(iops) = self.max_iops {
-                io.max_iops = Some(iops);
             }
-            if let Some(bw_str) = &self.max_bandwidth {
-                if let Some(bw) = crate::policy::types::parse_byte_size(bw_str) {
-                    io.max_bandwidth = Some(bw);
-                }
-            }
-            io_rate = Some(io);
-        }
+        });
         ResourceLimits {
             cpu_seconds: self.cpu_seconds,
             address_space_bytes: self.address_space_bytes,

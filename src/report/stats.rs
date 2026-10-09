@@ -128,6 +128,39 @@ struct Inner {
     suspicious: BTreeMap<(String, String, String, String), u64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Operation {
+    FsRead,
+    FsWrite,
+    Exec,
+    Net,
+    Other,
+}
+
+impl Operation {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Operation::FsRead => "fs-read",
+            Operation::FsWrite => "fs-write",
+            Operation::Exec => "exec",
+            Operation::Net => "net",
+            Operation::Other => "other",
+        }
+    }
+}
+
+pub fn classify_path(path: &str) -> Operation {
+    let p = std::path::Path::new(path);
+    let extension = p
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_ascii_lowercase);
+    match extension.as_deref() {
+        Some("sh") | Some("bash") | Some("zsh") | Some("exe") | Some("bin") => Operation::Exec,
+        _ => Operation::FsRead,
+    }
+}
+
 pub struct StatsCollector {
     inner: Arc<Mutex<Inner>>,
 }
@@ -201,12 +234,17 @@ fn collect_loop(mut rx: broadcast::Receiver<Event>, inner: Arc<Mutex<Inner>>) {
 }
 
 fn ingest(inner: &mut Inner, ev: Event) {
-    if let Some(signal) = crate::classifier::classify_event(&ev) {
+    if let Event::BlockedAttempt {
+        ref path,
+        ref source,
+        ..
+    } = ev
+    {
         let key = (
-            signal.category.to_string(),
-            signal.severity.label().to_string(),
-            signal.subject,
-            signal.reason.to_string(),
+            "blocked".to_string(),
+            "warning".to_string(),
+            path.clone(),
+            source.clone(),
         );
         if inner.suspicious.contains_key(&key) || inner.suspicious.len() < MAX_DISTINCT_RECORDS {
             *inner.suspicious.entry(key).or_insert(0) += 1;
@@ -244,9 +282,9 @@ fn ingest(inner: &mut Inner, ev: Event) {
         } => {
             // fd-derived access beats extension heuristics when available.
             let op = match access {
-                FileAccess::Write => crate::classifier::Operation::FsWrite,
-                FileAccess::Read => crate::classifier::classify_path(path),
-                FileAccess::Unknown => crate::classifier::classify_path(path),
+                FileAccess::Write => Operation::FsWrite,
+                FileAccess::Read => classify_path(path),
+                FileAccess::Unknown => classify_path(path),
             };
             *st.op_counts.entry(op.label().to_string()).or_insert(0) += 1;
             let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
@@ -284,7 +322,7 @@ fn ingest(inner: &mut Inner, ev: Event) {
             ..
         } => {
             *st.op_counts
-                .entry(crate::classifier::Operation::Net.label().to_string())
+                .entry(Operation::Net.label().to_string())
                 .or_insert(0) += 1;
             if st.net_requests.len() < 500 {
                 st.net_requests.push(NetRecord {
@@ -296,7 +334,7 @@ fn ingest(inner: &mut Inner, ev: Event) {
         }
         Event::DnsResolved { host, ips, .. } => {
             *st.op_counts
-                .entry(crate::classifier::Operation::Net.label().to_string())
+                .entry(Operation::Net.label().to_string())
                 .or_insert(0) += 1;
             if st.dns_resolutions.len() < 500 {
                 st.dns_resolutions.push(DnsRecord { host, ips });
@@ -311,7 +349,7 @@ fn ingest(inner: &mut Inner, ev: Event) {
             ..
         } => {
             *st.op_counts
-                .entry(crate::classifier::Operation::Net.label().to_string())
+                .entry(Operation::Net.label().to_string())
                 .or_insert(0) += 1;
             st.total_egress_bytes_tx += bytes_tx;
             st.total_egress_bytes_rx += bytes_rx;
@@ -340,7 +378,7 @@ fn ingest(inner: &mut Inner, ev: Event) {
             ..
         } => {
             *st.op_counts
-                .entry(crate::classifier::Operation::Net.label().to_string())
+                .entry(Operation::Net.label().to_string())
                 .or_insert(0) += 1;
             let msg =
                 format!("network quota exceeded for {host}: {used_bytes}/{limit_bytes} bytes");
@@ -350,7 +388,7 @@ fn ingest(inner: &mut Inner, ev: Event) {
         }
         Event::Notice { message, .. } => {
             *st.op_counts
-                .entry(crate::classifier::Operation::Other.label().to_string())
+                .entry(Operation::Other.label().to_string())
                 .or_insert(0) += 1;
             if st.notices.len() < 100 {
                 st.notices.push(message);

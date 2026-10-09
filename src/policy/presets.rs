@@ -147,27 +147,19 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
             "pypi.org".into(),
             "files.pythonhosted.org".into(),
         ],
-        "opencode" => {
-            let mut domains = vec![
-                "api.openai.com".into(),
-                "api.anthropic.com".into(),
-                "openrouter.ai".into(),
-                "opencode.ai".into(),
-                "integrate.api.nvidia.com".into(),
-                "agentrouter.org".into(),
-                "aihubmix.com".into(),
-                "api.github.com".into(),
-                "github.com".into(),
-                "localhost".into(),
-                "127.0.0.1".into(),
-            ];
-            for d in crate::policy::opencode::discover_opencode_providers() {
-                if !domains.contains(&d) {
-                    domains.push(d);
-                }
-            }
-            domains
-        }
+        "opencode" => vec![
+            "api.openai.com".into(),
+            "api.anthropic.com".into(),
+            "openrouter.ai".into(),
+            "opencode.ai".into(),
+            "integrate.api.nvidia.com".into(),
+            "agentrouter.org".into(),
+            "aihubmix.com".into(),
+            "api.github.com".into(),
+            "github.com".into(),
+            "localhost".into(),
+            "127.0.0.1".into(),
+        ],
         "cursor" => vec![
             "api2.cursor.sh".into(),
             "api.cursor.sh".into(),
@@ -329,7 +321,7 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
         ];
         for var in base_url_vars {
             if let Ok(val) = std::env::var(var) {
-                if let Some(h) = crate::policy::opencode::extract_host_from_url(&val) {
+                if let Some(h) = extract_host_from_url(&val) {
                     if h == "localhost" || h == "127.0.0.1" {
                         if !domains.contains(&"localhost".to_string()) {
                             domains.push("localhost".to_string());
@@ -353,6 +345,48 @@ pub fn agent_network_allowlist(agent: &str) -> Vec<String> {
     }
 
     domains
+}
+
+fn extract_host_from_url(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let without_scheme = if let Some(idx) = s.find("://") {
+        &s[idx + 3..]
+    } else {
+        s
+    };
+    let host_and_port = without_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(without_scheme);
+    let host_and_port = if let Some(idx) = host_and_port.rfind('@') {
+        &host_and_port[idx + 1..]
+    } else {
+        host_and_port
+    };
+    let host = if host_and_port.starts_with('[') {
+        if let Some(end_bracket) = host_and_port.find(']') {
+            &host_and_port[1..end_bracket]
+        } else {
+            host_and_port
+        }
+    } else if let Some((h, p)) = host_and_port.rsplit_once(':') {
+        if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) && !h.contains(':') {
+            h
+        } else {
+            host_and_port
+        }
+    } else {
+        host_and_port
+    };
+    let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 /// Default resource limits for specific agents (e.g. OpenCode SQLite file size limit).
