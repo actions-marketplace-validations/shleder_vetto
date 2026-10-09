@@ -109,10 +109,7 @@ pub enum Action {
         args: Vec<String>,
     },
     /// Outbound TCP/UDP network connection attempt to a domain/host and port.
-    NetConnect {
-        domain: String,
-        port: u16,
-    },
+    NetConnect { domain: String, port: u16 },
 }
 
 impl Action {
@@ -149,10 +146,7 @@ pub enum ActionVerdict {
     /// The action is explicitly authorized under the active security contract.
     Allowed,
     /// The action is denied due to policy boundaries, secret masking, or execution ceilings.
-    Denied {
-        reason: String,
-        rule: String,
-    },
+    Denied { reason: String, rule: String },
 }
 
 impl ActionVerdict {
