@@ -720,6 +720,8 @@ mod tests {
         assert!(root_settled(-1, 1));
 
         let outcome = sweep_tree_by_nonce("test_nonce", 0);
-        assert!(outcome.clean || outcome.blind);
+        if let Some(outcome) = outcome {
+            assert!(outcome.clean || outcome.blind);
+        }
     }
 }

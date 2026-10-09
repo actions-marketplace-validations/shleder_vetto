@@ -41,6 +41,7 @@ impl LedgerVerificationResult {
 }
 
 /// An append-only audit ledger implementing tamper-evident hash chaining (INV-34, INV-35).
+#[derive(Debug)]
 pub struct AuditLedger {
     file: BufWriter<File>,
     seq: u64,

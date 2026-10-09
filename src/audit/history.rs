@@ -233,7 +233,10 @@ pub fn verify_ledger_cli(target: Option<&str>, json_output: bool) -> Result<()> 
         }
         std::process::exit(crate::exit_codes::EXIT_FAIL_CLOSED);
     } else {
-        eprintln!("FAIL: Audit ledger '{}' verification failed.", path.display());
+        eprintln!(
+            "FAIL: Audit ledger '{}' verification failed.",
+            path.display()
+        );
         std::process::exit(crate::exit_codes::EXIT_FAIL_CLOSED);
     }
     Ok(())
@@ -1704,7 +1707,8 @@ mod tests {
 
     #[test]
     fn test_compute_auto_timeout_calculation_with_floor() {
-        let temp = std::env::temp_dir().join(format!("vetto-audit-hist-test-{}", std::process::id()));
+        let temp =
+            std::env::temp_dir().join(format!("vetto-audit-hist-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp);
         fs::create_dir_all(&temp).unwrap();
 
