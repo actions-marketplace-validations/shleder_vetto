@@ -2422,7 +2422,7 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
 
     // 19.1: Fast simulated battery execution (<15ms, in practice <1ms)
     let start = std::time::Instant::now();
-    let report = battery_simulated(&contract, &net, start);
+    let report = battery_simulated(&contract, &policy, &net, start);
     assert_eq!(report.status(), "pass");
     assert_eq!(report.tier, "simulated");
     assert_eq!(report.leaks(), 0);
@@ -2570,4 +2570,3 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
 
     let _ = std::fs::remove_dir_all(&ws);
 }
-

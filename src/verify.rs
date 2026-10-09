@@ -18,6 +18,7 @@ use anyhow::Context;
 use crate::config::NetMode;
 use crate::policy;
 use crate::policy::Policy;
+use crate::policy::Tier;
 use crate::sandbox;
 
 #[cfg(unix)]
@@ -601,7 +602,7 @@ fn parse_probe_output(output: &str, tier: Option<Tier>, checks: &mut Vec<CheckRe
     }
 }
 
-fn battery_simulated(
+pub fn battery_simulated(
     contract: &crate::policy_ir::contract::SecurityContract,
     pol: &Policy,
     net: &NetMode,
@@ -609,19 +610,8 @@ fn battery_simulated(
 ) -> VerifyReport {
     let mut checks = Vec::new();
 
-    // 1. Contract Sealed Hash Integrity Check
-    if contract.verify_sha256() {
-        let hash_prefix = if contract.sealed_contract_hash.len() >= 16 {
-            &contract.sealed_contract_hash[..16]
-        } else {
-            &contract.sealed_contract_hash
-        };
-        checks.push(CheckResult {
-            name: "contract-integrity",
-            status: STATUS_PASS,
-            detail: format!("SHA-256 sealed contract hash verified: {}", hash_prefix),
-        });
-    } else {
+    // 1. Contract Sealed Hash Integrity Check (INV-36)
+    if !contract.verify_sha256() {
         checks.push(CheckResult {
             name: "contract-integrity",
             status: STATUS_LEAK,

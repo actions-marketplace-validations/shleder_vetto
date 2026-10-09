@@ -455,7 +455,12 @@ fn print_text(
     }
 
     println!("  ├── Process Execution");
-    let invoked_bin = if contract.agent_identity.invoked_binary.as_os_str().is_empty() {
+    let invoked_bin = if contract
+        .agent_identity
+        .invoked_binary
+        .as_os_str()
+        .is_empty()
+    {
         "(default)".to_string()
     } else {
         contract.agent_identity.invoked_binary.display().to_string()
