@@ -1448,7 +1448,10 @@ mod tests {
         man.render(&mut buf).expect("render man");
         assert!(!buf.is_empty(), "man page should not be empty");
         let rendered = String::from_utf8_lossy(&buf);
-        assert!(rendered.contains(".TH"), "man page should have troff header");
+        assert!(
+            rendered.contains(".TH"),
+            "man page should have troff header"
+        );
     }
 }
 

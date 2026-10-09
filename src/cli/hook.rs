@@ -141,7 +141,10 @@ pub const GIT_HOOK_MARKER: &str = "# Vetto secret leak guard pre-commit hook";
 pub fn install_git_pre_commit_hook(project_dir: &Path) -> Result<PathBuf> {
     let git_dir = project_dir.join(".git");
     if !git_dir.exists() {
-        anyhow::bail!("not a git repository (missing .git directory at {})", project_dir.display());
+        anyhow::bail!(
+            "not a git repository (missing .git directory at {})",
+            project_dir.display()
+        );
     }
     let hooks_dir = git_dir.join("hooks");
     std::fs::create_dir_all(&hooks_dir)
@@ -160,8 +163,12 @@ pub fn install_git_pre_commit_hook(project_dir: &Path) -> Result<PathBuf> {
          fi\n"
     );
 
-    std::fs::write(&hook_path, script)
-        .with_context(|| format!("failed to write git pre-commit hook: {}", hook_path.display()))?;
+    std::fs::write(&hook_path, script).with_context(|| {
+        format!(
+            "failed to write git pre-commit hook: {}",
+            hook_path.display()
+        )
+    })?;
 
     #[cfg(unix)]
     {
@@ -182,8 +189,12 @@ pub fn uninstall_git_pre_commit_hook(project_dir: &Path) -> Result<bool> {
     if hook_path.exists() {
         let content = std::fs::read_to_string(&hook_path).unwrap_or_default();
         if content.contains(GIT_HOOK_MARKER) {
-            std::fs::remove_file(&hook_path)
-                .with_context(|| format!("failed to remove git pre-commit hook: {}", hook_path.display()))?;
+            std::fs::remove_file(&hook_path).with_context(|| {
+                format!(
+                    "failed to remove git pre-commit hook: {}",
+                    hook_path.display()
+                )
+            })?;
             return Ok(true);
         }
     }
@@ -310,7 +321,10 @@ fn handle_uninstall(scope: HookScope, shells: &[ShellType], git: bool) -> Result
         let cwd = std::env::current_dir().context("getcwd")?;
         match uninstall_git_pre_commit_hook(&cwd) {
             Ok(true) => {
-                println!("  git hook  : removed from {}", cwd.join(".git/hooks/pre-commit").display());
+                println!(
+                    "  git hook  : removed from {}",
+                    cwd.join(".git/hooks/pre-commit").display()
+                );
             }
             Ok(false) => {}
             Err(e) => {

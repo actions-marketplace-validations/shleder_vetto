@@ -35,7 +35,9 @@ pub fn kill_cgroup_session(session_id: &str, cgroup_path: Option<&str>) {
     if let Some(path) = cgroup_path {
         cg_dirs.push(std::path::PathBuf::from(path));
     }
-    cg_dirs.push(std::path::PathBuf::from(format!("/sys/fs/cgroup/vetto-{session_id}")));
+    cg_dirs.push(std::path::PathBuf::from(format!(
+        "/sys/fs/cgroup/vetto-{session_id}"
+    )));
 
     for cg in cg_dirs {
         let kill_file = cg.join("cgroup.kill");

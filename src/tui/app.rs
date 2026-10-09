@@ -468,7 +468,11 @@ impl AppState {
         }
 
         let elapsed = self.started_at.elapsed();
-        let elapsed_str = format!("{:02}:{:02}", elapsed.as_secs() / 60, elapsed.as_secs() % 60);
+        let elapsed_str = format!(
+            "{:02}:{:02}",
+            elapsed.as_secs() / 60,
+            elapsed.as_secs() % 60
+        );
 
         let ram_mb = self.ram_bytes / (1024 * 1024);
         let ram_str = if ram_mb > 0 {

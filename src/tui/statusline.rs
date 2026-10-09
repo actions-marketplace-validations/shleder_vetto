@@ -251,8 +251,12 @@ pub fn run(
 ) -> (i32, bool) {
     let mut rx = bus.subscribe();
     let mut app_state = AppState::new(tier, net, profile);
+    #[cfg(target_os = "linux")]
     if let Some(cmd) = handle.options.agent_cmd.first() {
-        let name = std::path::Path::new(cmd).file_name().and_then(|n| n.to_str()).unwrap_or(cmd);
+        let name = std::path::Path::new(cmd)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(cmd);
         app_state.agent = Some(name.to_string());
     }
     let master = pty_master.as_raw_fd();

@@ -130,7 +130,9 @@ pub fn find_real_binary(name: &str) -> Result<PathBuf> {
                 let ext_candidate = candidate.with_extension(ext);
                 if is_executable_file(&ext_candidate) && !is_vetto_shim_content(&ext_candidate) {
                     if let Some(ref current) = current_exe {
-                        if let (Ok(c1), Ok(c2)) = (ext_candidate.canonicalize(), current.canonicalize()) {
+                        if let (Ok(c1), Ok(c2)) =
+                            (ext_candidate.canonicalize(), current.canonicalize())
+                        {
                             if c1 == c2 {
                                 continue;
                             }

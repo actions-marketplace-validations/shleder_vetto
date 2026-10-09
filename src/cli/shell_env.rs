@@ -442,7 +442,9 @@ pub fn emit_shell_env(
     let p = profile.unwrap_or("default");
     let version = env!("CARGO_PKG_VERSION");
 
-    let is_fish = std::env::var("SHELL").map(|s| s.ends_with("/fish")).unwrap_or(false);
+    let is_fish = std::env::var("SHELL")
+        .map(|s| s.ends_with("/fish"))
+        .unwrap_or(false);
 
     if is_fish {
         format!(

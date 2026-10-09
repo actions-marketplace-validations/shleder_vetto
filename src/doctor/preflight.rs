@@ -1133,7 +1133,11 @@ fn execute_macos_preflight() -> PreflightReport {
         PreflightVerdict::Pass
     };
 
-    let exit_code = if verdict == PreflightVerdict::Fail { 125 } else { 0 };
+    let exit_code = if verdict == PreflightVerdict::Fail {
+        125
+    } else {
+        0
+    };
 
     PreflightReport {
         verdict,
@@ -1142,7 +1146,11 @@ fn execute_macos_preflight() -> PreflightReport {
             supported: false,
             abi_version: None,
             max_supported_abi: 0,
-            status: if seatbelt_ok { "seatbelt_active".to_string() } else { "seatbelt_missing".to_string() },
+            status: if seatbelt_ok {
+                "seatbelt_active".to_string()
+            } else {
+                "seatbelt_missing".to_string()
+            },
             raw_errno: None,
             message: if seatbelt_ok {
                 "Seatbelt SBPL used on macOS (Tier 2)".to_string()
