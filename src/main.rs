@@ -290,9 +290,7 @@ fn run() -> Result<()> {
                     cfg.tui = TuiMode::None;
                 }
             } else {
-                if !resolve_target_agent(&mut cfg, &args, run_args, true)? {
-                    return print_zero_arg_summary();
-                }
+                resolve_target_agent(&mut cfg, &args, run_args, true)?;
             }
             if *benchmark || args.benchmark {
                 let bench_args = cli::bench::BenchArgs {
@@ -655,9 +653,7 @@ fn run() -> Result<()> {
                 return print_zero_arg_summary();
             }
             let mut cfg = RunConfig::from_cli(&args)?;
-            if !resolve_target_agent(&mut cfg, &args, &[], false)? {
-                return print_zero_arg_summary();
-            }
+            resolve_target_agent(&mut cfg, &args, &[], false)?;
             if args.tui.is_none()
                 && cfg.tui == TuiMode::Statusline
                 && vetto::config::should_default_to_no_tui(cfg.agent_preset.as_deref(), &cfg.agent)
@@ -687,10 +683,10 @@ fn resolve_target_agent(
     cfg: &mut RunConfig,
     args: &cli::Cli,
     extra_args: &[String],
-    _is_run_subcommand: bool,
-) -> Result<bool> {
+    is_run_subcommand: bool,
+) -> Result<()> {
     if !cfg.agent.is_empty() && !cfg.agent[0].starts_with('-') {
-        return Ok(true);
+        return Ok(());
     }
 
     if let Some(ref agent_name) = cfg.agent_preset.clone() {
@@ -713,14 +709,25 @@ fn resolve_target_agent(
         {
             cfg.tui = TuiMode::None;
         }
-        return Ok(true);
+        return Ok(());
     }
 
     let project = std::env::current_dir().context("getcwd")?;
     let detected = match vetto::onboard::detect_agent(&project) {
         Ok(detected) => detected,
-        Err(_) => {
-            return Ok(false);
+        Err(e) => {
+            let guidance = if is_run_subcommand {
+                "1. `vetto enable` — wrap installed agents (e.g. `vetto enable claude`)\n  \
+                 2. `vetto run <command>` — e.g. `vetto run claude` or `vetto run -- python agent.py`\n  \
+                 3. `vetto doctor` — see what this kernel can enforce\n\n\
+                 Docs: https://shleder.github.io/vetto/"
+            } else {
+                "1. `vetto enable` — wrap installed agents (e.g. `vetto enable claude`)\n  \
+                 2. `vetto doctor` — see what this kernel can enforce\n  \
+                 3. `vetto -- <command>` — sandbox any binary, e.g. `vetto -- python agent.py`\n\n\
+                 Docs: https://shleder.github.io/vetto/"
+            };
+            bail!("{e}\n\nGet started:\n  {guidance}");
         }
     };
     eprintln!(
@@ -739,7 +746,7 @@ fn resolve_target_agent(
     {
         cfg.tui = TuiMode::None;
     }
-    Ok(true)
+    Ok(())
 }
 
 fn scan_secrets_cli(
