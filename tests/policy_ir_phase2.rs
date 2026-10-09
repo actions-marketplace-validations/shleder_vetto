@@ -3,7 +3,8 @@
 use vetto::policy_ir::{
     compile as legacy_compile, validate as legacy_validate, authorize_action, Action,
     ActionVerdict, CompilerError, ExecutionState, ExecutionStateMachine, NetworkMode,
-    PolicyCompiler, RequestedPolicy, SecurityContract, SecurityLevel, StateTransitionError,
+    PolicyCompiler, PolicyError, RequestedPolicy, SecurityContract, SecurityLevel,
+    StateTransitionError,
 };
 
 #[test]
@@ -468,6 +469,16 @@ fn test_action_authorization_process_exec() {
         },
     );
     assert_eq!(exec_ok, ActionVerdict::Allowed);
+
+    // Allowed invoked binary directly matching contract.agent_identity.invoked_binary
+    let exec_invoked = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("claude"),
+            args: vec![],
+        },
+    );
+    assert_eq!(exec_invoked, ActionVerdict::Allowed);
 
     // Disallowed binary outside allowed paths
     let exec_bad = authorize_action(
@@ -1036,6 +1047,77 @@ fn test_capability_gate_action_authorization_e2e() {
 
     // FsRead denied to secret .env
     assert!(authorize_action(&contract, &Action::FsRead(ws.join(".env"))).is_denied());
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+#[test]
+fn test_policy_error_exit_codes_and_reexports() {
+    let err_compile = PolicyError::CompilationFailed("bad syntax".into());
+    assert_eq!(err_compile.exit_code(), 125);
+    assert_eq!(
+        format!("{err_compile}"),
+        "Policy compilation failed: bad syntax"
+    );
+
+    let err_verify = PolicyError::VerificationFailed("hash mismatch".into());
+    assert_eq!(err_verify.exit_code(), 125);
+    assert_eq!(
+        format!("{err_verify}"),
+        "Sealed contract verification failed: hash mismatch"
+    );
+
+    let err_lockdown = PolicyError::LockdownViolation("blocked mutation".into());
+    assert_eq!(err_lockdown.exit_code(), 126);
+    assert_eq!(
+        format!("{err_lockdown}"),
+        "Policy lockdown violation: blocked mutation"
+    );
+}
+
+#[test]
+fn test_compile_effective_lexical_normalization_dots() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_norm_dots_{}", std::process::id()));
+    std::fs::create_dir_all(ws.join("src")).expect("create workspace");
+
+    let raw_read = ws.join("./src/../src/lib.rs");
+    let raw_write = ws.join("./src/output.rs");
+
+    let policy = Policy {
+        allow_read: vec![raw_read],
+        allow_write: vec![raw_write],
+        ..Policy::default()
+    };
+
+    let input = EffectivePolicyInput {
+        agent_name: "claude",
+        workspace_root: &ws,
+        policy: &policy,
+        invoked_binary: PathBuf::from("claude"),
+        network_mode: None,
+        runtime_tier: None,
+    };
+
+    let contract = PolicyCompiler::compile_effective(input).expect("compile effective");
+
+    // All allow_read and allow_write entries must be lexically normalized (no '.' components)
+    for p in &contract.filesystem.allow_read {
+        assert!(
+            !p.components().any(|c| matches!(c, std::path::Component::CurDir)),
+            "allow_read path {:?} contains CurDir component",
+            p
+        );
+    }
+    for p in &contract.filesystem.allow_write {
+        assert!(
+            !p.components().any(|c| matches!(c, std::path::Component::CurDir)),
+            "allow_write path {:?} contains CurDir component",
+            p
+        );
+    }
 
     let _ = std::fs::remove_dir_all(&ws);
 }

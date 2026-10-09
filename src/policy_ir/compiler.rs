@@ -140,6 +140,7 @@ impl PolicyCompiler {
             } else {
                 workspace_root.join(path)
             };
+            let normalized = lexical_normalize(&normalized);
             if !allow_read.contains(&normalized) {
                 allow_read.push(normalized);
             }
@@ -239,6 +240,7 @@ impl PolicyCompiler {
             for comp in suffix_components.into_iter().rev() {
                 resolved.push(comp);
             }
+            let resolved = lexical_normalize(&resolved);
             if !allow_write.contains(&resolved) {
                 allow_write.push(resolved);
             }
@@ -992,7 +994,10 @@ fn authorize_process_exec(
 
     // Direct match against explicitly invoked binary
     let norm_invoked = lexical_normalize(&contract.agent_identity.invoked_binary);
-    if resolved == norm_invoked {
+    if resolved == norm_invoked
+        || lexical_normalize(binary) == norm_invoked
+        || binary == &contract.agent_identity.invoked_binary
+    {
         return ActionVerdict::allow();
     }
 
