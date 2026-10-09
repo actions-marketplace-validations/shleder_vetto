@@ -50,10 +50,6 @@ if [[ -n "${VETTO_ACTION_POLICY:-}" ]]; then
   args+=(--policy "${VETTO_ACTION_POLICY}")
 fi
 
-if [[ "${VETTO_ACTION_TELEMETRY:-false}" == "true" || "${VETTO_ACTION_TELEMETRY:-false}" == "1" ]]; then
-  args+=(--telemetry)
-fi
-
 case "${VETTO_ACTION_FAIL_ON_BLOCK:-false}" in
   ""|false|0)
     ;;

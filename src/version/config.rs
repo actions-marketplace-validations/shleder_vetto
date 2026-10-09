@@ -14,10 +14,6 @@ fn default_channel() -> String {
 pub struct UserConfig {
     #[serde(default = "default_channel")]
     pub channel: String,
-    #[serde(default)]
-    pub telemetry: bool,
-    #[serde(default)]
-    pub telemetry_endpoint: String,
     /// Opt-in background self-update (default off: a security tool must not
     /// mutate itself silently). Env `VETTO_AUTO_UPDATE=1` enables,
     /// `VETTO_NO_SELF_UPDATE=1` (or CI) always disables.
@@ -31,8 +27,6 @@ impl Default for UserConfig {
     fn default() -> Self {
         Self {
             channel: default_channel(),
-            telemetry: false,
-            telemetry_endpoint: String::new(),
             auto_update: false,
         }
     }
@@ -60,20 +54,6 @@ pub fn load_user_config() -> Result<UserConfig> {
     if let Ok(ch) = std::env::var("VETTO_CHANNEL") {
         if !ch.trim().is_empty() {
             config.channel = ch.trim().to_string();
-        }
-    }
-
-    if let Ok(tel) = std::env::var("VETTO_TELEMETRY") {
-        match tel.trim().to_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => config.telemetry = true,
-            "0" | "false" | "no" | "off" => config.telemetry = false,
-            _ => {}
-        }
-    }
-
-    if let Ok(endpoint) = std::env::var("VETTO_TELEMETRY_ENDPOINT") {
-        if !endpoint.trim().is_empty() {
-            config.telemetry_endpoint = endpoint.trim().to_string();
         }
     }
 
@@ -116,8 +96,6 @@ mod tests {
     fn test_user_config_defaults() {
         let cfg = UserConfig::default();
         assert_eq!(cfg.channel, "stable");
-        assert!(!cfg.telemetry);
-        assert!(cfg.telemetry_endpoint.is_empty());
         // Security default: a sandbox never self-mutates unless asked.
         assert!(!cfg.auto_update);
     }
@@ -126,17 +104,10 @@ mod tests {
     fn test_user_config_toml_parsing() {
         let toml_str = r#"
 channel = "alpha"
-telemetry = true
-telemetry_endpoint = "https://telemetry.example.com/api/v1/report"
 auto_update = true
 "#;
         let parsed: UserConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(parsed.channel, "alpha");
-        assert!(parsed.telemetry);
-        assert_eq!(
-            parsed.telemetry_endpoint,
-            "https://telemetry.example.com/api/v1/report"
-        );
         assert!(parsed.auto_update);
     }
 }

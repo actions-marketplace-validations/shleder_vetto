@@ -137,7 +137,7 @@ Linux is Vetto's reference production platform, offering hardware-enforced unpri
 - **Landlock LSM (ABI v1–v6)**: Inode-level access restriction evaluated in the kernel VFS before `execve`.
 - **Private Namespaces**: Mount namespace (`CLONE_NEWNS`) with empty `tmpfs` mode-000 and `/dev/null` overlays masking `~/.ssh`, `~/.aws`, and `.env*`; PID namespace (`CLONE_NEWPID`) ensuring 100% process tree teardown; Network namespace (`CLONE_NEWNET`) with loopback-only egress and local TCP/TLS broker.
 - **Seccomp-BPF**: System call filtering preventing ptrace, process_vm_readv, mount, bpf, userfaultfd, and dangerous syscalls.
-- **Tiers within Linux**: `FULL` tier leverages user namespaces (`CLONE_NEWUSER`) for private mount and network namespaces; `FS-ONLY` tier provides Landlock filesystem confinement and seccomp network blocking on systems where unprivileged user namespaces are disabled.
+- **Tiers within Linux**: `FULL` tier uses user namespaces (`CLONE_NEWUSER`) for private mount and network namespaces; `FS-ONLY` tier provides Landlock filesystem confinement and seccomp network blocking on systems where unprivileged user namespaces are disabled.
 - **Windows WSL2**: Fully supported as Tier 1, utilizing the native Linux kernel inside WSL2.
 
 ### Tier 2: macOS (Experimental)
@@ -145,7 +145,7 @@ The macOS backend uses Apple's private Seatbelt API (`libsandbox.1.dylib!sandbox
 - **Write and Exec Isolation**: File writes are strictly locked to `$PROJECT` and `/tmp`. Network egress is locked via `--net=off` (`(deny network*)`).
 - **dyld Crash Limitation & Broad Reads**: On modern macOS (13/14/15), the dynamic linker (`dyld`) aborts (`SIGABRT`) when SBPL read rules are fragmented across multiple discrete path clauses. Vetto applies broad read permissions `(allow file-read* (subpath "/"))` alongside tail denials on known secrets. Because Darwin lacks unprivileged mount overlays and VFS inode masking, unprivileged read denial cannot guarantee absolute secrecy against all native binaries. This platform defect is tracked via `vetto doctor` under `sbpl-read-fragment`.
 - **Process Supervision**: Enforced via a `kqueue` EVFILT_PROC watchdog (`pdeath_watch`), providing best-effort process tree termination.
-- **Recommendation**: For hardware-enforced kernel read-denial of host credentials on macOS, run Vetto inside **OrbStack**, a lightweight Linux VM, or Docker devcontainers.
+- **Recommendation**: For hardware-enforced kernel read-denial of host credentials on macOS, run Vetto inside **OrbStack** (Linux VM), or Docker devcontainers.
 
 ### Tier 3: Windows (Experimental / Preview)
 Windows native isolation uses Win32 security tokens and Job Objects:

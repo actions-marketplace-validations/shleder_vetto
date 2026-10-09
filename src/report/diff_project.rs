@@ -1,6 +1,6 @@
 //! Project Diff Report (Feature 30).
 //!
-//! Creates an initial lightweight manifest of project files (path, mtime, size, quick sha256 hash)
+//! Creates an initial manifest of project files (path, mtime, size, quick sha256 hash)
 //! and compares it with the final session state to report modified/created/deleted files
 //! without duplicating the whole project tree.
 

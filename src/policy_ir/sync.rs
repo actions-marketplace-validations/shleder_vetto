@@ -1,6 +1,6 @@
 //! Enterprise Policy Synchronization and Certification Engine.
 //!
-//! Fulfills Phase 4 of the Next-Generation Architectural Specification:
+//! Fulfills Phase 4 of the Policy IR Specification:
 //! Synchronizes canonical security contracts across multi-agent swarm fleets,
 //! verifying contract immutability and preventing policy drift with fail-closed
 //! rejection (Exit 125).
@@ -34,7 +34,7 @@ pub enum PolicySyncError {
 }
 
 impl PolicySyncError {
-    /// Exit code mandated by Next-Gen fail-closed architecture (§18 / INV-01).
+    /// Exit code mandated by fail-closed architecture (INV-01).
     pub fn exit_code(&self) -> i32 {
         125
     }

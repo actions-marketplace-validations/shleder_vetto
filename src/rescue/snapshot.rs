@@ -1,6 +1,6 @@
 //! Project Snapshot & Rollback Engine (Feature 32).
 //!
-//! Creates a lightweight TAR archive of project files in `~/.vetto/snapshots/<session>/`
+//! Creates a TAR archive of project files before session execution in `~/.vetto/snapshots/<session>/`
 //! with a strict size limit, and provides rollback functionality to restore files.
 
 use anyhow::{bail, Context, Result};

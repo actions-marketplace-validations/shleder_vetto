@@ -28,17 +28,6 @@ fn registry_response_and_semver_parsing() {
 }
 
 #[test]
-fn telemetry_zero_network_when_disabled() {
-    use vetto::report::stats::SessionStats;
-    use vetto::telemetry::send_session_telemetry;
-
-    let stats = SessionStats::default();
-    // Default config has telemetry = false, should return Ok without network calls
-    let res = send_session_telemetry(&stats, "full");
-    assert!(res.is_ok());
-}
-
-#[test]
 fn audit_cli_listing_and_json_flags() {
     let mut cmd = Command::new(common::vetto_bin());
     cmd.arg("audit").arg("--json");

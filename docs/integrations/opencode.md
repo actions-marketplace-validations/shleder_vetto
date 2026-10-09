@@ -6,7 +6,7 @@ OpenCode is an open-source terminal coding assistant. Vetto provides zero-config
 
 ## 1. Quick Start: Transparent Shim
 
-The fastest and most reliable way to sandbox OpenCode is via Vetto priority shims:
+Standard method to sandbox OpenCode is via Vetto priority shims:
 
 ```bash
 vetto enable opencode

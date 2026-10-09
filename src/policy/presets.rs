@@ -654,6 +654,9 @@ mod tests {
 
     #[test]
     fn auto_allowlist_matches_known_agents() {
+        let _lock = crate::cli::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         assert!(CANONICAL_PACKAGE_REGISTRY_DOMAINS.contains(&"crates.io"));
         assert!(CANONICAL_PACKAGE_REGISTRY_DOMAINS.contains(&"index.crates.io"));
         assert!(CANONICAL_PACKAGE_REGISTRY_DOMAINS.contains(&"static.crates.io"));
@@ -993,6 +996,9 @@ mod tests {
 
     #[test]
     fn agent_network_allowlist_dynamic_base_urls() {
+        let _lock = crate::cli::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         struct EnvGuard<'a>(&'a str);
         impl<'a> Drop for EnvGuard<'a> {
             fn drop(&mut self) {

@@ -93,17 +93,48 @@ fn backend_selection_flag_parity() {
 }
 
 #[test]
-fn oslog_and_lpac_flags_parse_parity() {
+fn lpac_flag_parse_parity() {
     let proj = TempProject::new("parity-flags-dryrun");
     let out = run_vetto_in(
         proj.path(),
-        &["--dry-run", "--oslog", "--lpac", "--", "cargo", "--version"],
+        &["--dry-run", "--lpac", "--", "cargo", "--version"],
     );
     assert!(
         out.status.success(),
-        "dry-run with --oslog and --lpac must succeed; stderr: {}",
+        "dry-run with --lpac must succeed; stderr: {}",
         stderr(&out)
     );
+}
+
+#[test]
+fn purged_telemetry_and_logging_flags_rejected() {
+    let proj = TempProject::new("parity-purged-flags");
+    let purged_flags = [
+        "--oslog",
+        "--system-log",
+        "--notify",
+        "--anonymous-telemetry",
+        "--otel",
+        "--otel-endpoint",
+    ];
+
+    for flag in purged_flags {
+        let mut args = vec!["--dry-run", flag];
+        if flag == "--otel-endpoint" {
+            args.push("http://localhost:4317");
+        }
+        args.extend_from_slice(&["--", "cargo", "--version"]);
+        let out = run_vetto_in(proj.path(), &args);
+        assert!(
+            !out.status.success(),
+            "purged flag {flag} must be rejected by CLI, but it succeeded"
+        );
+        let err = stderr(&out);
+        assert!(
+            err.contains("unexpected argument") || err.contains("was unexpected"),
+            "expected clap unexpected argument error for {flag}, got stderr:\n{err}"
+        );
+    }
 }
 
 #[test]

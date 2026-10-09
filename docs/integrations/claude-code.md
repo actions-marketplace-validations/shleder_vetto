@@ -96,7 +96,7 @@ paths = [
 
 By default, an AI agent should only talk to its approved inference APIs. Vetto enforces this using kernel network namespaces and an in-process DNS/CONNECT relay broker.
 
-### Out-of-the-Box Allowlist
+### Default Network Allowlist
 When wrapped with `vetto enable claude`, outbound network connections are restricted strictly to:
 - `api.anthropic.com`
 

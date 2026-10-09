@@ -75,10 +75,6 @@ pub struct Cli {
     #[arg(long, value_name = "BACKEND")]
     pub backend: Option<String>,
 
-    /// Emit events to macOS unified log (os_log / logger)
-    #[arg(long)]
-    pub oslog: bool,
-
     /// Run Windows AppContainer in Less Privileged AppContainer (LPAC) mode
     #[arg(long)]
     pub lpac: bool,
@@ -95,10 +91,6 @@ pub struct Cli {
     /// Mount a 512MB tmpfs over /tmp (requires Linux)
     #[arg(long)]
     pub tmpfs_tmp: bool,
-
-    /// Opt-in: send anonymous violation telemetry (hashed agent slug + category, no paths/secrets)
-    #[arg(long)]
-    pub anonymous_telemetry: bool,
 
     /// Shadow mode: policy layer logs "would deny" instead of blocking in verification/preflight.
     /// Note: Kernel sandbox (Landlock/seccomp) cannot be shadowed; shadow mode applies to policy-layer verification.
@@ -154,18 +146,6 @@ pub struct Cli {
     #[arg(long)]
     pub git_ssh: bool,
 
-    /// Desktop notifications on security violations (blocked path access, network escape).
-    #[arg(long)]
-    pub notify: bool,
-
-    /// OpenTelemetry OTLP endpoint for session span export.
-    #[arg(long, value_name = "URL")]
-    pub otel_endpoint: Option<String>,
-
-    /// Enable OpenTelemetry spans for the session
-    #[arg(long)]
-    pub otel: bool,
-
     /// Kill the sandboxed session after DURATION without the agent finishing
     /// (e.g. 90s, 30m, 2h). Enforced with --tui=none (CI mode); other TUI
     /// modes warn and ignore it.
@@ -202,10 +182,6 @@ pub struct Cli {
     /// Verbose diagnostics on stderr
     #[arg(short = 'v', long, global = true)]
     pub verbose: bool,
-
-    /// Forward session events to system journal (journald, EventLog, syslog)
-    #[arg(long)]
-    pub system_log: bool,
 
     /// Select an agent preset.
     #[arg(
@@ -934,7 +910,6 @@ impl Cli {
             explicit_net,
             tui,
             backend: cli.backend.clone(),
-            oslog: cli.oslog,
             lpac: cli.lpac,
             observe_seccomp,
             jsonl_path,
@@ -945,12 +920,8 @@ impl Cli {
             report_max_age_secs,
             fail_on_block,
             git_ssh,
-            notify: cli.notify,
-            otel_endpoint: cli.otel_endpoint.clone(),
-            otel: cli.otel,
             session_timeout,
             auto_timeout_requested,
-            system_log: cli.system_log,
             limits_spec,
             verify_preflight,
             shadow,
@@ -966,8 +937,6 @@ impl Cli {
             ephemeral_force_discard: false,
             auto_deny_secrets,
             read_only_caches: cli.read_only_caches,
-            anonymous_telemetry: cli.anonymous_telemetry
-                || global.anonymous_telemetry.unwrap_or(false),
             tmpfs_tmp,
             mask_secrets,
             net_quota,
