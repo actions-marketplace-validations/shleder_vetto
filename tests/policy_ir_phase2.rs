@@ -1,7 +1,7 @@
 //! Integration tests for Phase 2: Tri-Plane Policy IR & Canonical Security Contract.
 
 use vetto::policy_ir::{
-    compile as legacy_compile, validate as legacy_validate, authorize_action, Action,
+    authorize_action, compile as legacy_compile, validate as legacy_validate, Action,
     ActionVerdict, CompilerError, ExecutionState, ExecutionStateMachine, NetworkMode,
     PolicyCompiler, PolicyError, RequestedPolicy, SecurityContract, SecurityLevel,
     StateTransitionError,
@@ -456,8 +456,8 @@ fn test_action_authorization_process_exec() {
     let ws = temp_dir.join(format!("vetto_m1_action_exec_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let mut contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
-        .expect("compile contract");
+    let mut contract =
+        PolicyCompiler::compile("claude", &ws, None, &[], &[]).expect("compile contract");
     contract.agent_identity.invoked_binary = PathBuf::from("claude");
     contract.filesystem.allow_execute = vec![PathBuf::from("/bin/sh"), PathBuf::from("/usr/bin")];
 
@@ -549,7 +549,10 @@ fn test_sealed_contract_sha256_hash_structure() {
     );
 
     // Self-verification must succeed
-    assert!(contract.verify_sha256(), "verify_sha256 must pass on clean contract");
+    assert!(
+        contract.verify_sha256(),
+        "verify_sha256 must pass on clean contract"
+    );
     assert!(contract.verify_sealed().is_ok(), "verify_sealed must pass");
 
     let _ = std::fs::remove_dir_all(&ws);
@@ -608,8 +611,14 @@ fn test_sealed_contract_sha256_determinism() {
     let contract2 = PolicyCompiler::compile_effective(input2).expect("compile contract 2");
 
     // Deterministic hashing invariant INV-36: identical inputs produce identical hash
-    assert_eq!(contract1.sealed_contract_hash, contract2.sealed_contract_hash);
-    assert_eq!(contract1.contract_digest_blake3, contract2.contract_digest_blake3);
+    assert_eq!(
+        contract1.sealed_contract_hash,
+        contract2.sealed_contract_hash
+    );
+    assert_eq!(
+        contract1.contract_digest_blake3,
+        contract2.contract_digest_blake3
+    );
 
     let _ = std::fs::remove_dir_all(&ws);
 }
@@ -1435,7 +1444,7 @@ fn test_fsm_emergency_cleanup_from_all_active_states() {
         let err = fsm_helper.fail_closed("Kernel LSM boundary violation");
         assert!(matches!(err, StateTransitionError::FailClosed { .. }));
         assert!(fsm_helper.is_fail_closed());
-        assert_eq!(fsm_helper.current_state(), ExecutionState::FailClosed);
+        assert_eq!(fsm_helper.current_state(), ExecutionState::Failed);
 
         fsm_helper
             .transition(ExecutionState::EmergencyCleanup)

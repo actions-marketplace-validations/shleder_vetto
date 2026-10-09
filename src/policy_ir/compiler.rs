@@ -776,15 +776,16 @@ fn resolve_and_check_traversal(workspace_root: &Path, target_path: &Path) -> (Pa
 
     let ws_norm = lexical_normalize(workspace_root);
 
-    if target_path.is_absolute() {
+    if target_path.is_absolute() || target_path.has_root() {
         let norm = lexical_normalize(&clean_path);
         // Absolute path attempting to use '..' to climb outside a workspace root it declared
-        let escaped = has_parent_dir && clean_path.starts_with(&ws_norm) && !norm.starts_with(&ws_norm);
+        let escaped =
+            has_parent_dir && clean_path.starts_with(&ws_norm) && !norm.starts_with(&ws_norm);
         (norm, escaped)
     } else {
         let joined = workspace_root.join(&clean_path);
         let norm = lexical_normalize(&joined);
-        let escaped = !norm.starts_with(&ws_norm);
+        let escaped = has_parent_dir && !norm.starts_with(&ws_norm);
         (norm, escaped)
     }
 }
@@ -1023,7 +1024,10 @@ fn authorize_process_exec(
 fn authorize_net_connect(contract: &SecurityContract, domain: &str, port: u16) -> ActionVerdict {
     let clean_domain = domain.trim().trim_end_matches('.');
     if clean_domain.is_empty() {
-        return ActionVerdict::deny("Network destination host/domain is empty", "net_empty_domain");
+        return ActionVerdict::deny(
+            "Network destination host/domain is empty",
+            "net_empty_domain",
+        );
     }
 
     let host = strip_domain_port(clean_domain).to_ascii_lowercase();
@@ -1093,8 +1097,7 @@ fn authorize_net_connect(contract: &SecurityContract, domain: &str, port: u16) -
     }
 
     // Step 5: Port Restrictions (Strict mode / Explicit allowed_ports)
-    if !contract.network.allowed_ports.is_empty()
-        && !contract.network.allowed_ports.contains(&port)
+    if !contract.network.allowed_ports.is_empty() && !contract.network.allowed_ports.contains(&port)
     {
         return ActionVerdict::deny(
             format!(
@@ -1110,7 +1113,9 @@ fn authorize_net_connect(contract: &SecurityContract, domain: &str, port: u16) -
 
 fn is_domain_in_allowlist(host: &str, allowed_domains: &[String]) -> bool {
     allowed_domains.iter().any(|pat| {
-        let pat = strip_domain_port(pat).trim_end_matches('.').to_ascii_lowercase();
+        let pat = strip_domain_port(pat)
+            .trim_end_matches('.')
+            .to_ascii_lowercase();
         if pat == "*" {
             true
         } else if let Some(suffix) = pat.strip_prefix("*.") {
@@ -1375,8 +1380,10 @@ mod compiler_tests {
         );
 
         // 4. Reading relative directory traversal escaping workspace is denied
-        let v_read_trav =
-            authorize_action(&contract, &Action::FsRead(PathBuf::from("../../etc/shadow")));
+        let v_read_trav = authorize_action(
+            &contract,
+            &Action::FsRead(PathBuf::from("../../etc/shadow")),
+        );
         assert!(v_read_trav.is_denied());
         assert_eq!(v_read_trav.denial_rule(), Some("path_traversal"));
 
@@ -1392,18 +1399,15 @@ mod compiler_tests {
     #[test]
     fn test_authorize_action_fs_write_and_mask_precedence() {
         let temp_dir = std::env::temp_dir().canonicalize().unwrap();
-        let ws = temp_dir.join(format!("vetto_gate_test_write_{}", generate_session_nonce()));
+        let ws = temp_dir.join(format!(
+            "vetto_gate_test_write_{}",
+            generate_session_nonce()
+        ));
         std::fs::create_dir_all(&ws).unwrap();
 
         let write_target = ws.join("output/result.txt");
-        let contract = PolicyCompiler::compile(
-            "codex",
-            &ws,
-            None,
-            &[],
-            &[write_target.clone()],
-        )
-        .expect("compile contract");
+        let contract = PolicyCompiler::compile("codex", &ws, None, &[], &[write_target.clone()])
+            .expect("compile contract");
 
         // 1. Writing to authorized target is allowed
         let v_write_ok = authorize_action(&contract, &Action::FsWrite(write_target));
@@ -1418,7 +1422,10 @@ mod compiler_tests {
         // 3. Writing to .git directory (parent of .git/config secret mask) is denied
         let v_write_git = authorize_action(&contract, &Action::FsWrite(ws.join(".git")));
         assert!(v_write_git.is_denied());
-        assert!(v_write_git.denial_rule().unwrap().starts_with("secret_mask:"));
+        assert!(v_write_git
+            .denial_rule()
+            .unwrap()
+            .starts_with("secret_mask:"));
 
         // 4. Writing relative traversal escaping workspace is denied
         let v_write_trav =
@@ -1435,14 +1442,9 @@ mod compiler_tests {
         let ws = temp_dir.join(format!("vetto_gate_test_net_{}", generate_session_nonce()));
         std::fs::create_dir_all(&ws).unwrap();
 
-        let mut contract = PolicyCompiler::compile(
-            "claude",
-            &ws,
-            Some(NetworkMode::Allowlist),
-            &[],
-            &[],
-        )
-        .expect("compile contract");
+        let mut contract =
+            PolicyCompiler::compile("claude", &ws, Some(NetworkMode::Allowlist), &[], &[])
+                .expect("compile contract");
 
         contract.network.allowed_domains = vec![
             "api.anthropic.com".to_string(),
