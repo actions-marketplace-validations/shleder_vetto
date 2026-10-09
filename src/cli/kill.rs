@@ -34,6 +34,14 @@ pub fn kill_cgroup_session(session_id: &str, cgroup_path: Option<&str>) {
     let mut cg_dirs = Vec::new();
     if let Some(path) = cgroup_path {
         cg_dirs.push(std::path::PathBuf::from(path));
+    } else if let Ok(base) = crate::cli::status::SessionRegistry::default_sessions_dir() {
+        let session_dir = base.join(session_id);
+        if let Ok(cg_str) = std::fs::read_to_string(session_dir.join("cgroup")) {
+            let p = std::path::PathBuf::from(cg_str.trim());
+            if p.exists() {
+                cg_dirs.push(p);
+            }
+        }
     }
     cg_dirs.push(std::path::PathBuf::from(format!(
         "/sys/fs/cgroup/vetto-{session_id}"
@@ -43,6 +51,21 @@ pub fn kill_cgroup_session(session_id: &str, cgroup_path: Option<&str>) {
         let kill_file = cg.join("cgroup.kill");
         if kill_file.exists() {
             let _ = std::fs::write(&kill_file, "1");
+        }
+        #[cfg(unix)]
+        {
+            let procs_file = cg.join("cgroup.procs");
+            if let Ok(content) = std::fs::read_to_string(&procs_file) {
+                for line in content.lines() {
+                    if let Ok(p) = line.trim().parse::<libc::pid_t>() {
+                        if p > 1 {
+                            unsafe {
+                                libc::kill(p, libc::SIGKILL);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -57,15 +80,15 @@ pub fn kill_pid(pid: u32, force: bool) -> Result<()> {
     {
         let pinned = crate::sandbox::linux::proctrack::PinnedProcess::open(pid as i32);
         let sig = if force { libc::SIGKILL } else { libc::SIGTERM };
+        let pid_i = pid as libc::pid_t;
 
         if pinned.pidfd.is_some() {
             let _ = pinned.send_signal(sig);
-        } else {
-            let pid_i = pid as libc::pid_t;
-            unsafe {
-                if libc::kill(-pid_i, sig) != 0 {
-                    libc::kill(pid_i, sig);
-                }
+        }
+
+        unsafe {
+            if libc::kill(-pid_i, sig) != 0 {
+                libc::kill(pid_i, sig);
             }
         }
 
@@ -73,7 +96,6 @@ pub fn kill_pid(pid: u32, force: bool) -> Result<()> {
             let deadline = std::time::Instant::now() + Duration::from_millis(500);
             while std::time::Instant::now() < deadline {
                 if !crate::cli::status::is_pid_alive(pid) {
-                    crate::sandbox::linux::proctrack::sweep_reparented(100, pid as i32);
                     return Ok(());
                 }
                 std::thread::sleep(Duration::from_millis(25));
@@ -81,19 +103,15 @@ pub fn kill_pid(pid: u32, force: bool) -> Result<()> {
             if crate::cli::status::is_pid_alive(pid) {
                 if pinned.pidfd.is_some() {
                     let _ = pinned.send_signal(libc::SIGKILL);
-                } else {
-                    let pid_i = pid as libc::pid_t;
-                    unsafe {
-                        if libc::kill(-pid_i, libc::SIGKILL) != 0 {
-                            libc::kill(pid_i, libc::SIGKILL);
-                        }
+                }
+                unsafe {
+                    if libc::kill(-pid_i, libc::SIGKILL) != 0 {
+                        libc::kill(pid_i, libc::SIGKILL);
                     }
                 }
             }
         }
 
-        // Tree sweep: reap reparented orphan descendants (INV-12/13)
-        crate::sandbox::linux::proctrack::sweep_reparented(100, pid as i32);
         Ok(())
     }
 
@@ -255,5 +273,14 @@ mod tests {
             force: false,
         };
         assert!(run_cli(&args).is_err());
+    }
+
+    #[test]
+    fn test_kill_cgroup_session_empty_or_nonexistent() {
+        kill_cgroup_session(
+            "nonexistent-session",
+            Some("/tmp/nonexistent-cgroup-path-vetto-test"),
+        );
+        kill_cgroup_session("nonexistent-session", None);
     }
 }

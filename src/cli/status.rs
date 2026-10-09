@@ -332,4 +332,40 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp);
     }
+
+    #[test]
+    fn registry_with_cgroup_path_storage_and_retrieval() {
+        let temp = std::env::temp_dir().join(format!("vetto-test-reg-cg-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp);
+        let registry = SessionRegistry::with_dir(temp.clone());
+
+        let my_pid = std::process::id();
+        let fake_cg = "/sys/fs/cgroup/user.slice/user-1000.slice/vetto-test-session";
+        registry
+            .register_with_cgroup(
+                "test-sess-cg-1",
+                my_pid,
+                "agent-test",
+                "default",
+                "full",
+                Path::new("/tmp"),
+                Some(fake_cg),
+            )
+            .unwrap();
+
+        let active = registry.list_active().unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].session_id, "test-sess-cg-1");
+        assert_eq!(active[0].cgroup_path.as_deref(), Some(fake_cg));
+
+        let info_path = temp.join("test-sess-cg-1").join("info.json");
+        let content = fs::read_to_string(&info_path).unwrap();
+        assert!(content.contains(fake_cg));
+
+        let cg_file = temp.join("test-sess-cg-1").join("cgroup");
+        assert_eq!(fs::read_to_string(cg_file).unwrap(), fake_cg);
+
+        registry.unregister("test-sess-cg-1");
+        let _ = fs::remove_dir_all(&temp);
+    }
 }
