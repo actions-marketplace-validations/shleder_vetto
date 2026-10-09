@@ -419,7 +419,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             }
             Err(e) => {
                 let msg = e.to_string();
-                if msg.contains("exceeds maximum snapshot limit") {
+                if msg.contains("exceeds maximum snapshot limit") || msg.contains("snapshot limit") {
+                    eprintln!("[vetto] warning: project size exceeds 50MB snapshot limit; pre-session snapshot skipped (undo will be unavailable).");
                     tracing::debug!("vetto: snapshot skipped (project exceeds 50MB limit): {msg}");
                 } else {
                     tracing::debug!("vetto: snapshot creation skipped: {e}");

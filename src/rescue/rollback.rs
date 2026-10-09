@@ -428,4 +428,58 @@ mod tests {
 
         let _ = fs::remove_dir_all(dir);
     }
+
+    #[test]
+    fn rollback_session_restores_snapshot_and_cleans_untracked() {
+        let proj = test_dir("rollback-sess");
+        let file1 = proj.join("src").join("main.rs");
+        let file2 = proj.join("README.md");
+        fs::create_dir_all(proj.join("src")).unwrap();
+        fs::write(&file1, "fn main() {}\n").unwrap();
+        fs::write(&file2, "# Readme\n").unwrap();
+
+        let session_id = format!("test-sess-rb-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        // Mutate existing file and add untracked rogue file
+        fs::write(&file1, "fn main() { panic!() }\n").unwrap();
+        let rogue = proj.join("rogue.py");
+        fs::write(&rogue, "print('malicious')\n").unwrap();
+        assert!(rogue.exists());
+
+        let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+        assert_eq!(res.files_restored, 2);
+        assert_eq!(res.files_deleted, 1);
+        assert_eq!(fs::read_to_string(&file1).unwrap(), "fn main() {}\n");
+        assert!(!rogue.exists(), "rogue file should be deleted");
+
+        let _ = fs::remove_dir_all(&proj);
+    }
+
+    #[test]
+    fn atomic_commit_bytes_with_mode_restores_permissions() {
+        let dir = test_dir("mode-test");
+        let target = dir.join("run.sh");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            atomic_commit_bytes_with_mode(&target, b"#!/bin/sh\necho ok\n", Some(0o755)).unwrap();
+            let perms = fs::metadata(&target).unwrap().permissions();
+            assert_eq!(perms.mode() & 0o777, 0o755);
+        }
+
+        #[cfg(not(unix))]
+        {
+            atomic_commit_bytes_with_mode(&target, b"echo ok\n", None).unwrap();
+            assert_eq!(fs::read(&target).unwrap(), b"echo ok\n");
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
 }

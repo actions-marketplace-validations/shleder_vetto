@@ -484,11 +484,16 @@ pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if path.is_dir() {
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
                 if !crate::fs::is_ignored_directory(&name) {
                     queue.push(path);
                 }
-            } else if path.is_file() {
+            } else if file_type.is_file() {
                 if let Ok(rel) = path.strip_prefix(root) {
                     let rel_str = rel.to_string_lossy().replace('\\', "/");
                     if let Ok(bytes) = std::fs::read(&path) {
@@ -596,5 +601,61 @@ mod tests {
         assert!(src_dir.join("original.txt").exists());
 
         let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn ignored_directories_are_excluded_from_snapshot() {
+        let src_dir = temp_test_dir("ignored");
+
+        // Ignored build/toolchain directories
+        let ignored_dirs = [".git", "node_modules", "target", ".venv", "dist", "build"];
+        for d in &ignored_dirs {
+            let dir_path = src_dir.join(d);
+            fs::create_dir_all(&dir_path).unwrap();
+            fs::write(dir_path.join("file.txt"), "ignored content").unwrap();
+        }
+
+        // Legitimate source directory
+        let legit_dir = src_dir.join("src");
+        fs::create_dir_all(&legit_dir).unwrap();
+        fs::write(legit_dir.join("main.rs"), "fn main() {}\n").unwrap();
+
+        let session_id = format!("test-session-ignored-{}", std::process::id());
+        let meta = create_snapshot(&src_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        assert_eq!(meta.file_count, 1, "only legit src/main.rs should be included");
+        let entries = inspect_snapshot_archive(&session_id).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, "src/main.rs");
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn snapshot_aborts_on_exceeded_size_limit() {
+        let src_dir = temp_test_dir("size-limit");
+        fs::write(src_dir.join("large.bin"), vec![0u8; 1000]).unwrap();
+
+        let session_id = format!("test-session-size-{}", std::process::id());
+        // Quota is 500 bytes, file is 1000 bytes
+        let res = create_snapshot(&src_dir, &session_id, 500);
+
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("exceeds maximum snapshot limit"));
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn test_try_reflink_clone() {
+        let dir = temp_test_dir("reflink");
+        let src = dir.join("src.txt");
+        let dst = dir.join("dst.txt");
+        fs::write(&src, "reflink test payload").unwrap();
+
+        let _ = try_reflink_clone(&src, &dst);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

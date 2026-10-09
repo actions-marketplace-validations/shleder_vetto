@@ -283,4 +283,65 @@ mod tests {
 
         let _ = fs::remove_dir_all(&project_dir);
     }
+
+    #[test]
+    fn test_ephemeral_guard_drop_rolls_back() {
+        let project_dir = temp_test_dir("guard-drop");
+        let file_path = project_dir.join("code.rs");
+        fs::write(&file_path, "fn main() { /* original */ }\n").unwrap();
+
+        let session_id = format!(
+            "test-guard-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        create_snapshot(&project_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        {
+            let _guard = EphemeralGuard::new(session_id.clone(), project_dir.clone());
+            fs::write(&file_path, "fn main() { /* crashed halfway */ }\n").unwrap();
+            // Drop without complete()
+        }
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "fn main() { /* original */ }\n"
+        );
+
+        let _ = fs::remove_dir_all(&project_dir);
+    }
+
+    #[test]
+    fn test_ephemeral_guard_complete_keeps_changes() {
+        let project_dir = temp_test_dir("guard-complete");
+        let file_path = project_dir.join("code.rs");
+        fs::write(&file_path, "fn main() { /* original */ }\n").unwrap();
+
+        let session_id = format!(
+            "test-guard-complete-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        create_snapshot(&project_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        {
+            let guard = EphemeralGuard::new(session_id.clone(), project_dir.clone());
+            fs::write(&file_path, "fn main() { /* kept */ }\n").unwrap();
+            guard.complete();
+        }
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "fn main() { /* kept */ }\n"
+        );
+
+        let _ = fs::remove_dir_all(&project_dir);
+        if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
+            let _ = fs::remove_dir_all(root.join(&session_id));
+        }
+    }
 }
