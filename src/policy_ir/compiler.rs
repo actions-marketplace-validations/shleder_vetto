@@ -997,7 +997,7 @@ fn authorize_process_exec(
     let norm_invoked = lexical_normalize(&contract.agent_identity.invoked_binary);
     if resolved == norm_invoked
         || lexical_normalize(binary) == norm_invoked
-        || binary == &contract.agent_identity.invoked_binary
+        || binary == contract.agent_identity.invoked_binary
     {
         return ActionVerdict::allow();
     }
@@ -1358,7 +1358,7 @@ mod compiler_tests {
             "claude",
             &ws,
             Some(NetworkMode::Allowlist),
-            &[sub_read.clone()],
+            std::slice::from_ref(&sub_read),
             &[],
         )
         .expect("compile contract");
@@ -1406,8 +1406,9 @@ mod compiler_tests {
         std::fs::create_dir_all(&ws).unwrap();
 
         let write_target = ws.join("output/result.txt");
-        let contract = PolicyCompiler::compile("codex", &ws, None, &[], &[write_target.clone()])
-            .expect("compile contract");
+        let contract =
+            PolicyCompiler::compile("codex", &ws, None, &[], std::slice::from_ref(&write_target))
+                .expect("compile contract");
 
         // 1. Writing to authorized target is allowed
         let v_write_ok = authorize_action(&contract, &Action::FsWrite(write_target));
