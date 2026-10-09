@@ -29,39 +29,90 @@ pub struct KillArgs {
     pub force: bool,
 }
 
+/// Terminates cgroup v2 processes associated with a session if cgroup is active.
+pub fn kill_cgroup_session(session_id: &str, cgroup_path: Option<&str>) {
+    let mut cg_dirs = Vec::new();
+    if let Some(path) = cgroup_path {
+        cg_dirs.push(std::path::PathBuf::from(path));
+    }
+    cg_dirs.push(std::path::PathBuf::from(format!("/sys/fs/cgroup/vetto-{session_id}")));
+
+    for cg in cg_dirs {
+        let kill_file = cg.join("cgroup.kill");
+        if kill_file.exists() {
+            let _ = std::fs::write(&kill_file, "1");
+        }
+    }
+}
+
 /// Kills a process by PID, optionally sending SIGKILL immediately or with a grace period.
 pub fn kill_pid(pid: u32, force: bool) -> Result<()> {
     if pid <= 1 {
         bail!("Refusing to kill reserved PID {pid}");
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    {
+        let pinned = crate::sandbox::linux::proctrack::PinnedProcess::open(pid as i32);
+        let sig = if force { libc::SIGKILL } else { libc::SIGTERM };
+
+        if pinned.pidfd.is_some() {
+            let _ = pinned.send_signal(sig);
+        } else {
+            let pid_i = pid as libc::pid_t;
+            unsafe {
+                if libc::kill(-pid_i, sig) != 0 {
+                    libc::kill(pid_i, sig);
+                }
+            }
+        }
+
+        if !force {
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                if !crate::cli::status::is_pid_alive(pid) {
+                    crate::sandbox::linux::proctrack::sweep_reparented(100, pid as i32);
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            if crate::cli::status::is_pid_alive(pid) {
+                if pinned.pidfd.is_some() {
+                    let _ = pinned.send_signal(libc::SIGKILL);
+                } else {
+                    let pid_i = pid as libc::pid_t;
+                    unsafe {
+                        if libc::kill(-pid_i, libc::SIGKILL) != 0 {
+                            libc::kill(pid_i, libc::SIGKILL);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tree sweep: reap reparented orphan descendants (INV-12/13)
+        crate::sandbox::linux::proctrack::sweep_reparented(100, pid as i32);
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "linux")))]
     {
         let pid_i = pid as libc::pid_t;
-        if force {
-            // SAFETY: Negating the PID targets the process group. If that fails,
-            // we fall back to signaling the individual PID directly.
-            unsafe {
-                if libc::kill(-pid_i, libc::SIGKILL) != 0 {
-                    libc::kill(pid_i, libc::SIGKILL);
-                }
+        let sig = if force { libc::SIGKILL } else { libc::SIGTERM };
+        unsafe {
+            if libc::kill(-pid_i, sig) != 0 {
+                libc::kill(pid_i, sig);
             }
-        } else {
-            // SAFETY: Negating the PID sends SIGTERM to the process group.
-            unsafe {
-                if libc::kill(-pid_i, libc::SIGTERM) != 0 {
-                    libc::kill(pid_i, libc::SIGTERM);
-                }
-            }
-            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        }
+        if !force {
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
             while std::time::Instant::now() < deadline {
                 if !crate::cli::status::is_pid_alive(pid) {
                     return Ok(());
                 }
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(25));
             }
             if crate::cli::status::is_pid_alive(pid) {
-                // SAFETY: Escalating to SIGKILL for unresponsive process/group.
                 unsafe {
                     if libc::kill(-pid_i, libc::SIGKILL) != 0 {
                         libc::kill(pid_i, libc::SIGKILL);
@@ -113,6 +164,7 @@ fn kill_by_pid(pid: u32, force: bool) -> Result<()> {
     let session = active.iter().find(|s| s.pid == pid);
 
     if let Some(s) = session {
+        kill_cgroup_session(&s.session_id, s.cgroup_path.as_deref());
         kill_pid(pid, force)?;
         registry.unregister(&s.session_id);
         println!("Terminated session {} (PID {})", s.session_id, pid);
@@ -138,6 +190,7 @@ fn kill_by_session_id(target: &str, force: bool) -> Result<()> {
 
     if !matched.is_empty() {
         for s in matched {
+            kill_cgroup_session(&s.session_id, s.cgroup_path.as_deref());
             kill_pid(s.pid, force)?;
             registry.unregister(&s.session_id);
             println!("Terminated session {} (PID {})", s.session_id, s.pid);
@@ -160,6 +213,7 @@ fn kill_hung_sessions(threshold: Duration, force: bool) -> Result<()> {
     for s in &active {
         let elapsed = now_secs.saturating_sub(s.started_at_secs);
         if elapsed >= threshold.as_secs() {
+            kill_cgroup_session(&s.session_id, s.cgroup_path.as_deref());
             kill_pid(s.pid, force)?;
             registry.unregister(&s.session_id);
             println!(

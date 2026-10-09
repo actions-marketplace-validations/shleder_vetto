@@ -558,7 +558,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     #[cfg(unix)]
     let stdio = match cfg.tui {
         TuiMode::Statusline => {
-            let (rows, cols) = crossterm::terminal::size().unwrap_or((24, 80));
+            let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
             let p = crate::pty::Pty::open(rows.saturating_sub(1).max(1), cols).map_err(|e| {
                 SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
             })?;

@@ -19,6 +19,8 @@ pub struct SessionEntry {
     pub policy: String,
     pub tier: String,
     pub cwd: String,
+    #[serde(default)]
+    pub cgroup_path: Option<String>,
 }
 
 pub struct SessionRegistry {
@@ -26,16 +28,20 @@ pub struct SessionRegistry {
 }
 
 impl SessionRegistry {
-    pub fn default_run_dir() -> Result<PathBuf> {
+    pub fn default_sessions_dir() -> Result<PathBuf> {
         let home = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
             .map(PathBuf::from)
             .context("failed to resolve HOME directory for session registry")?;
-        Ok(home.join(".vetto").join("run"))
+        Ok(home.join(".vetto").join("sessions"))
+    }
+
+    pub fn default_run_dir() -> Result<PathBuf> {
+        Self::default_sessions_dir()
     }
 
     pub fn new() -> Result<Self> {
-        let run_dir = Self::default_run_dir()?;
+        let run_dir = Self::default_sessions_dir()?;
         fs::create_dir_all(&run_dir)?;
         Ok(Self { run_dir })
     }
@@ -55,6 +61,20 @@ impl SessionRegistry {
         tier: &str,
         cwd: &Path,
     ) -> Result<()> {
+        self.register_with_cgroup(session_id, pid, agent, policy, tier, cwd, None)
+    }
+
+    /// Register a newly started session with optional cgroup path.
+    pub fn register_with_cgroup(
+        &self,
+        session_id: &str,
+        pid: u32,
+        agent: &str,
+        policy: &str,
+        tier: &str,
+        cwd: &Path,
+        cgroup_path: Option<&str>,
+    ) -> Result<()> {
         let entry_dir = self.run_dir.join(session_id);
         fs::create_dir_all(&entry_dir)?;
 
@@ -71,6 +91,7 @@ impl SessionRegistry {
             policy: policy.to_string(),
             tier: tier.to_string(),
             cwd: cwd.display().to_string(),
+            cgroup_path: cgroup_path.map(String::from),
         };
 
         let json = serde_json::to_string_pretty(&entry)?;
@@ -78,6 +99,9 @@ impl SessionRegistry {
         fs::write(entry_dir.join("pid"), pid.to_string())?;
         fs::write(entry_dir.join("policy"), policy)?;
         fs::write(entry_dir.join("started"), now_secs.to_string())?;
+        if let Some(cg) = cgroup_path {
+            fs::write(entry_dir.join("cgroup"), cg)?;
+        }
         Ok(())
     }
 
@@ -90,34 +114,49 @@ impl SessionRegistry {
     /// List all live sessions, pruning dead PIDs.
     pub fn list_active(&self) -> Result<Vec<SessionEntry>> {
         let mut active = Vec::new();
-        if !self.run_dir.exists() {
-            return Ok(active);
+        let mut dirs_to_check = vec![self.run_dir.clone()];
+
+        // Fallback check ~/.vetto/run/ for backward compatibility
+        if let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+            let legacy_run = PathBuf::from(home).join(".vetto").join("run");
+            if legacy_run.exists() && legacy_run != self.run_dir {
+                dirs_to_check.push(legacy_run);
+            }
         }
 
-        let entries = match fs::read_dir(&self.run_dir) {
-            Ok(entries) => entries,
-            Err(_) => return Ok(active),
-        };
+        let mut seen_ids = std::collections::HashSet::new();
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
+        for dir in dirs_to_check {
+            if !dir.exists() {
                 continue;
             }
-            let info_file = path.join("info.json");
-            if let Ok(content) = fs::read_to_string(&info_file) {
-                if let Ok(session) = serde_json::from_str::<SessionEntry>(&content) {
-                    if is_pid_alive(session.pid) {
-                        active.push(session);
+            let entries = match fs::read_dir(&dir) {
+                Ok(entries) => entries,
+                Err(_) => continue,
+            };
+
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let info_file = path.join("info.json");
+                if let Ok(content) = fs::read_to_string(&info_file) {
+                    if let Ok(session) = serde_json::from_str::<SessionEntry>(&content) {
+                        if is_pid_alive(session.pid) {
+                            if seen_ids.insert(session.session_id.clone()) {
+                                active.push(session);
+                            }
+                        } else {
+                            // Prune dead session directory
+                            let _ = fs::remove_dir_all(&path);
+                        }
                     } else {
-                        // Prune dead session directory
                         let _ = fs::remove_dir_all(&path);
                     }
                 } else {
                     let _ = fs::remove_dir_all(&path);
                 }
-            } else {
-                let _ = fs::remove_dir_all(&path);
             }
         }
 

@@ -20,11 +20,17 @@ pub const ENV_VETTO_SHIM_ACTIVE: &str = "VETTO_SHIM_ACTIVE";
 /// Environment variable set to indicate that execution is wrapped by vetto enable.
 pub const ENV_VETTO_WRAPPED: &str = "VETTO_WRAPPED";
 
+/// Environment variable set to prevent recursion through transparent shims.
+pub const ENV_VETTO_INTERCEPTED: &str = "_VETTO_INTERCEPTED";
+
 /// Check if the current process is already running in a sandboxed or shim-active context.
 pub fn is_sandboxed() -> bool {
-    env::var(ENV_VETTO_SANDBOXED)
+    env::var(ENV_VETTO_INTERCEPTED)
         .map(|v| v == "1")
         .unwrap_or(false)
+        || env::var(ENV_VETTO_SANDBOXED)
+            .map(|v| v == "1")
+            .unwrap_or(false)
         || env::var(ENV_VETTO_SHIM_ACTIVE)
             .map(|v| v == "1")
             .unwrap_or(false)
@@ -104,6 +110,12 @@ pub fn find_real_binary(name: &str) -> Result<PathBuf> {
                     }
                 }
             }
+            if let Ok(canon) = candidate.canonicalize() {
+                if is_shim_path(&canon) || is_vetto_shim_content(&canon) {
+                    continue;
+                }
+                return Ok(canon);
+            }
             return Ok(candidate);
         }
 
@@ -117,6 +129,19 @@ pub fn find_real_binary(name: &str) -> Result<PathBuf> {
                 }
                 let ext_candidate = candidate.with_extension(ext);
                 if is_executable_file(&ext_candidate) && !is_vetto_shim_content(&ext_candidate) {
+                    if let Some(ref current) = current_exe {
+                        if let (Ok(c1), Ok(c2)) = (ext_candidate.canonicalize(), current.canonicalize()) {
+                            if c1 == c2 {
+                                continue;
+                            }
+                        }
+                    }
+                    if let Ok(canon) = ext_candidate.canonicalize() {
+                        if is_shim_path(&canon) || is_vetto_shim_content(&canon) {
+                            continue;
+                        }
+                        return Ok(canon);
+                    }
                     return Ok(ext_candidate);
                 }
             }
@@ -400,6 +425,7 @@ pub fn dispatch(binary_name: &str, args: &[String]) -> Result<i32> {
         supervisor_cmd.env(ENV_VETTO_SANDBOXED, "1");
         supervisor_cmd.env(ENV_VETTO_SHIM_ACTIVE, "1");
         supervisor_cmd.env(ENV_VETTO_WRAPPED, "1");
+        supervisor_cmd.env(ENV_VETTO_INTERCEPTED, "1");
 
         // Preserve raw stdio pass-through without freezing
         supervisor_cmd.stdin(std::process::Stdio::inherit());

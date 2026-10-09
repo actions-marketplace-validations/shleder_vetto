@@ -90,12 +90,23 @@ pub fn enable_all(force: bool, fix: bool, scope: HookScope) -> Result<()> {
     let mut installed_agents = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
+    // Priority targets: claude, codex, aider, cursor, goose, qwen-code (aliased to qwen_code)
+    let priority_agents = ["claude", "codex", "aider", "cursor", "goose", "qwen-code"];
+    let mut all_candidates: Vec<&str> = priority_agents.to_vec();
     for &agent in &SUPPORTED_AGENTS {
+        if !all_candidates.contains(&agent) {
+            all_candidates.push(agent);
+        }
+    }
+
+    for agent in all_candidates {
         let canon = crate::policy::defaults::canonical_agent_name(agent).unwrap_or(agent);
         if !seen.insert(canon) {
             continue;
         }
-        if let Ok((_real_name, real_bin)) = crate::onboard::find_real_agent_binary(canon) {
+        if let Ok((_real_name, real_bin)) = crate::onboard::find_real_agent_binary(agent) {
+            installed_agents.push((agent, real_bin));
+        } else if let Ok((_real_name, real_bin)) = crate::onboard::find_real_agent_binary(canon) {
             installed_agents.push((canon, real_bin));
         }
     }

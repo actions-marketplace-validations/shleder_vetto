@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -210,7 +211,13 @@ pub struct AppState {
     pub paused: bool,
     pub help: bool,
     pub generation: u64,
-    pub started_at: Option<DateTime<Utc>>,
+    pub agent: Option<String>,
+    pub started_at: Instant,
+    pub session_start: Option<DateTime<Utc>>,
+    pub active_alert: Option<(String, Instant)>,
+    pub ram_bytes: u64,
+    pub file_blocked: u64,
+    pub net_blocked: u64,
     pub ended_at: Option<DateTime<Utc>>,
     pub exit_code: Option<i32>,
     pub file_tree: BTreeMap<String, u64>,
@@ -243,7 +250,13 @@ impl AppState {
             paused: false,
             help: false,
             generation: 0,
-            started_at: None,
+            agent: None,
+            started_at: Instant::now(),
+            session_start: None,
+            active_alert: None,
+            ram_bytes: 0,
+            file_blocked: 0,
+            net_blocked: 0,
             ended_at: None,
             exit_code: None,
             file_tree: BTreeMap::new(),
@@ -251,6 +264,11 @@ impl AppState {
             network_hosts: BTreeMap::new(),
             activity: VecDeque::with_capacity(ACTIVITY_CAP),
         }
+    }
+
+    pub fn with_agent(mut self, agent: &str) -> Self {
+        self.agent = Some(agent.to_string());
+        self
     }
 
     pub fn ingest(&mut self, ev: Event) {
@@ -265,7 +283,7 @@ impl AppState {
             sample.suspicious = 1;
         }
         match &ev {
-            Event::SessionStarted { ts, .. } => self.started_at = Some(*ts),
+            Event::SessionStarted { ts, .. } => self.session_start = Some(*ts),
             Event::SessionEnded { ts, exit_code, .. } => {
                 self.ended_at = Some(*ts);
                 self.exit_code = Some(*exit_code);
@@ -287,6 +305,11 @@ impl AppState {
             }
             Event::BlockedAttempt { path, .. } => {
                 self.blocked += 1;
+                self.file_blocked += 1;
+                self.active_alert = Some((
+                    format!("[BLOCKED: {path}]"),
+                    Instant::now() + Duration::from_secs(3),
+                ));
                 sample.events = 1;
                 sample.blocked = 1;
                 *self.file_tree.entry(file_tree_key(path)).or_insert(0) += 1;
@@ -307,6 +330,12 @@ impl AppState {
                     self.network.allowed += 1;
                 } else {
                     self.network.blocked += 1;
+                    self.blocked += 1;
+                    self.net_blocked += 1;
+                    self.active_alert = Some((
+                        format!("[BLOCKED: {host}]"),
+                        Instant::now() + Duration::from_secs(3),
+                    ));
                 }
                 sample.events = 1;
                 sample.network = 1;
@@ -324,7 +353,14 @@ impl AppState {
             Event::SessionTimeout { .. } => {}
             Event::DnsResolved { .. } => {}
             Event::NetEgress { .. } => {}
-            Event::NetQuotaExceeded { .. } => {}
+            Event::NetQuotaExceeded { host, .. } => {
+                self.blocked += 1;
+                self.net_blocked += 1;
+                self.active_alert = Some((
+                    format!("[BLOCKED: {host}]"),
+                    Instant::now() + Duration::from_secs(3),
+                ));
+            }
         }
         self.last_line = describe(&ev);
         self.events.push_back(ev);
@@ -426,20 +462,51 @@ impl AppState {
 
     /// One compact statusline cell: badges + counters + last event.
     pub fn status_text(&self, cols: u16) -> String {
-        let state = if self.paused { "paused" } else { "live" };
-        let head = format!(
-            " vetto [{state}] [tier={}] [net={}] blocked={} suspicious={} files={} exec={} ",
-            self.tier, self.net, self.blocked, self.suspicious, self.files, self.execs
-        );
         let budget = cols as usize;
         if budget == 0 {
             return String::new();
         }
+
+        let elapsed = self.started_at.elapsed();
+        let elapsed_str = format!("{:02}:{:02}", elapsed.as_secs() / 60, elapsed.as_secs() % 60);
+
+        let ram_mb = self.ram_bytes / (1024 * 1024);
+        let ram_str = if ram_mb > 0 {
+            format!("{ram_mb}MB")
+        } else {
+            "0MB".to_string()
+        };
+
+        let agent_label = self.agent.as_deref().unwrap_or("agent");
+
+        let alert_prefix = if let Some((ref alert, expiry)) = self.active_alert {
+            if Instant::now() < expiry {
+                format!("{alert} ")
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        let badge = if self.paused {
+            "[PROTECTED:PAUSED]"
+        } else {
+            "[PROTECTED]"
+        };
+
+        let head = format!(
+            " {alert_prefix}{badge} agent={agent_label} prof={} blk_file={} blk_net={} ram={ram_str} time={elapsed_str} ",
+            self.profile, self.file_blocked, self.net_blocked
+        );
+
         if head.len() >= budget.saturating_sub(1) {
             truncate_chars(&head, budget)
-        } else {
+        } else if !self.last_line.is_empty() {
             let tail_budget = budget - head.len() - 1;
             format!("{head}| {}", truncate_chars(&self.last_line, tail_budget))
+        } else {
+            truncate_chars(&head, budget)
         }
     }
 }
@@ -698,5 +765,18 @@ mod tests {
         // Ring buffer bounds to capacity 5
         assert_eq!(agg.recent_events.len(), 5);
         assert_eq!(agg.recent(3).len(), 3);
+    }
+
+    #[test]
+    fn test_status_text_protected_badge_and_blocked_alert() {
+        let mut state = AppState::new("linux-landlock", "off", "strict").with_agent("claude");
+        let text = state.status_text(80);
+        assert!(text.contains("[PROTECTED]"));
+        assert!(text.contains("agent=claude"));
+
+        state.ingest(blocked("/home/user/.ssh/id_rsa"));
+        let alert_text = state.status_text(120);
+        assert!(alert_text.contains("[BLOCKED: /home/user/.ssh/id_rsa]"));
+        assert!(alert_text.contains("[PROTECTED]"));
     }
 }

@@ -69,6 +69,10 @@ pub enum HookCommand {
         /// Overwrite existing shims and force shell profile update
         #[arg(long, short = 'f')]
         force: bool,
+
+        /// Install Git pre-commit secret leak guard hook into .git/hooks/pre-commit
+        #[arg(long)]
+        git: bool,
     },
     /// Uninstall Vetto transparent shims and restore shell environments
     Uninstall {
@@ -79,6 +83,10 @@ pub enum HookCommand {
         /// Target shells to remove configuration from
         #[arg(long = "shell", value_enum, action = clap::ArgAction::Append)]
         shells: Vec<ShellType>,
+
+        /// Remove Git pre-commit secret leak guard hook from .git/hooks/pre-commit
+        #[arg(long)]
+        git: bool,
     },
     /// Display status of Vetto shims and shell integrations
     Status {
@@ -127,6 +135,61 @@ pub fn get_home_dir() -> Result<PathBuf> {
         .context("neither HOME nor USERPROFILE is set")
 }
 
+pub const GIT_HOOK_MARKER: &str = "# Vetto secret leak guard pre-commit hook";
+
+/// Installs a Git pre-commit hook in the target repository to block unmasked secrets.
+pub fn install_git_pre_commit_hook(project_dir: &Path) -> Result<PathBuf> {
+    let git_dir = project_dir.join(".git");
+    if !git_dir.exists() {
+        anyhow::bail!("not a git repository (missing .git directory at {})", project_dir.display());
+    }
+    let hooks_dir = git_dir.join("hooks");
+    std::fs::create_dir_all(&hooks_dir)
+        .with_context(|| format!("failed to create git hooks dir: {}", hooks_dir.display()))?;
+
+    let hook_path = hooks_dir.join("pre-commit");
+    let script = format!(
+        "#!/bin/sh\n\
+         {GIT_HOOK_MARKER}\n\
+         # Automatically installed by `vetto hook install --git`\n\
+         if command -v vetto >/dev/null 2>&1; then\n\
+             vetto scan-secrets --path . || {{\n\
+                 echo \"vetto: commit blocked: detected unmasked secrets in repository\" >&2\n\
+                 exit 1\n\
+             }}\n\
+         fi\n"
+    );
+
+    std::fs::write(&hook_path, script)
+        .with_context(|| format!("failed to write git pre-commit hook: {}", hook_path.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&hook_path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o755);
+            let _ = std::fs::set_permissions(&hook_path, perms);
+        }
+    }
+
+    Ok(hook_path)
+}
+
+/// Uninstalls the Git pre-commit hook if it was installed by Vetto.
+pub fn uninstall_git_pre_commit_hook(project_dir: &Path) -> Result<bool> {
+    let hook_path = project_dir.join(".git").join("hooks").join("pre-commit");
+    if hook_path.exists() {
+        let content = std::fs::read_to_string(&hook_path).unwrap_or_default();
+        if content.contains(GIT_HOOK_MARKER) {
+            std::fs::remove_file(&hook_path)
+                .with_context(|| format!("failed to remove git pre-commit hook: {}", hook_path.display()))?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Executes the `vetto hook` CLI subcommands.
 pub fn run_cli(command: &HookCommand) -> Result<()> {
     match command {
@@ -135,8 +198,9 @@ pub fn run_cli(command: &HookCommand) -> Result<()> {
             shells,
             shims,
             force,
-        } => handle_install(*scope, shells, shims, *force),
-        HookCommand::Uninstall { scope, shells } => handle_uninstall(*scope, shells),
+            git,
+        } => handle_install(*scope, shells, shims, *force, *git),
+        HookCommand::Uninstall { scope, shells, git } => handle_uninstall(*scope, shells, *git),
         HookCommand::Status { scope, json } => handle_status(*scope, *json),
     }
 }
@@ -146,6 +210,7 @@ fn handle_install(
     shells: &[ShellType],
     custom_shims: &[String],
     force: bool,
+    git: bool,
 ) -> Result<()> {
     let shims_dir = get_shims_dir(scope)?;
     let home_dir = get_home_dir()?;
@@ -185,6 +250,18 @@ fn handle_install(
         configured_profiles.push((shell, profile));
     }
 
+    if git {
+        let cwd = std::env::current_dir().context("getcwd")?;
+        match install_git_pre_commit_hook(&cwd) {
+            Ok(hook_path) => {
+                println!("  git hook  : {} (installed)", hook_path.display());
+            }
+            Err(e) => {
+                eprintln!("vetto: warning: failed to install git hook: {e}");
+            }
+        }
+    }
+
     println!("vetto hook install: successfully configured environment");
     println!("  scope     : {:?}", scope);
     println!("  shims dir : {}", shims_dir.display());
@@ -204,7 +281,7 @@ fn handle_install(
     Ok(())
 }
 
-fn handle_uninstall(scope: HookScope, shells: &[ShellType]) -> Result<()> {
+fn handle_uninstall(scope: HookScope, shells: &[ShellType], git: bool) -> Result<()> {
     let shims_dir = get_shims_dir(scope)?;
     let home_dir = get_home_dir()?;
 
@@ -226,6 +303,19 @@ fn handle_uninstall(scope: HookScope, shells: &[ShellType]) -> Result<()> {
     for &shell in &target_shells {
         if let Some(profile) = shell_env::uninstall_shell_hook(shell, &home_dir)? {
             cleaned_profiles.push((shell, profile));
+        }
+    }
+
+    if git {
+        let cwd = std::env::current_dir().context("getcwd")?;
+        match uninstall_git_pre_commit_hook(&cwd) {
+            Ok(true) => {
+                println!("  git hook  : removed from {}", cwd.join(".git/hooks/pre-commit").display());
+            }
+            Ok(false) => {}
+            Err(e) => {
+                eprintln!("vetto: warning: failed to remove git hook: {e}");
+            }
         }
     }
 
