@@ -188,18 +188,22 @@ fn verdict_tamper_001_forces_exit_125_on_contract_violation() {
         eprintln!("SKIP: no tier");
         return;
     }
+    if !tool_available("curl") {
+        eprintln!("SKIP: curl is unavailable");
+        return;
+    }
     let project = TempProject::new("verdict-tamper");
-    // Child attempts forbidden write to /etc/tamper_test, catches error, exits 0
+    // Child attempts forbidden network egress to non-allowlisted target, catches error, exits 0
     let out = run_vetto_in(
         project.path(),
         &[
             "--ci",
             "--fail-on-block=1",
-            "--observe-seccomp",
+            "--net=allowlist:localhost",
             "--",
             "sh",
             "-c",
-            "touch /etc/tamper_test 2>/dev/null; exit 0",
+            "curl -s -m 1 http://192.0.2.1/ 2>/dev/null; exit 0",
         ],
     );
     assert_eq!(

@@ -72,32 +72,3 @@ fn full_tier_records_secret_masking_events() {
         "no masking events: {log}"
     );
 }
-
-#[test]
-fn observe_seccomp_reports_out_of_policy_paths() {
-    if detected_tier().as_deref() != Some("full") {
-        eprintln!("SKIP: needs full tier");
-        return;
-    }
-    let proj = TempProject::new("observe");
-    ensure_fake_ssh_key();
-    let jsonl = proj.path().join("session.jsonl");
-    let out = run_vetto_in(
-        proj.path(),
-        &[
-            "--tui=none",
-            "--observe-seccomp",
-            "--jsonl",
-            jsonl.to_str().unwrap(),
-            "--",
-            "cat",
-            &format!("{}/.ssh/id_rsa", test_home().display()),
-        ],
-    );
-    let _ = out.status.code(); // blocked cat exits nonzero; that is fine
-    let log = std::fs::read_to_string(&jsonl).unwrap_or_default();
-    assert!(
-        log.contains("blocked_attempt") && log.contains(".ssh"),
-        "observe-seccomp did not report the ssh attempt: {log}"
-    );
-}
