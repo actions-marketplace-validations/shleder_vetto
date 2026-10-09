@@ -1154,3 +1154,424 @@ fn test_compile_effective_lexical_normalization_dots() {
     let _ = std::fs::remove_dir_all(&ws);
 }
 
+// ============================================================================
+// Milestone 2 Integration Tests: 12-State FSM, Extinction Guard & Verdict Engine
+// ============================================================================
+
+use vetto::audit::verdict::{
+    EvidenceStrength, FinalVerdict, SecurityVerdict, VerdictEngine, VerdictStatus,
+};
+use vetto::exit_codes::EXIT_FAIL_CLOSED;
+
+/// Helper to create a sealed mock contract for Authoritative Verdict Engine tests.
+fn create_test_verdict_contract() -> SecurityContract {
+    use vetto::policy_ir::{
+        AgentIdentity, AttestationContract, EnvironmentContract, FilesystemContract,
+        NetworkContract, NetworkMode, ResourceContract, UnsealedSecurityContract,
+    };
+    use std::path::PathBuf;
+
+    let unsealed = UnsealedSecurityContract {
+        production: None,
+        crypto: Default::default(),
+        contract_version: 1,
+        contract_id: "m2-test-contract-001".to_string(),
+        session_nonce: "nonce-m2-verdict-test".to_string(),
+        agent_identity: AgentIdentity {
+            agent_name: "test-agent".to_string(),
+            agent_preset: "test".to_string(),
+            agent_version: "0.2.25".to_string(),
+            invoked_binary: PathBuf::from("/bin/sh"),
+            invoked_args: vec!["-c".to_string(), "echo ok".to_string()],
+        },
+        filesystem: FilesystemContract {
+            workspace_root: PathBuf::from("/workspace"),
+            allow_read: vec![PathBuf::from("/workspace")],
+            allow_write: vec![PathBuf::from("/workspace")],
+            allow_execute: vec![PathBuf::from("/bin")],
+            mask_paths: vec![PathBuf::from("/home/user/.ssh")],
+            cow_overlay: true,
+            execution_root_ro: true,
+            shadow: false,
+        },
+        network: NetworkContract {
+            mode: NetworkMode::Off,
+            allowed_domains: vec![],
+            allowed_ports: vec![],
+            block_cloud_metadata: true,
+            block_loopback_daemons: true,
+        },
+        resources: ResourceContract {
+            max_pids: 128,
+            max_memory_bytes: 2 * 1024 * 1024 * 1024,
+            max_cpu_percent: 100,
+            max_wall_time_ms: 120_000,
+            max_stdout_bytes: 10 * 1024 * 1024,
+            max_file_size_bytes: 100 * 1024 * 1024,
+        },
+        environment: EnvironmentContract {
+            pass_through_vars: vec!["PATH".to_string()],
+            explicit_vars: std::collections::BTreeMap::new(),
+            redacted_patterns: vec!["*_KEY".to_string()],
+            inject_session_nonce: true,
+        },
+        attestation: AttestationContract {
+            generate_audit_jsonl: true,
+            sign_minisign: false,
+            sign_cosign_slsa: true,
+            evidence_level_minimum: "HOST_FACT".to_string(),
+        },
+    };
+    unsealed.seal().expect("seal mock contract for verdict tests")
+}
+
+// ----------------------------------------------------------------------------
+// Test 1: 12-State FSM Happy Path Transition Sequence
+// Sequence: Uninitialized -> PolicyCompiled -> PreflightPassed -> IsolationConfigured
+//           -> ChildSpawned -> Running -> Terminating -> CleanedUp -> Completed
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_12_state_canonical_happy_path() {
+    let mut fsm = ExecutionStateMachine::from_state(ExecutionState::Uninitialized);
+    assert_eq!(fsm.current_state(), ExecutionState::Uninitialized);
+    assert!(!fsm.is_terminal());
+    assert!(!fsm.is_fail_closed());
+
+    let canonical_sequence = [
+        ExecutionState::PolicyCompiled,
+        ExecutionState::PreflightPassed,
+        ExecutionState::IsolationConfigured,
+        ExecutionState::ChildSpawned,
+        ExecutionState::Running,
+        ExecutionState::Terminating,
+        ExecutionState::CleanedUp,
+        ExecutionState::Completed,
+    ];
+
+    for step in canonical_sequence {
+        fsm.transition(step).unwrap_or_else(|e| {
+            panic!("Expected valid transition to {:?}, got error: {}", step, e);
+        });
+        assert_eq!(fsm.current_state(), step);
+    }
+
+    assert!(fsm.is_terminal(), "Completed must be recognized as terminal state");
+    assert!(!fsm.is_fail_closed(), "Happy path must not be fail-closed");
+
+    // Negative verification: no transition allowed from Completed
+    let err = fsm.transition(ExecutionState::Running).unwrap_err();
+    assert!(
+        matches!(err, StateTransitionError::InvalidTransition { .. }),
+        "Transition from terminal Completed state must be rejected"
+    );
+
+    // History verification
+    let history = fsm.history();
+    assert_eq!(history.len(), 9, "Initial + 8 transitions = 9 history records");
+    assert_eq!(history.first().unwrap().0, ExecutionState::Uninitialized);
+    assert_eq!(history.last().unwrap().0, ExecutionState::Completed);
+}
+
+// ----------------------------------------------------------------------------
+// Test 2: SignalReceived Transition
+// Sequence: Running -> SignalReceived -> Terminating -> CleanedUp -> Completed
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_signal_received_transition() {
+    let mut fsm = ExecutionStateMachine::from_state(ExecutionState::Running);
+    assert_eq!(fsm.current_state(), ExecutionState::Running);
+
+    // External OS signal (SIGINT, SIGTERM, timeout deadline) arrives
+    fsm.transition(ExecutionState::SignalReceived)
+        .expect("Transition from Running to SignalReceived must be valid");
+    assert_eq!(fsm.current_state(), ExecutionState::SignalReceived);
+    assert!(!fsm.is_terminal());
+    assert!(!fsm.is_fail_closed());
+
+    // Disallowed jumps from SignalReceived
+    let bad_jump_running = fsm.transition(ExecutionState::Running).unwrap_err();
+    assert!(matches!(bad_jump_running, StateTransitionError::InvalidTransition { .. }));
+
+    let bad_jump_completed = fsm.transition(ExecutionState::Completed).unwrap_err();
+    assert!(matches!(bad_jump_completed, StateTransitionError::InvalidTransition { .. }));
+
+    // Valid continuation: SignalReceived -> Terminating -> CleanedUp -> Completed
+    fsm.transition(ExecutionState::Terminating)
+        .expect("SignalReceived -> Terminating must be valid");
+    assert_eq!(fsm.current_state(), ExecutionState::Terminating);
+
+    fsm.transition(ExecutionState::CleanedUp)
+        .expect("Terminating -> CleanedUp must be valid");
+    assert_eq!(fsm.current_state(), ExecutionState::CleanedUp);
+
+    fsm.record_extinction_result(0);
+    fsm.transition(ExecutionState::Completed)
+        .expect("CleanedUp -> Completed must be valid with 0 survivors");
+    assert_eq!(fsm.current_state(), ExecutionState::Completed);
+    assert!(fsm.is_terminal());
+}
+
+// ----------------------------------------------------------------------------
+// Test 3: Extinction Guard Verification
+// Invariant: Block transition to Completed / Terminal when surviving_descendants > 0
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_extinction_guard_blocks_completion_and_terminal() {
+    // 3.1: Canonical pipeline (CleanedUp -> Completed)
+    let mut fsm_canonical = ExecutionStateMachine::from_state(ExecutionState::CleanedUp);
+    fsm_canonical.record_extinction_result(3); // 3 escaped descendant processes
+    assert_eq!(fsm_canonical.surviving_descendants(), Some(3));
+
+    let err_completed = fsm_canonical.transition(ExecutionState::Completed).unwrap_err();
+    match err_completed {
+        StateTransitionError::InvalidTransition { from, to, reason } => {
+            assert_eq!(from, ExecutionState::CleanedUp);
+            assert_eq!(to, ExecutionState::Completed);
+            assert!(
+                reason.contains("surviving") || reason.contains("descendant"),
+                "Error reason must cite surviving descendant processes: {reason}"
+            );
+        }
+        other => panic!("Expected InvalidTransition, got: {:?}", other),
+    }
+    assert_eq!(fsm_canonical.current_state(), ExecutionState::CleanedUp);
+    assert!(!fsm_canonical.is_terminal());
+
+    // Resetting to 0 surviving processes allows completion
+    fsm_canonical.record_extinction_result(0);
+    fsm_canonical.transition(ExecutionState::Completed).unwrap();
+    assert!(fsm_canonical.is_terminal());
+
+    // 3.2: Phase 3 pipeline (Verdict -> Terminal)
+    let mut fsm_phase3 = ExecutionStateMachine::from_state(ExecutionState::Verdict);
+    fsm_phase3.record_extinction_result(1); // 1 leaked process
+    assert_eq!(fsm_phase3.surviving_descendants(), Some(1));
+
+    let err_terminal = fsm_phase3.transition(ExecutionState::Terminal).unwrap_err();
+    match err_terminal {
+        StateTransitionError::InvalidTransition { from, to, reason } => {
+            assert_eq!(from, ExecutionState::Verdict);
+            assert_eq!(to, ExecutionState::Terminal);
+            assert!(
+                reason.contains("surviving") || reason.contains("descendant"),
+                "Error reason must cite surviving descendant processes: {reason}"
+            );
+        }
+        other => panic!("Expected InvalidTransition, got: {:?}", other),
+    }
+    assert_eq!(fsm_phase3.current_state(), ExecutionState::Verdict);
+    assert!(!fsm_phase3.is_terminal());
+
+    fsm_phase3.record_extinction_result(0);
+    fsm_phase3.transition(ExecutionState::Terminal).unwrap();
+    assert!(fsm_phase3.is_terminal());
+}
+
+// ----------------------------------------------------------------------------
+// Test 4: Emergency Cleanup Transition from Any Active State (Exit 125)
+// Invariant: EmergencyCleanup accessible from every active state (INV-01)
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_emergency_cleanup_from_all_active_states() {
+    assert_eq!(EXIT_FAIL_CLOSED, 125, "Fail-closed exit code must be 125 (INV-01)");
+
+    let active_canonical_states = [
+        ExecutionState::Uninitialized,
+        ExecutionState::PolicyCompiled,
+        ExecutionState::PreflightPassed,
+        ExecutionState::IsolationConfigured,
+        ExecutionState::ChildSpawned,
+        ExecutionState::Running,
+        ExecutionState::SignalReceived,
+        ExecutionState::Terminating,
+        ExecutionState::CleanedUp,
+    ];
+
+    for state in active_canonical_states {
+        // Direct transition to EmergencyCleanup
+        let mut fsm = ExecutionStateMachine::from_state(state);
+        fsm.transition(ExecutionState::EmergencyCleanup).unwrap_or_else(|e| {
+            panic!("Direct transition from {:?} to EmergencyCleanup must succeed: {}", state, e);
+        });
+        assert_eq!(fsm.current_state(), ExecutionState::EmergencyCleanup);
+        assert!(fsm.is_fail_closed());
+
+        // Continuation from EmergencyCleanup to Terminal
+        fsm.transition(ExecutionState::Terminal).unwrap();
+        assert!(fsm.is_terminal());
+
+        // Transition via fail_closed helper
+        let mut fsm_helper = ExecutionStateMachine::from_state(state);
+        let err = fsm_helper.fail_closed("Kernel LSM boundary violation");
+        assert!(matches!(err, StateTransitionError::FailClosed { .. }));
+        assert!(fsm_helper.is_fail_closed());
+        assert_eq!(fsm_helper.current_state(), ExecutionState::FailClosed);
+
+        fsm_helper.transition(ExecutionState::EmergencyCleanup).unwrap();
+        assert_eq!(fsm_helper.current_state(), ExecutionState::EmergencyCleanup);
+    }
+
+    let active_phase3_states = [
+        ExecutionState::Intent,
+        ExecutionState::ContractSealed,
+        ExecutionState::Prepare,
+        ExecutionState::Spawn,
+        ExecutionState::Enforce,
+        ExecutionState::Observe,
+        ExecutionState::Terminate,
+        ExecutionState::Cleanup,
+        ExecutionState::Verify,
+        ExecutionState::Attest,
+        ExecutionState::Verdict,
+    ];
+
+    for state in active_phase3_states {
+        let mut fsm = ExecutionStateMachine::from_state(state);
+        fsm.transition(ExecutionState::EmergencyCleanup).unwrap_or_else(|e| {
+            panic!("Phase 3 transition from {:?} to EmergencyCleanup must succeed: {}", state, e);
+        });
+        assert_eq!(fsm.current_state(), ExecutionState::EmergencyCleanup);
+        assert!(fsm.is_fail_closed());
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Test 5: Authoritative Verdict Engine Decoupling & Audit Export
+// Tests:
+// - Policy breach -> SecurityVerdict::Violated, exit_code: 125
+// - Child exit code 1 without violation -> SecurityVerdict::Satisfied, exit_code: 1
+// - Dropped evidence -> SecurityVerdict::Inconclusive, exit_code: 125
+// - Clean run -> SecurityVerdict::Satisfied, exit_code: 0
+// - Serialization check of to_audit_export()
+// ----------------------------------------------------------------------------
+#[test]
+fn test_authoritative_verdict_engine_decoupling_and_export() {
+    let contract = create_test_verdict_contract();
+
+    // 5.1: Policy / Kernel Breach -> SecurityVerdict::Violated, exit_code: 125
+    // 5.1.a: Kernel capability denials
+    let v_denials = VerdictEngine::evaluate(&contract, 2, 0, 0, true, 0);
+    assert_eq!(v_denials.security_verdict, SecurityVerdict::Violated);
+    assert_eq!(v_denials.status, VerdictStatus::Fail);
+    assert_eq!(v_denials.exit_code, 125);
+    assert_eq!(v_denials.strength, EvidenceStrength::Strong);
+    assert!(!v_denials.is_contract_satisfied());
+    assert!(!v_denials.is_success());
+    assert_eq!(v_denials.security_badge(), "VIOLATED [STRONG]");
+    assert!(v_denials.reason.contains("2 kernel capability denials"));
+
+    // 5.1.b: Unauthorized VFS writes (non-shadow)
+    let v_writes = VerdictEngine::evaluate(&contract, 0, 1, 0, true, 0);
+    assert_eq!(v_writes.security_verdict, SecurityVerdict::Violated);
+    assert_eq!(v_writes.status, VerdictStatus::Fail);
+    assert_eq!(v_writes.exit_code, 125);
+    assert!(!v_writes.is_contract_satisfied());
+    assert!(!v_writes.is_success());
+    assert!(v_writes.reason.contains("writes outside authorized workspace"));
+
+    // 5.1.c: Surviving zombie processes
+    let v_zombies = VerdictEngine::evaluate(&contract, 0, 0, 3, true, 0);
+    assert_eq!(v_zombies.security_verdict, SecurityVerdict::Violated);
+    assert_eq!(v_zombies.status, VerdictStatus::Fail);
+    assert_eq!(v_zombies.exit_code, 125);
+    assert!(!v_zombies.is_contract_satisfied());
+    assert!(!v_zombies.is_success());
+    assert!(v_zombies.reason.contains("3 descendant processes escaped extinction"));
+
+    // 5.2: Child Process Exit Code 1 Without Security Violation -> Satisfied, exit_code: 1
+    // Decoupling Invariant: Workload failure does NOT equal security breach!
+    let v_workload_err = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 1);
+    assert_eq!(
+        v_workload_err.security_verdict,
+        SecurityVerdict::Satisfied,
+        "Security verdict MUST be Satisfied when no invariants were breached"
+    );
+    assert_eq!(
+        v_workload_err.exit_code, 1,
+        "Original child process exit code must be preserved"
+    );
+    assert_eq!(v_workload_err.status, VerdictStatus::Pass);
+    assert!(
+        v_workload_err.is_contract_satisfied(),
+        "Contract invariants were fully satisfied"
+    );
+    assert!(
+        !v_workload_err.is_success(),
+        "Nonzero exit code must not be reported as overall clean success"
+    );
+    assert_eq!(v_workload_err.security_badge(), "SATISFIED [STRONG]");
+
+    // 5.3: Dropped Evidence Channel -> SecurityVerdict::Inconclusive, exit_code: 125
+    let v_inconclusive = VerdictEngine::evaluate(&contract, 0, 0, 0, false, 0);
+    assert_eq!(v_inconclusive.security_verdict, SecurityVerdict::Inconclusive);
+    assert_eq!(v_inconclusive.status, VerdictStatus::Inconclusive);
+    assert_eq!(v_inconclusive.exit_code, 125);
+    assert!(!v_inconclusive.is_contract_satisfied());
+    assert!(!v_inconclusive.is_success());
+    assert_eq!(v_inconclusive.security_badge(), "INCONCLUSIVE [STRONG]");
+    assert!(v_inconclusive.reason.contains("dropped events"));
+
+    // 5.4: Clean Run -> SecurityVerdict::Satisfied, exit_code: 0
+    let v_clean = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
+    assert_eq!(v_clean.security_verdict, SecurityVerdict::Satisfied);
+    assert_eq!(v_clean.status, VerdictStatus::Pass);
+    assert_eq!(v_clean.exit_code, 0);
+    assert!(v_clean.is_contract_satisfied());
+    assert!(v_clean.is_success());
+    assert_eq!(v_clean.display_badge(), "PASS [STRONG]");
+    assert_eq!(v_clean.security_badge(), "SATISFIED [STRONG]");
+    assert_eq!(
+        v_clean.recommended_action(),
+        "Commit CoW changes to host workspace."
+    );
+
+    // 5.5: Serialization Check of to_audit_export()
+    // 5.5.a: Clean export serialization
+    let clean_export = v_clean.to_audit_export();
+    assert!(clean_export.is_object(), "Export must produce a JSON object");
+    assert_eq!(clean_export["status"], "PASS");
+    assert_eq!(clean_export["strength"], "STRONG");
+    assert_eq!(clean_export["security_verdict"], "SATISFIED");
+    assert_eq!(clean_export["exit_code"], 0);
+    assert_eq!(clean_export["badge"], "PASS [STRONG]");
+    assert_eq!(clean_export["security_badge"], "SATISFIED [STRONG]");
+    assert_eq!(clean_export["is_success"], true);
+    assert_eq!(clean_export["is_contract_satisfied"], true);
+    assert!(clean_export["reason"].is_string());
+    assert_eq!(
+        clean_export["recommended_action"],
+        "Commit CoW changes to host workspace."
+    );
+
+    // JSON round-trip verification
+    let clean_json_str = serde_json::to_string(&clean_export).expect("serialize export to string");
+    let clean_parsed: serde_json::Value =
+        serde_json::from_str(&clean_json_str).expect("deserialize export string");
+    assert_eq!(clean_parsed, clean_export);
+
+    // 5.5.b: Breach export serialization
+    let breach_export = v_denials.to_audit_export();
+    assert_eq!(breach_export["status"], "FAIL");
+    assert_eq!(breach_export["security_verdict"], "VIOLATED");
+    assert_eq!(breach_export["exit_code"], 125);
+    assert_eq!(breach_export["security_badge"], "VIOLATED [STRONG]");
+    assert_eq!(breach_export["is_success"], false);
+    assert_eq!(breach_export["is_contract_satisfied"], false);
+    assert_eq!(
+        breach_export["recommended_action"],
+        "Wipe CoW layer; abort session immediately."
+    );
+
+    // 5.5.c: Inconclusive export serialization
+    let inconc_export = v_inconclusive.to_audit_export();
+    assert_eq!(inconc_export["status"], "INCONCLUSIVE");
+    assert_eq!(inconc_export["security_verdict"], "INCONCLUSIVE");
+    assert_eq!(inconc_export["exit_code"], 125);
+    assert_eq!(inconc_export["security_badge"], "INCONCLUSIVE [STRONG]");
+    assert_eq!(
+        inconc_export["recommended_action"],
+        "Wipe CoW layer; audit ledger inconclusive."
+    );
+}
+
+
