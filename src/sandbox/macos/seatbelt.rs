@@ -555,10 +555,11 @@ mod tests {
         let profile = generate_sbpl_shape_d(&policy, &NetMode::Off, None);
         assert!(profile.contains("(version 1)"));
         assert!(profile.contains("require-any"));
-        let res = apply_seatbelt_shape_d(&policy, &NetMode::Off, None);
+        assert!(profile.contains("(deny default)"));
         #[cfg(not(target_os = "macos"))]
-        assert!(res.is_err());
-        #[cfg(target_os = "macos")]
-        let _ = res;
+        {
+            let res = apply_seatbelt_shape_d(&policy, &NetMode::Off, None);
+            assert!(res.is_err());
+        }
     }
 }
