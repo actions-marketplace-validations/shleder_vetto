@@ -1347,6 +1347,8 @@ mod compiler_tests {
         std::fs::create_dir_all(&ws).unwrap();
 
         let sub_read = ws.join("src/lib.rs");
+        std::fs::create_dir_all(ws.join("src")).unwrap();
+        std::fs::write(&sub_read, b"// test content").unwrap();
         let contract = PolicyCompiler::compile(
             "claude",
             &ws,

@@ -622,12 +622,18 @@ fn test_sealed_contract_sha256_dual_digest_integrity() {
     let ws = temp_dir.join(format!("vetto_m1_dual_digest_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
-        .expect("compile contract");
+    let contract =
+        PolicyCompiler::compile("claude", &ws, None, &[], &[]).expect("compile contract");
 
     // Both BLAKE3 and SHA-256 digests must independently verify
-    assert!(contract.verify_digest(), "BLAKE3 digest verification must pass");
-    assert!(contract.verify_sha256(), "SHA-256 digest verification must pass");
+    assert!(
+        contract.verify_digest(),
+        "BLAKE3 digest verification must pass"
+    );
+    assert!(
+        contract.verify_sha256(),
+        "SHA-256 digest verification must pass"
+    );
 
     let _ = std::fs::remove_dir_all(&ws);
 }
@@ -644,8 +650,7 @@ fn test_anti_tamper_resources_mutation() {
     let ws = temp_dir.join(format!("vetto_m1_tamper_res_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let contract = PolicyCompiler::compile("codex", &ws, None, &[], &[])
-        .expect("compile contract");
+    let contract = PolicyCompiler::compile("codex", &ws, None, &[], &[]).expect("compile contract");
 
     // Vector 1: Tamper with resource ceilings
     let mut tampered = contract.clone();
@@ -675,8 +680,7 @@ fn test_anti_tamper_filesystem_mutation() {
     let ws = temp_dir.join(format!("vetto_m1_tamper_fs_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let contract = PolicyCompiler::compile("aider", &ws, None, &[], &[])
-        .expect("compile contract");
+    let contract = PolicyCompiler::compile("aider", &ws, None, &[], &[]).expect("compile contract");
 
     // Vector 2: Tamper with filesystem allow_write by adding an unauthorized root
     let mut tampered = contract.clone();
@@ -702,8 +706,8 @@ fn test_anti_tamper_secret_mask_removal() {
     let ws = temp_dir.join(format!("vetto_m1_tamper_mask_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
-        .expect("compile contract");
+    let contract =
+        PolicyCompiler::compile("claude", &ws, None, &[], &[]).expect("compile contract");
 
     // Vector 3: Tamper with secret mask paths (strip protections)
     let mut tampered = contract.clone();
@@ -762,8 +766,8 @@ fn test_anti_tamper_env_injection() {
     let ws = temp_dir.join(format!("vetto_m1_tamper_env_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
-        .expect("compile contract");
+    let contract =
+        PolicyCompiler::compile("claude", &ws, None, &[], &[]).expect("compile contract");
 
     // Vector 5: Tamper with environment variables (leaking secrets)
     let mut tampered = contract.clone();
@@ -1138,14 +1142,16 @@ fn test_compile_effective_lexical_normalization_dots() {
     // All allow_read and allow_write entries must be lexically normalized (no '.' components)
     for p in &contract.filesystem.allow_read {
         assert!(
-            !p.components().any(|c| matches!(c, std::path::Component::CurDir)),
+            !p.components()
+                .any(|c| matches!(c, std::path::Component::CurDir)),
             "allow_read path {:?} contains CurDir component",
             p
         );
     }
     for p in &contract.filesystem.allow_write {
         assert!(
-            !p.components().any(|c| matches!(c, std::path::Component::CurDir)),
+            !p.components()
+                .any(|c| matches!(c, std::path::Component::CurDir)),
             "allow_write path {:?} contains CurDir component",
             p
         );
