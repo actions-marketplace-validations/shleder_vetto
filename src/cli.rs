@@ -498,6 +498,9 @@ pub enum Command {
         recap: bool,
         #[arg(long)]
         digest: bool,
+        /// Verify cryptographic integrity of the session audit ledger
+        #[arg(long)]
+        verify: bool,
     },
     /// Compare two session JSON audit reports (metric deltas and violation diffs).
     #[command(name = "diff-sessions", hide = true)]
@@ -1303,6 +1306,17 @@ mod tests {
                 recap: true,
                 ..
             })
+        ));
+
+        let audit_verify = Cli::try_parse_from(["vetto", "audit", "session-12345", "--verify"])
+            .expect("audit verify parsing");
+        assert!(matches!(
+            audit_verify.command,
+            Some(Command::Audit {
+                ref session_id,
+                verify: true,
+                ..
+            }) if session_id.as_deref() == Some("session-12345")
         ));
 
         let diff_cli =

@@ -329,6 +329,14 @@ pub fn compute_diff_ops<'a>(old_lines: &[&'a str], new_lines: &[&'a str]) -> Vec
         for &line in a {
             middle_ops.push(DiffOp::Delete(line));
         }
+    } else if len_a + len_b > 4000 {
+        // DoS guard: skip unbounded O(N*D) trace matrix allocation on large diffs
+        for &line in a {
+            middle_ops.push(DiffOp::Delete(line));
+        }
+        for &line in b {
+            middle_ops.push(DiffOp::Insert(line));
+        }
     } else {
         let max_edits = len_a + len_b;
         let limit_d = max_edits.min(2000);
@@ -758,5 +766,21 @@ mod tests {
         assert!(!is_binary(b"hello world\nthis is plain text\n"));
         assert!(is_binary(b"hello \x00 world"));
         assert!(is_binary(&[0xff, 0xfe, 0xfd]));
+    }
+
+    #[test]
+    fn test_compute_diff_ops_dos_guard_large_diff() {
+        let old: Vec<String> = (0..2500).map(|i| format!("old line {i}")).collect();
+        let new: Vec<String> = (0..2500).map(|i| format!("new line {i}")).collect();
+        let old_refs: Vec<&str> = old.iter().map(|s| s.as_str()).collect();
+        let new_refs: Vec<&str> = new.iter().map(|s| s.as_str()).collect();
+
+        // 2500 + 2500 = 5000 > 4000: triggers DoS guard block replacement
+        let ops = compute_diff_ops(&old_refs, &new_refs);
+        assert_eq!(ops.len(), 5000);
+        let del_count = ops.iter().filter(|op| matches!(op, DiffOp::Delete(_))).count();
+        let ins_count = ops.iter().filter(|op| matches!(op, DiffOp::Insert(_))).count();
+        assert_eq!(del_count, 2500);
+        assert_eq!(ins_count, 2500);
     }
 }

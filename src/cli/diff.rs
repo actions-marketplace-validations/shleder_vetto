@@ -476,7 +476,7 @@ pub fn compare_snapshot_against_disk(
     telemetry: &SecurityTelemetry,
     session_id: &str,
 ) -> Result<SessionReview> {
-    let snapshot_files = read_tar_archive(archive_path)?;
+    let snapshot_files = read_tar_archive_with_modes(archive_path)?;
     let mut disk_files = scan_disk_files(project_dir)?;
     if let Ok(rel_archive) = archive_path.strip_prefix(project_dir) {
         let rel_str = rel_archive.to_string_lossy().replace('\\', "/");
@@ -519,15 +519,46 @@ pub fn compare_snapshot_against_disk(
         });
     }
 
-    // 2. Modified files: present in both, content differ
+    // 2. Modified files: present in both, content differ or permissions changed
     for path in disk_keys.intersection(&snapshot_keys) {
         if !matches_path_filter(path, path_filter) {
             continue;
         }
-        let snap_bytes = &snapshot_files[*path];
-        let disk_bytes = &disk_files[*path];
+        let (snap_bytes, snap_mode) = {
+            let (b, m) = &snapshot_files[*path];
+            (b.as_slice(), *m & 0o7777)
+        };
+        let disk_bytes = disk_files[*path].as_slice();
+
+        #[cfg(unix)]
+        let disk_mode = {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::symlink_metadata(project_dir.join(path))
+                .ok()
+                .map(|m| m.permissions().mode() & 0o7777)
+                .unwrap_or(snap_mode)
+        };
+        #[cfg(not(unix))]
+        let disk_mode = snap_mode;
 
         if snap_bytes == disk_bytes {
+            if snap_mode != disk_mode {
+                files.push(FileChange {
+                    path: (*path).clone(),
+                    change_type: ChangeType::PermissionsChanged,
+                    lines_added: 0,
+                    lines_deleted: 0,
+                    is_binary: is_binary(snap_bytes),
+                    color_patch: format!(
+                        "\x1b[35m  * {} (mode changed: {:04o} -> {:04o})\x1b[0m\n",
+                        path, snap_mode, disk_mode
+                    ),
+                    patch: format!(
+                        "Mode changed for {}: {:04o} -> {:04o}\n",
+                        path, snap_mode, disk_mode
+                    ),
+                });
+            }
             continue;
         }
 
@@ -563,7 +594,7 @@ pub fn compare_snapshot_against_disk(
         if !matches_path_filter(path, path_filter) {
             continue;
         }
-        let snap_bytes = &snapshot_files[*path];
+        let (snap_bytes, _) = &snapshot_files[*path];
         let is_bin = is_binary(snap_bytes);
         let (added, deleted, color_patch, plain_patch) = if is_bin {
             (
@@ -599,7 +630,9 @@ pub fn compare_snapshot_against_disk(
     })
 }
 
-pub use crate::rescue::snapshot::{read_tar_archive, read_tar_entries, scan_disk_files};
+pub use crate::rescue::snapshot::{
+    read_tar_archive, read_tar_archive_with_modes, read_tar_entries, scan_disk_files,
+};
 
 /// Read and aggregate security telemetry for session from logs, reports, and history.
 pub fn load_security_telemetry(session_id: &str, project_dir: &Path) -> SecurityTelemetry {
@@ -1076,5 +1109,54 @@ mod tests {
         assert_eq!(parsed["files"]["deleted"].as_array().unwrap().len(), 1);
         assert_eq!(parsed["files"]["added"].as_array().unwrap().len(), 0);
         assert_eq!(parsed["diffs"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_compare_snapshot_permissions_changed() {
+        let temp_dir = std::env::temp_dir().join(format!("vetto_diff_perm_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let file_path = temp_dir.join("script.sh");
+        let content = b"#!/bin/sh\necho hello\n";
+        std::fs::write(&file_path, content).unwrap();
+
+        let archive_path = temp_dir.join("snapshot.tar");
+        let mut tar_file = std::fs::File::create(&archive_path).unwrap();
+        crate::rescue::snapshot::write_tar_entry_with_mode(
+            &mut tar_file,
+            "script.sh",
+            content,
+            std::time::SystemTime::now(),
+            0o644,
+        )
+        .unwrap();
+        tar_file.write_all(&[0u8; 1024]).unwrap();
+        tar_file.flush().unwrap();
+        drop(tar_file);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+            let telemetry = SecurityTelemetry::default();
+            let review = compare_snapshot_against_disk(
+                &archive_path,
+                &temp_dir,
+                None,
+                &telemetry,
+                "test_perm_session",
+            )
+            .unwrap();
+
+            assert_eq!(review.files.len(), 1);
+            assert_eq!(review.files[0].path, "script.sh");
+            assert_eq!(review.files[0].change_type, ChangeType::PermissionsChanged);
+            assert_eq!(review.files[0].lines_added, 0);
+            assert_eq!(review.files[0].lines_deleted, 0);
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

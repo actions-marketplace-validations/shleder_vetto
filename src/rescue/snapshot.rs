@@ -287,7 +287,7 @@ pub fn create_snapshot(
     Ok(metadata)
 }
 
-/// Attempts a Copy-on-Write reflink clone of `src` to `dst`.
+/// Attempts a Copy-on-Write reflink clone of `src` to `dst`, falling back to standard copy if unsupported.
 pub fn try_reflink_clone(src: &Path, dst: &Path) -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
     {
@@ -301,9 +301,10 @@ pub fn try_reflink_clone(src: &Path, dst: &Path) -> std::io::Result<()> {
         let ret = unsafe { libc::ioctl(dst_file.as_raw_fd(), 0x40049409, src_file.as_raw_fd()) };
         if ret == 0 {
             return Ok(());
-        } else {
-            return Err(std::io::Error::last_os_error());
         }
+        drop(dst_file);
+        drop(src_file);
+        std::fs::copy(src, dst).map(|_| ())
     }
     #[cfg(target_os = "macos")]
     {
@@ -319,16 +320,12 @@ pub fn try_reflink_clone(src: &Path, dst: &Path) -> std::io::Result<()> {
         let ret = unsafe { clonefile(src_c.as_ptr(), dst_c.as_ptr(), 0) };
         if ret == 0 {
             return Ok(());
-        } else {
-            return Err(std::io::Error::last_os_error());
         }
+        std::fs::copy(src, dst).map(|_| ())
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "reflink clone not supported",
-        ))
+        std::fs::copy(src, dst).map(|_| ())
     }
 }
 
@@ -426,15 +423,15 @@ pub fn parse_tar_header_with_mode(header: &[u8; 512]) -> Result<(String, u64, u3
     Ok((name, size, mode))
 }
 
-/// Read entries and contents from a snapshot tar archive.
-pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+/// Read entries, contents, and POSIX modes from a snapshot tar archive.
+pub fn read_tar_archive_with_modes(path: &Path) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
     let file = File::open(path)
         .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
-    read_tar_entries(file)
+    read_tar_entries_with_modes(file)
 }
 
-/// Read tar entries from an arbitrary byte reader.
-pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
+/// Read tar entries and POSIX modes from an arbitrary byte reader.
+pub fn read_tar_entries_with_modes<R: Read>(mut reader: R) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
     let mut entries = BTreeMap::new();
     loop {
         let mut header = [0u8; 512];
@@ -443,7 +440,7 @@ pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u
             break;
         }
 
-        let (name, size) = parse_tar_header(&header)?;
+        let (name, size, mode) = parse_tar_header_with_mode(&header)?;
         if name.is_empty() {
             break;
         }
@@ -464,10 +461,23 @@ pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u
                 .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             let normalized = name.replace('\\', "/");
-            entries.insert(normalized, data);
+            entries.insert(normalized, (data, mode));
         }
     }
     Ok(entries)
+}
+
+/// Read entries and contents from a snapshot tar archive.
+pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
+    read_tar_entries(file)
+}
+
+/// Read tar entries from an arbitrary byte reader.
+pub fn read_tar_entries<R: Read>(reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
+    let entries = read_tar_entries_with_modes(reader)?;
+    Ok(entries.into_iter().map(|(k, (v, _))| (k, v)).collect())
 }
 
 /// Scan current project directory, ignoring transient / toolchain folders.
@@ -652,9 +662,14 @@ mod tests {
         let dir = temp_test_dir("reflink");
         let src = dir.join("src.txt");
         let dst = dir.join("dst.txt");
-        fs::write(&src, "reflink test payload").unwrap();
+        let payload = "reflink test payload";
+        fs::write(&src, payload).unwrap();
 
-        let _ = try_reflink_clone(&src, &dst);
+        let res = try_reflink_clone(&src, &dst);
+        assert!(res.is_ok(), "try_reflink_clone should succeed: {:?}", res);
+        assert!(dst.exists(), "destination file must exist");
+        let content = fs::read_to_string(&dst).unwrap();
+        assert_eq!(content, payload, "destination must match test payload");
 
         let _ = fs::remove_dir_all(&dir);
     }

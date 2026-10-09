@@ -207,6 +207,9 @@ pub fn rollback_session(
 
         snapshot_files.insert(clean_path.to_path_buf());
         let out_path = dest.join(clean_path);
+        if out_path.is_dir() {
+            let _ = fs::remove_dir_all(&out_path);
+        }
         atomic_commit_bytes_with_mode(&out_path, &data, Some(mode))?;
         files_restored += 1;
         bytes_restored += size;
@@ -236,9 +239,12 @@ pub fn rollback_session(
                     disk_dirs.push(path.clone());
                     queue.push(path);
                 }
-            } else if file_type.is_file() {
+            } else {
                 if let Ok(rel) = path.strip_prefix(dest) {
-                    if !snapshot_files.contains(rel) {
+                    let rel_norm = rel.to_string_lossy().replace('\\', "/");
+                    let is_tracked = snapshot_files.contains(rel)
+                        || snapshot_files.iter().any(|p| p.to_string_lossy().replace('\\', "/") == rel_norm);
+                    if !is_tracked {
                         let _ = fs::remove_file(&path);
                         files_deleted += 1;
                     }
@@ -481,5 +487,61 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rollback_session_deletes_untracked_symlink() {
+        let proj = test_dir("rollback-symlink");
+        let file1 = proj.join("original.txt");
+        fs::write(&file1, "original content\n").unwrap();
+
+        let session_id = format!("test-sess-symlink-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        #[cfg(unix)]
+        {
+            let rogue_link = proj.join("rogue_symlink");
+            let _ = std::os::unix::fs::symlink(&file1, &rogue_link);
+            assert!(rogue_link.exists() || rogue_link.is_symlink());
+
+            let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+            assert_eq!(res.files_deleted, 1);
+            assert!(!rogue_link.exists() && !rogue_link.is_symlink(), "symlink must be deleted");
+        }
+
+        let _ = fs::remove_dir_all(&proj);
+    }
+
+    #[test]
+    fn rollback_session_resolves_directory_conflict() {
+        let proj = test_dir("rollback-conflict");
+        let file1 = proj.join("target_file.txt");
+        fs::write(&file1, "file content before conflict\n").unwrap();
+
+        let session_id = format!("test-sess-conflict-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        // Rogue agent replaces target_file.txt with a non-empty directory tree
+        fs::remove_file(&file1).unwrap();
+        fs::create_dir_all(file1.join("sub")).unwrap();
+        fs::write(file1.join("sub").join("nested.txt"), "nested rogue data").unwrap();
+        assert!(file1.is_dir());
+
+        let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+        assert_eq!(res.files_restored, 1);
+        assert!(file1.is_file(), "file must replace rogue directory tree");
+        assert_eq!(fs::read_to_string(&file1).unwrap(), "file content before conflict\n");
+
+        let _ = fs::remove_dir_all(&proj);
     }
 }

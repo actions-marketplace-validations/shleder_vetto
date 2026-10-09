@@ -30,9 +30,14 @@ pub fn default_reports_dir(session_id: Option<&str>) -> PathBuf {
         .map(|home| home.join(".vetto").join("reports"))
         .unwrap_or_else(|| PathBuf::from(".vetto/reports"));
     if let Some(session) = session_id {
-        let trimmed = session.trim();
-        if !trimmed.is_empty() {
-            return base.join(trimmed);
+        let mut sanitized = session.trim().to_string();
+        while sanitized.contains("..") {
+            sanitized = sanitized.replace("..", "");
+        }
+        let sanitized = sanitized.replace('/', "_").replace('\\', "_");
+        let clean = sanitized.trim_matches('_');
+        if !clean.is_empty() {
+            return base.join(clean);
         }
     }
     base
@@ -416,5 +421,15 @@ mod tests {
         let root_str = storage.root().to_string_lossy();
         assert!(root_str.ends_with("session-storage-test"));
         let _ = fs::remove_dir(storage.root());
+    }
+
+    #[test]
+    fn default_reports_dir_sanitizes_path_traversal() {
+        let dir = default_reports_dir(Some("../../etc/passwd"));
+        let path_str = dir.to_string_lossy();
+        assert!(!path_str.contains(".."));
+        assert!(path_str.ends_with("etc_passwd"));
+        assert!(path_str.contains(".vetto"));
+        assert!(path_str.contains("reports"));
     }
 }

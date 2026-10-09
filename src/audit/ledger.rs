@@ -79,19 +79,22 @@ impl AuditLedger {
     /// Resumes `seq` and `prev_hash` from the existing ledger file if present.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path_ref = path.as_ref();
+        if let Some(parent) = path_ref.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let mut seq = 0;
         let mut prev_hash = GENESIS_HASH.to_string();
 
         if path_ref.exists() && path_ref.metadata().map(|m| m.len() > 0).unwrap_or(false) {
             let result = Self::verify_file_detailed(path_ref)?;
-            if let Some(ref c) = result.corruption {
-                if c.actual_hash.is_some()
-                    || c.reason.contains("mismatch")
-                    || c.reason.contains("break")
-                    || c.reason.contains("Extraneous")
-                    || c.reason.contains("JSON")
-                {
-                    anyhow::bail!("Cannot open corrupted audit ledger: {}", c.reason);
+            if result.has_signature {
+                anyhow::bail!("Cannot append to finalized and signed audit ledger");
+            }
+            if !result.is_valid {
+                if let Some(ref c) = result.corruption {
+                    if !c.reason.contains("Missing terminal record") {
+                        anyhow::bail!("Cannot open corrupted audit ledger: {}", c.reason);
+                    }
                 }
             }
             if let Some(s) = result.last_seq {
@@ -328,6 +331,26 @@ impl AuditLedger {
                                 "Signature envelope mismatch: expected seq={}, prev_hash='{}', got seq={}, prev_hash='{}'",
                                 expected_seq, expected_prev, seq, prev_hash
                             ),
+                        }),
+                    });
+                }
+
+                let expected_sig = manual_hex_hash(&format!("CLOSE:{}", expected_prev));
+                let actual_sig = obj.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+                if actual_sig != expected_sig {
+                    return Ok(LedgerVerificationResult {
+                        is_valid: false,
+                        records_verified,
+                        last_seq: if expected_seq > 0 { Some(expected_seq - 1) } else { None },
+                        last_hash: Some(expected_prev.to_string()),
+                        has_terminal_record,
+                        has_signature: false,
+                        corruption: Some(LedgerCorruption {
+                            line_number,
+                            seq: Some(expected_seq),
+                            expected_hash: Some(expected_sig),
+                            actual_hash: Some(actual_sig.to_string()),
+                            reason: "Signature envelope hash mismatch".to_string(),
                         }),
                     });
                 }
@@ -632,5 +655,91 @@ mod tests {
         assert_eq!(result.records_verified, 2);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_signed_cannot_append() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto-test-ledger-signed-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            let p1 = TestPayload {
+                message: "only_event".into(),
+                code: 0,
+                record_type: None,
+            };
+            ledger.record_event(&p1).expect("record");
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(verify_res.is_valid);
+        assert!(verify_res.has_signature);
+
+        let reopen_res = AuditLedger::new(&ledger_path);
+        assert!(reopen_res.is_err());
+        assert!(reopen_res
+            .unwrap_err()
+            .to_string()
+            .contains("Cannot append to finalized and signed audit ledger"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_signature_tamper_detection() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto-test-ledger-sigtamper-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            let p1 = TestPayload {
+                message: "event".into(),
+                code: 0,
+                record_type: None,
+            };
+            ledger.record_event(&p1).expect("record");
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        // Tamper with signature envelope
+        let content = std::fs::read_to_string(&ledger_path).expect("read");
+        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        assert_eq!(lines.len(), 2);
+        lines[1] = lines[1].replace("\"signature\":\"", "\"signature\":\"00000000000000000000000000000000");
+        std::fs::write(&ledger_path, lines.join("\n") + "\n").expect("write");
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(!verify_res.is_valid);
+        let corr = verify_res.corruption.expect("corruption");
+        assert_eq!(corr.reason, "Signature envelope hash mismatch");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_creates_parent_directory() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto-test-ledger-parent-{}/nested/sub", std::process::id()));
+        let ledger_path = temp_dir.join("ledger.jsonl");
+        assert!(!temp_dir.exists());
+
+        let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger with missing parent");
+        let p1 = TestPayload {
+            message: "ok".into(),
+            code: 0,
+            record_type: None,
+        };
+        ledger.record_event(&p1).expect("record");
+        assert!(ledger_path.exists());
+
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join(format!("vetto-test-ledger-parent-{}", std::process::id())),
+        );
     }
 }

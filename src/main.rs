@@ -456,8 +456,11 @@ fn run() -> Result<()> {
             json,
             recap,
             digest,
+            verify,
         }) => {
-            if *digest {
+            if *verify {
+                vetto::audit::verify_ledger_cli(session_id.as_deref(), *json)
+            } else if *digest {
                 vetto::audit::run_digest(since.as_deref(), *json)
             } else {
                 vetto::audit::run_audit_command(
