@@ -7,7 +7,11 @@ pub mod sarif;
 pub mod stats;
 pub mod storage;
 
-pub use diff_project::{ProjectDiff, ProjectManifest};
+pub use diff_project::{
+    compute_diff_ops, format_unified_diff, is_binary, render_hunks, DiffOp, FileFingerprint,
+    ProjectDiff, ProjectManifest,
+};
+pub use storage::default_reports_dir;
 
 use std::fs::File;
 use std::io::{self, Write};
@@ -30,6 +34,7 @@ use crate::logger::sanitizer;
 #[derive(Debug, Clone)]
 pub struct ReportOptions {
     pub report_dir: Option<PathBuf>,
+    pub session_id: Option<String>,
     pub auto_cleanup: bool,
     pub retention: Option<usize>,
     pub max_age_secs: Option<u64>,
@@ -38,7 +43,8 @@ pub struct ReportOptions {
 impl Default for ReportOptions {
     fn default() -> Self {
         Self {
-            report_dir: Some(PathBuf::from(".vetto/reports")),
+            report_dir: None,
+            session_id: None,
             auto_cleanup: true,
             retention: Some(50),
             max_age_secs: None,
