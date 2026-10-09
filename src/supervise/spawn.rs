@@ -163,58 +163,7 @@ pub fn explicit_policy_deny_count(path: &Path) -> Option<usize> {
 
 /// Resolves an executable binary candidate from PATH or absolute/relative path.
 pub fn resolve_in_path(cmd: &str) -> std::io::Result<String> {
-    let command_path = Path::new(cmd);
-    if command_path.is_absolute() || command_path.components().count() > 1 {
-        return Ok(cmd.to_string());
-    }
-    if let Ok(real) = crate::shim::find_real_binary(cmd) {
-        return Ok(real.to_string_lossy().into_owned());
-    }
-    if let Some(path) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let candidate = dir.join(cmd);
-            if is_executable_file(&candidate) {
-                return Ok(candidate.to_string_lossy().into_owned());
-            }
-            #[cfg(windows)]
-            if candidate.extension().is_none() {
-                let extensions =
-                    std::env::var_os("PATHEXT").unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
-                for extension in extensions.to_string_lossy().split(';') {
-                    let extension = extension.trim().trim_start_matches('.');
-                    if extension.is_empty() {
-                        continue;
-                    }
-                    let candidate = candidate.with_extension(extension);
-                    if is_executable_file(&candidate) {
-                        return Ok(candidate.to_string_lossy().into_owned());
-                    }
-                }
-            }
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("agent command '{cmd}' not found in PATH"),
-    ))
-}
-
-fn is_executable_file(p: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        match std::fs::metadata(p) {
-            Ok(m) => m.is_file() && (m.permissions().mode() & 0o111) != 0,
-            Err(_) => false,
-        }
-    }
-    #[cfg(windows)]
-    {
-        match std::fs::metadata(p) {
-            Ok(m) => m.is_file(),
-            Err(_) => false,
-        }
-    }
+    crate::shim::resolve_executable(cmd).map(|p| p.to_string_lossy().into_owned())
 }
 
 /// Preflight boundary checks (detect leaked environment variables or unmasked secrets before spawn).
