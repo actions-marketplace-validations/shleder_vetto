@@ -51,6 +51,11 @@ pkg-fmt = "zip"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+# Used only to encode Microsoft's documented SandboxSpec.fbs contract for the
+# dynamically-resolved Windows 11 processmodel.dll API.
+flatbuffers = "25.12.19"
+
 [dev-dependencies]
 criterion = "0.5"
 
