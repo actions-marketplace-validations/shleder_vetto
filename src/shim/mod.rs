@@ -114,7 +114,6 @@ pub fn find_real_binary(name: &str) -> Result<PathBuf> {
                 if is_shim_path(&canon) || is_vetto_shim_content(&canon) {
                     continue;
                 }
-                return Ok(canon);
             }
             return Ok(candidate);
         }
@@ -142,7 +141,6 @@ pub fn find_real_binary(name: &str) -> Result<PathBuf> {
                         if is_shim_path(&canon) || is_vetto_shim_content(&canon) {
                             continue;
                         }
-                        return Ok(canon);
                     }
                     return Ok(ext_candidate);
                 }
