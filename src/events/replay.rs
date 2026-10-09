@@ -247,7 +247,7 @@ mod tests {
             ts: now + chrono::Duration::seconds(5),
             message: "second".into(),
         };
-        let mut events = vec![e1, e2, e3];
+        let mut events = [e1, e2, e3];
         events.sort_by_key(|e| e.ts());
 
         let messages: Vec<&str> = events

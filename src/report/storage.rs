@@ -34,7 +34,7 @@ pub fn default_reports_dir(session_id: Option<&str>) -> PathBuf {
         while sanitized.contains("..") {
             sanitized = sanitized.replace("..", "");
         }
-        let sanitized = sanitized.replace('/', "_").replace('\\', "_");
+        let sanitized = sanitized.replace(['/', '\\'], "_");
         let clean = sanitized.trim_matches('_');
         if !clean.is_empty() {
             return base.join(clean);
