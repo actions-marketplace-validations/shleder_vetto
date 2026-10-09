@@ -524,14 +524,8 @@ fn scan_nonce_pids(needle: &[u8], root_pid: u32, me: u32, me_uid: libc::uid_t) -
             && pid != root_pid as i32
             && !crate::sandbox::handle::is_active_root(pid as u32)
         {
-            let my_sid = session_of(0);
-            let their_sid = session_of(pid);
             let their_pgid = unsafe { libc::getpgid(pid) };
-            let is_orphan = match (my_sid, their_sid) {
-                (Some(mine), Some(theirs)) if mine != theirs => true,
-                _ => their_pgid == root_pid as i32,
-            };
-            if is_orphan {
+            if their_pgid == root_pid as i32 {
                 blind = true;
                 matched.push(pid);
             }
