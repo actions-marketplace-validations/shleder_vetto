@@ -458,9 +458,10 @@ fn test_action_authorization_process_exec() {
 
     let mut contract = PolicyCompiler::compile("claude", &ws, None, &[], &[])
         .expect("compile contract");
+    contract.agent_identity.invoked_binary = PathBuf::from("claude");
     contract.filesystem.allow_execute = vec![PathBuf::from("/bin/sh"), PathBuf::from("/usr/bin")];
 
-    // Allowed binary
+    // Allowed binary in allow_execute
     let exec_ok = authorize_action(
         &contract,
         &Action::ProcessExec {
@@ -469,6 +470,16 @@ fn test_action_authorization_process_exec() {
         },
     );
     assert_eq!(exec_ok, ActionVerdict::Allowed);
+
+    // Allowed binary under /usr/bin allow_execute directory
+    let exec_usr = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("/usr/bin/python3"),
+            args: vec![],
+        },
+    );
+    assert_eq!(exec_usr, ActionVerdict::Allowed);
 
     // Allowed invoked binary directly matching contract.agent_identity.invoked_binary
     let exec_invoked = authorize_action(
@@ -491,6 +502,18 @@ fn test_action_authorization_process_exec() {
     assert!(
         matches!(exec_bad, ActionVerdict::Denied { .. }),
         "binary not in allow_execute must be denied"
+    );
+
+    let exec_unauthorized = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("unauthorized_binary"),
+            args: vec![],
+        },
+    );
+    assert!(
+        matches!(exec_unauthorized, ActionVerdict::Denied { .. }),
+        "unauthorized binary must be denied"
     );
 
     let _ = std::fs::remove_dir_all(&ws);
@@ -1083,7 +1106,7 @@ fn test_compile_effective_lexical_normalization_dots() {
     let ws = temp_dir.join(format!("vetto_norm_dots_{}", std::process::id()));
     std::fs::create_dir_all(ws.join("src")).expect("create workspace");
 
-    let raw_read = ws.join("./src/../src/lib.rs");
+    let raw_read = ws.join("./src/./lib.rs");
     let raw_write = ws.join("./src/output.rs");
 
     let policy = Policy {
@@ -1092,13 +1115,22 @@ fn test_compile_effective_lexical_normalization_dots() {
         ..Policy::default()
     };
 
+    let argv = vec!["/bin/sh".to_string()];
+    let env = BTreeMap::new();
+    let net = CliNetMode::Off;
+
     let input = EffectivePolicyInput {
-        agent_name: "claude",
-        workspace_root: &ws,
         policy: &policy,
-        invoked_binary: PathBuf::from("claude"),
-        network_mode: None,
-        runtime_tier: None,
+        argv: &argv,
+        cwd: &ws,
+        env: &env,
+        net: &net,
+        nonce: "test-norm-dots",
+        timeout: None,
+        tier: None,
+        backend: "test".into(),
+        observe_seccomp: false,
+        debug_ports: None,
     };
 
     let contract = PolicyCompiler::compile_effective(input).expect("compile effective");
