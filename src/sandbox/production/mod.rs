@@ -21,7 +21,6 @@ pub mod context;
 pub mod drain;
 pub mod error;
 pub mod lifecycle;
-pub mod signals;
 
 pub use context::{
     ProductionSessionContext, SessionEvidenceState, SessionExecutionMetrics, SessionSignalState,
@@ -35,7 +34,6 @@ pub use lifecycle::{
     FrozenProductionInputs, PreparedExecution, PreparedProductionExecution, SpawnedExecution,
     SpawnedProductionExecution, UnpreparedExecution, UnpreparedProductionExecution,
 };
-pub use signals::{EscalationPolicy, ScopedSignalForwarder, SignalTarget};
 
 pub const PROD_SCENARIO_ID: &str = "PROD";
 pub const PROD_NONCE_ENV: &str = "VETTO_PROD_NONCE";

@@ -63,7 +63,7 @@ pub struct FinalizeContext<'a> {
 
 /// Finalizes the supervised session, verifying process extinction,
 /// evaluating verdicts, generating reports, and calculating the final exit code.
-pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, SuperviseError> {
+pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, SuperviseError> {
     let exit_code = ctx.lifecycle.exit_code;
     let timed_out = ctx.lifecycle.timed_out;
     let duration_secs = ctx.lifecycle.duration_secs;
@@ -188,10 +188,8 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
         );
     }
 
-    // 4. Telemetry and Funnel Milestone
+    // 4. Session stats snapshot
     let snap = ctx.session.stats.snapshot();
-    let _ = crate::telemetry::send_session_telemetry(&snap, ctx.session.tier_label());
-    let _ = crate::telemetry::record_funnel_milestone("first_session");
 
     // 5. Filesystem diff calculation
     let diff = if ctx.session.diff_enabled {
@@ -421,11 +419,7 @@ pub fn finalize_session(mut ctx: FinalizeContext) -> Result<SupervisionVerdict, 
         }
     }
 
-    // 12. OTEL, Session Audit Record and Ephemeral Cleanup
-    if let Some(otel) = ctx.session.otel_session.take() {
-        otel.finish(code);
-    }
-
+    // 12. Session Audit Record and Ephemeral Cleanup
     let history_record = audit::AuditRecord {
         ts: events::types::now(),
         session_id: format!("session-{}", ctx.session.root_pid),

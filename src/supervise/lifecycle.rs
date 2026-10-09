@@ -124,9 +124,39 @@ impl SignalController {
             let read_raw = pipe_read.as_raw_fd();
             let thread_active = Arc::clone(&active);
 
+            #[cfg(target_os = "linux")]
+            let pinned = if target > 0 {
+                Some(crate::sandbox::linux::proctrack::PinnedProcess::open(
+                    target,
+                ))
+            } else {
+                None
+            };
+
             let monitor_thread = std::thread::Builder::new()
                 .name("vetto-sig-watchdog".into())
                 .spawn(move || {
+                    let deliver_signal = |sig: libc::c_int| {
+                        #[cfg(target_os = "linux")]
+                        if let Some(ref p) = pinned {
+                            if p.send_signal(sig).is_ok() {
+                                return;
+                            }
+                        }
+                        unsafe { libc::kill(target, sig) };
+                    };
+
+                    let is_target_alive = || -> bool {
+                        #[cfg(target_os = "linux")]
+                        if let Some(ref p) = pinned {
+                            if p.pidfd.is_some() {
+                                return p.send_signal(0).is_ok();
+                            }
+                        }
+                        let pid = target.abs();
+                        unsafe { libc::kill(pid, 0) == 0 }
+                    };
+
                     let mut pfd = libc::pollfd {
                         fd: read_raw,
                         events: libc::POLLIN,
@@ -149,7 +179,7 @@ impl SignalController {
                                 return; // Shutdown requested
                             }
                             // 1st interrupt: send SIGINT to child or process group
-                            unsafe { libc::kill(target, libc::SIGINT) };
+                            deliver_signal(libc::SIGINT);
                             break;
                         }
                     }
@@ -162,8 +192,7 @@ impl SignalController {
                         if !thread_active.load(Ordering::Relaxed) {
                             return;
                         }
-                        let pid = target.abs();
-                        if unsafe { libc::kill(pid, 0) } != 0 {
+                        if !is_target_alive() {
                             // Child already terminated
                             return;
                         }
@@ -179,18 +208,15 @@ impl SignalController {
                                     return;
                                 }
                                 // 2nd interrupt: immediate SIGKILL
-                                unsafe { libc::kill(target, libc::SIGKILL) };
+                                deliver_signal(libc::SIGKILL);
                                 return;
                             }
                         }
                     }
 
                     // Step 3: Grace period expired; escalate to SIGKILL if child is still alive
-                    if thread_active.load(Ordering::Relaxed) {
-                        let pid = target.abs();
-                        if unsafe { libc::kill(pid, 0) } == 0 {
-                            unsafe { libc::kill(target, libc::SIGKILL) };
-                        }
+                    if thread_active.load(Ordering::Relaxed) && is_target_alive() {
+                        deliver_signal(libc::SIGKILL);
                     }
                 })
                 .map_err(|e| SuperviseError::SignalInstallationFailed(e.to_string()))?;

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::mounts;
-use crate::error::{VettoError, VettoResult};
+use crate::error::VettoResult;
 
 pub const SENSITIVE_PROC_SYS_PATHS: &[&str] = &[
     "/proc/sysrq-trigger",
@@ -18,73 +18,10 @@ pub fn mask_host_proc_sys() -> VettoResult<()> {
     for path_str in SENSITIVE_PROC_SYS_PATHS {
         let path = Path::new(path_str);
         if path.exists() {
-            if let Err(e) = mounts::mask_path(path, path.is_dir()) {
-                if unsafe { libc::geteuid() } != 0
-                    && (e.to_string().contains("Operation not permitted")
-                        || e.to_string().contains("Permission denied")
-                        || e.to_string().contains("Read-only file system"))
-                {
-                    tracing::warn!(
-                        path = %path.display(),
-                        "skipping sensitive proc/sys masking without privileges: {e}"
-                    );
-                } else {
-                    return Err(e);
-                }
-            }
+            mounts::mask_path(path, path.is_dir())?;
         }
     }
     Ok(())
-}
-
-/// Set up a Copy-on-Write overlay using overlayfs.
-pub fn setup_cow_overlay(
-    lower: &Path,
-    upper: &Path,
-    work: &Path,
-    target: &Path,
-) -> VettoResult<()> {
-    let lower_str = lower
-        .to_str()
-        .ok_or_else(|| VettoError::Mount("invalid lower".into()))?;
-    let upper_str = upper
-        .to_str()
-        .ok_or_else(|| VettoError::Mount("invalid upper".into()))?;
-    let work_str = work
-        .to_str()
-        .ok_or_else(|| VettoError::Mount("invalid work".into()))?;
-
-    let options = format!(
-        "lowerdir={},upperdir={},workdir={}\0",
-        lower_str, upper_str, work_str
-    );
-
-    let dst = std::ffi::CString::new(target.as_os_str().as_encoded_bytes())
-        .map_err(|_| VettoError::Mount("NUL in path".into()))?;
-
-    // SAFETY: flags and options
-    if unsafe {
-        libc::mount(
-            b"overlay\0".as_ptr() as *const libc::c_char,
-            dst.as_ptr(),
-            b"overlay\0".as_ptr() as *const libc::c_char,
-            0,
-            options.as_ptr().cast(),
-        )
-    } != 0
-    {
-        return Err(VettoError::Mount(format!(
-            "cow overlay mount failed: {}",
-            std::io::Error::last_os_error()
-        )));
-    }
-
-    Ok(())
-}
-
-/// Mask ~/.ssh, ~/.aws, ~/.gnupg, and .env via read-only tmpfs / devnull (INV-08).
-pub fn mask_ssh_and_env(home: &Path, project_root: Option<&Path>) -> VettoResult<()> {
-    mask_mandatory_secrets(home, project_root)
 }
 
 /// Return potential dangerous Unix domain sockets that must be blocked/masked:
@@ -145,19 +82,7 @@ pub fn get_dangerous_unix_sockets() -> Vec<PathBuf> {
 pub fn mask_unix_sockets(custom_sockets: &[PathBuf]) -> VettoResult<()> {
     for socket_path in custom_sockets {
         if socket_path.exists() {
-            if let Err(e) = mounts::mask_path(socket_path, false) {
-                if unsafe { libc::geteuid() } != 0
-                    && (e.to_string().contains("Operation not permitted")
-                        || e.to_string().contains("Permission denied"))
-                {
-                    tracing::warn!(
-                        path = %socket_path.display(),
-                        "skipping custom unix socket masking without privileges: {e}"
-                    );
-                } else {
-                    return Err(e);
-                }
-            }
+            mounts::mask_path(socket_path, false)?;
         }
     }
     Ok(())
@@ -193,19 +118,7 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
 
     for socket_path in get_dangerous_unix_sockets() {
         if socket_path.exists() {
-            if let Err(e) = mounts::mask_path(&socket_path, false) {
-                if unsafe { libc::geteuid() } != 0
-                    && (e.to_string().contains("Operation not permitted")
-                        || e.to_string().contains("Permission denied"))
-                {
-                    tracing::warn!(
-                        path = %socket_path.display(),
-                        "skipping dangerous unix socket masking without privileges: {e}"
-                    );
-                } else {
-                    return Err(e);
-                }
-            }
+            mounts::mask_path(&socket_path, false)?;
         }
     }
 
@@ -253,8 +166,18 @@ mod tests {
     #[test]
     fn mask_mandatory_secrets_handles_absent_paths() {
         let nonexistent = Path::new("/tmp/nonexistent-vetto-test-home-xyz");
-        assert!(mask_mandatory_secrets(nonexistent, None).is_ok());
-        assert!(mask_ssh_and_env(nonexistent, None).is_ok());
+        let has_host_items = get_dangerous_unix_sockets().iter().any(|s| s.exists())
+            || SENSITIVE_PROC_SYS_PATHS
+                .iter()
+                .any(|p| Path::new(p).exists());
+        let res = mask_mandatory_secrets(nonexistent, None);
+        if has_host_items {
+            if let Err(err) = res {
+                assert!(matches!(err, crate::error::VettoError::Mount(_)));
+            }
+        } else {
+            assert!(res.is_ok());
+        }
     }
 
     #[test]

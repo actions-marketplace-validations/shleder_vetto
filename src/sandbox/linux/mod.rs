@@ -34,7 +34,6 @@ pub mod limits;
 pub mod mounts;
 pub mod namespaces;
 pub mod net_relay;
-pub mod observe_seccomp;
 pub mod proctrack;
 pub mod seccomp_netblock;
 pub mod vfs_overlays;
@@ -81,7 +80,7 @@ pub fn probe() -> Probe {
         userns_available,
         full_tier_available: userns_available && namespaces::probe_full_tier(),
         seccomp_filter_available: seccomp_netblock::probe_available(),
-        seccomp_notify_available: observe_seccomp::probe_available(),
+        seccomp_notify_available: false,
         audit_feed_readable: audit_reader::open_audit_feed().is_ok(),
         cgroup_controllers: cgroup::available_controllers(),
     }
@@ -959,21 +958,10 @@ fn child_b(
         // Install user-notify only in the final agent process. Installing it
         // in S or B would trap their own Landlock path opens or fork and
         // deadlock setup before the parent owns the listener.
-        if observe {
-            if let Some(nc) = notif_child {
-                let mut ok = false;
-                if let Ok(listener) = observe_seccomp::install_tap() {
-                    child_write_all(nc, b"T");
-                    if net_relay::send_fd(nc, listener).is_ok() {
-                        ok = true;
-                    }
-                    unsafe { libc::close(listener) };
-                }
-                if !ok {
-                    child_write_all(nc, b"N");
-                }
-                unsafe { libc::close(nc) };
-            }
+        let _ = observe;
+        if let Some(nc) = notif_child {
+            child_write_all(nc, b"N");
+            unsafe { libc::close(nc) };
         }
         // The actual NetMode selects the socket policy: FULL/off is
         // AF_UNIX-only, while FULL/allowlist additionally permits IPv4/IPv6
@@ -1160,8 +1148,12 @@ unsafe fn child_full(a: FullChildArgs<'_>) -> ! {
     if let Err(e) = mounts::remount_proc_sys_readonly() {
         child_fail(err_w, 115, &format!("remount /proc/sys read-only: {e}"));
     }
-    let _ = mounts::mask_sensitive_proc_paths();
-    let _ = mounts::mount_ro_caches(&policy.ro_mounts);
+    if let Err(e) = mounts::mask_sensitive_proc_paths() {
+        child_fail(err_w, 115, &format!("mask sensitive proc paths: {e}"));
+    }
+    if let Err(e) = mounts::mount_ro_caches(&policy.ro_mounts) {
+        child_fail(err_w, 115, &format!("mount ro caches: {e}"));
+    }
     if let Err(e) = mounts::mask_restricted_devices(policy.dev_allow.as_deref()) {
         child_fail(err_w, 115, &format!("mask restricted devices: {e}"));
     }
@@ -1525,23 +1517,10 @@ unsafe fn child_fs_only(a: FsChildArgs<'_>) -> ! {
         }
     }
 
-    if observe {
-        if let Some(nc) = notif_child {
-            let mut ok = false;
-            if let Ok(listener) = observe_seccomp::install_tap() {
-                child_write_all(nc, b"T");
-                if net_relay::send_fd(nc, listener).is_ok() {
-                    ok = true;
-                }
-                // SAFETY: plain close; the parent owns the listener now.
-                unsafe { libc::close(listener) };
-            }
-            if !ok {
-                child_write_all(nc, b"N");
-            }
-            // SAFETY: plain close on the spent socket end.
-            unsafe { libc::close(nc) };
-        }
+    let _ = observe;
+    if let Some(nc) = notif_child {
+        child_write_all(nc, b"N");
+        unsafe { libc::close(nc) };
     }
 
     if let Err(msg) = child_stdio_setup(&opts.stdio) {
@@ -1715,21 +1694,10 @@ unsafe fn child_seccomp_only(a: FsChildArgs<'_>) -> ! {
         child_fail(err_w, 123, &format!("seccomp filter: {e}"));
     }
 
-    if observe {
-        if let Some(nc) = notif_child {
-            let mut ok = false;
-            if let Ok(listener) = observe_seccomp::install_tap() {
-                child_write_all(nc, b"T");
-                if net_relay::send_fd(nc, listener).is_ok() {
-                    ok = true;
-                }
-                unsafe { libc::close(listener) };
-            }
-            if !ok {
-                child_write_all(nc, b"N");
-            }
-            unsafe { libc::close(nc) };
-        }
+    let _ = observe;
+    if let Some(nc) = notif_child {
+        child_write_all(nc, b"N");
+        unsafe { libc::close(nc) };
     }
 
     if let Err(msg) = child_stdio_setup(&opts.stdio) {

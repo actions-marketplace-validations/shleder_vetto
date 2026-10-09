@@ -88,8 +88,6 @@ pub struct SupervisedSession {
     pub bus: std::sync::Arc<crate::events::EventBus>,
     /// Statistics collector attached to event bus.
     pub stats: std::sync::Arc<crate::report::stats::StatsCollector>,
-    /// OpenTelemetry session, if configured.
-    pub otel_session: Option<std::sync::Arc<crate::telemetry::TelemetrySession>>,
     /// Default log path for this session.
     pub default_log_path: PathBuf,
     /// Unix domain socket path for credential broker, if active.
@@ -672,10 +670,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         }
     }
 
-    if cfg.system_log || pol.system_log {
-        crate::logger::system_log::SystemLogSink::spawn(&bus);
-    }
-
     if cfg.auto_timeout_requested {
         if let Some(t) = cfg.session_timeout {
             bus.publish(crate::events::Event::Notice {
@@ -707,27 +701,8 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             crate::logger::jsonl::JsonlSink::spawn(&bus, path.clone());
         }
     }
-    if cfg.oslog || pol.oslog {
-        crate::logger::oslog::OsLogSink::spawn(&bus);
-    }
     let stats = crate::report::stats::StatsCollector::spawn(&bus);
 
-    let otel_session = std::sync::Arc::new(
-        crate::telemetry::TelemetrySession::start(
-            cfg.otel,
-            cfg.otel_endpoint.as_deref(),
-            &format!("session-{root_pid}"),
-            tier_label(tier),
-            &cfg.net.label(),
-            &pol.name,
-        )
-        .map_err(SuperviseError::Fatal)?,
-    );
-    crate::telemetry::spawn_telemetry_subscriber(&bus, otel_session.clone());
-
-    if cfg.notify {
-        crate::notify::DesktopNotifier::spawn(&bus, true);
-    }
     bus.publish(crate::events::Event::SessionStarted {
         ts: crate::events::types::now(),
         pid: root_pid,
@@ -831,67 +806,20 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             );
         }
         let _ = relay_port;
-        if let Some(fd) = spawned.take_notif_listener() {
-            let notifier_policy = std::sync::Arc::new(pol.clone());
-            if let Some(notify_cfg) = &pol.seccomp_notify {
-                if notify_cfg.enabled {
-                    sandbox::linux::observe_seccomp::spawn_enforcement_supervisor(
-                        fd,
-                        (*bus).clone(),
-                        notify_cfg.clone(),
-                        notifier_policy,
-                        project.clone(),
-                    );
-                    bus.publish(crate::events::Event::Notice {
-                        ts: crate::events::types::now(),
-                        message: "seccomp user-notify supervisor enforcement active (default deny)"
-                            .to_string(),
-                    });
-                } else {
-                    sandbox::linux::observe_seccomp::spawn_notifier(
-                        fd,
-                        (*bus).clone(),
-                        notifier_policy,
-                        project.clone(),
-                    );
-                }
-            } else {
-                sandbox::linux::observe_seccomp::spawn_notifier(
-                    fd,
-                    (*bus).clone(),
-                    notifier_policy,
-                    project.clone(),
-                );
-                bus.publish(crate::events::Event::Notice {
-                    ts: crate::events::types::now(),
-                    message: "blocked-attempt observation via --observe-seccomp \
-                              (BEST-EFFORT; paths are racy; Landlock stays the sole enforcer)"
-                        .to_string(),
-                });
-            }
-        }
         let audit_reason = sandbox::linux::audit_reader::spawn_reader_if_available((*bus).clone());
-        if !cfg.observe_seccomp {
-            if let Some(reason) = audit_reason {
-                bus.publish(crate::events::Event::Notice {
-                    ts: crate::events::types::now(),
-                    message: format!(
-                        "blocked-attempt feed unavailable ({reason}). Enforcement is ACTIVE."
-                    ),
-                });
-            }
+        if let Some(reason) = audit_reason {
+            bus.publish(crate::events::Event::Notice {
+                ts: crate::events::types::now(),
+                message: format!(
+                    "blocked-attempt feed unavailable ({reason}). Enforcement is ACTIVE."
+                ),
+            });
         }
         sandbox::linux::visibility::spawn_poller((*bus).clone(), vec![root_pid]);
     }
     #[cfg(target_os = "macos")]
     {
         let _ = &relay_port;
-        if let Some(reason) = sandbox::macos::fsevents::spawn_watcher_if_available(&bus) {
-            bus.publish(crate::events::Event::Notice {
-                ts: crate::events::types::now(),
-                message: reason,
-            });
-        }
     }
     #[cfg(target_os = "windows")]
     let _ = &relay_port;
@@ -928,7 +856,6 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
         verify_outcome,
         bus,
         stats: std::sync::Arc::new(stats),
-        otel_session: Some(otel_session),
         default_log_path,
         #[cfg(unix)]
         cred_sock,
