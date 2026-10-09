@@ -1618,8 +1618,8 @@ fn test_authoritative_verdict_engine_decoupling_and_export() {
         VerdictStatus::Pass,
         EvidenceStrength::Strong,
         SecurityVerdict::Satisfied,
-        "Workload completed with zero boundary violations",
         0,
+        "Workload completed with zero boundary violations",
     );
     assert_eq!(constructed.security_verdict, SecurityVerdict::Satisfied);
     assert_eq!(constructed.exit_code, 0);
