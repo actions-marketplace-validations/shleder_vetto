@@ -1273,8 +1273,10 @@ mod tests {
 
     #[test]
     fn test_unit_rule_root_wildcard() {
-        let mut policy = Policy::default();
-        policy.allow_write = vec![PathBuf::from("/")];
+        let mut policy = Policy {
+            allow_write: vec![PathBuf::from("/")],
+            ..Policy::default()
+        };
         let f = rule_root_wildcard(&policy);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].severity, Severity::High);
@@ -1293,8 +1295,10 @@ mod tests {
 
     #[test]
     fn test_unit_rule_dangerous_network_cidr() {
-        let mut policy = Policy::default();
-        policy.allow_cidr = vec!["0.0.0.0/0".to_string(), "::/0".to_string()];
+        let mut policy = Policy {
+            allow_cidr: vec!["0.0.0.0/0".to_string(), "::/0".to_string()],
+            ..Policy::default()
+        };
         let f = rule_dangerous_network_cidr(&policy);
         assert_eq!(f.len(), 2);
         assert_eq!(f[0].severity, Severity::High);
@@ -1307,9 +1311,11 @@ mod tests {
 
     #[test]
     fn test_unit_rule_broad_tmp_write() {
-        let mut policy = Policy::default();
-        policy.allow_write = vec![PathBuf::from("/tmp")];
-        policy.tmpfs_tmp = false;
+        let mut policy = Policy {
+            allow_write: vec![PathBuf::from("/tmp")],
+            tmpfs_tmp: false,
+            ..Policy::default()
+        };
         let f = rule_broad_tmp_write(&policy);
         assert!(f.is_some());
         assert_eq!(f.unwrap().severity, Severity::Warn);

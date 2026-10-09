@@ -650,9 +650,8 @@ pub fn battery_simulated(
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from);
     let ssh_path = home.as_ref().map(|h| h.join(".ssh"));
-    let mut ssh_masked = false;
-    if let Some(ref ssh) = ssh_path {
-        ssh_masked = contract
+    let ssh_masked = if let Some(ref ssh) = ssh_path {
+        contract
             .filesystem
             .mask_paths
             .iter()
@@ -660,10 +659,10 @@ pub fn battery_simulated(
             || pol
                 .deny_resolved
                 .iter()
-                .any(|d| d.path == *ssh || d.path.ends_with(".ssh"));
+                .any(|d| d.path == *ssh || d.path.ends_with(".ssh"))
     } else {
-        ssh_masked = true;
-    }
+        true
+    };
     // Verify secret mask precedence: secret mask path must not be exposed in allow_read
     let secret_leak = contract.filesystem.mask_paths.iter().any(|mask| {
         contract
