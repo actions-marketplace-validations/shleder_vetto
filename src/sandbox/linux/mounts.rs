@@ -103,33 +103,6 @@ pub fn isolate_dev_shm() -> VettoResult<()> {
 pub const TMPFS_TMP_SIZE_BYTES: u64 = 512 * 1024 * 1024;
 pub const TMPFS_TMP_MOUNT_OPTIONS: &str = "size=536870912,mode=1777";
 
-pub fn mount_tmpfs_tmp() -> VettoResult<()> {
-    let target = Path::new("/tmp");
-    if !target.exists() || !target.is_dir() {
-        return Ok(());
-    }
-    let dst = cstr(target)?;
-    let options = cstr(Path::new(TMPFS_TMP_MOUNT_OPTIONS))?;
-
-    // SAFETY: valid NUL-terminated mount arguments; flags are scalar.
-    let mount_res = unsafe {
-        libc::mount(
-            std::ptr::null(),
-            dst.as_ptr(),
-            b"tmpfs\0".as_ptr() as *const libc::c_char,
-            MS_NOSUID | MS_NODEV,
-            options.as_ptr().cast(),
-        )
-    };
-    if mount_res != 0 {
-        return Err(VettoError::Mount(format!(
-            "mount tmpfs over /tmp: {}",
-            std::io::Error::last_os_error()
-        )));
-    }
-    Ok(())
-}
-
 pub fn isolate_tmp(preserve_paths: &[&Path]) -> VettoResult<()> {
     let target = Path::new("/tmp");
     if !target.exists() || !target.is_dir() {
@@ -230,47 +203,6 @@ pub fn isolate_tmp(preserve_paths: &[&Path]) -> VettoResult<()> {
             libc::close(fd);
         }
     }
-    Ok(())
-}
-
-/// Restrict access to other agents' session directories (`~/.claude/sessions/`,
-/// `~/.codex/`, `~/.config/Cursor/`) by mounting empty read-only tmpfs instances
-/// or `/dev/null` over them.
-pub fn isolate_agent_state_dirs(home: &Path, current_agent: &str) -> VettoResult<()> {
-    let sensitive_subpaths = [
-        ".claude/sessions",
-        ".codex",
-        ".config/Cursor",
-        ".cursor",
-        ".config/Code",
-        ".local/share/code-server",
-    ];
-
-    for subpath in sensitive_subpaths {
-        // If current agent is specifically targeting one ecosystem (e.g. claude),
-        // we might leave that one to policy allowlist, but sibling state trees
-        // are masked by default.
-        let path = home.join(subpath);
-        if path.exists() {
-            let is_dir = path.is_dir();
-            let _ = mask_path(&path, is_dir);
-        }
-    }
-
-    // Mask sibling agent report directories in `.vetto-reports/`
-    let reports_dir = Path::new(".vetto-reports");
-    if reports_dir.exists() && reports_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(reports_dir) {
-            for entry in entries.flatten() {
-                if let Ok(name) = entry.file_name().into_string() {
-                    if name != current_agent && entry.path().is_dir() {
-                        let _ = empty_tmpfs(&entry.path());
-                    }
-                }
-            }
-        }
-    }
-
     Ok(())
 }
 
@@ -397,36 +329,6 @@ pub fn mask_path(path: &Path, is_dir: bool) -> VettoResult<bool> {
     Ok(true)
 }
 
-/// Mask mandatory secret directories (~/.ssh, ~/.aws, ~/.gnupg) and .env files (INV-08).
-/// Directories are masked using read-only tmpfs with mode 0000.
-pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> VettoResult<()> {
-    let mandatory_dirs = [".ssh", ".aws", ".gnupg"];
-    for dir_name in mandatory_dirs {
-        let p = home.join(dir_name);
-        if p.exists() {
-            mask_path(&p, p.is_dir())?;
-        }
-    }
-
-    let home_env = home.join(".env");
-    if home_env.exists() {
-        mask_path(&home_env, home_env.is_dir())?;
-    }
-
-    if let Some(root) = project_root {
-        let proj_env = root.join(".env");
-        if proj_env.exists() {
-            mask_path(&proj_env, proj_env.is_dir())?;
-        }
-        let git_config = root.join(".git").join("config");
-        if git_config.exists() {
-            mask_path(&git_config, git_config.is_dir())?;
-        }
-    }
-
-    Ok(())
-}
-
 /// Dangerous raw character devices that must never be accessible inside sandboxes.
 pub const DANGEROUS_RAW_DEVICES: &[&str] = &["/dev/mem", "/dev/kmem", "/dev/port", "/dev/nvram"];
 
@@ -434,7 +336,7 @@ pub fn mask_dangerous_devices() -> VettoResult<()> {
     for &d in DANGEROUS_RAW_DEVICES {
         let path = Path::new(d);
         if path.exists() {
-            let _ = mask_path(path, false);
+            mask_path(path, false)?;
         }
     }
     Ok(())
@@ -477,7 +379,7 @@ pub fn mask_restricted_devices(dev_allow: Option<&[String]>) -> VettoResult<()> 
                 if !allowed_set.contains(&name) {
                     let path = entry.path();
                     let is_dir = path.is_dir();
-                    let _ = mask_path(&path, is_dir);
+                    mask_path(&path, is_dir)?;
                 }
             }
         }
@@ -505,7 +407,7 @@ pub fn mask_restricted_devices(dev_allow: Option<&[String]>) -> VettoResult<()> 
             let path = Path::new(d);
             if path.exists() {
                 let is_dir = path.is_dir();
-                let _ = mask_path(path, is_dir);
+                mask_path(path, is_dir)?;
             }
         }
     }
@@ -647,7 +549,7 @@ pub fn mount_devpts_newinstance() -> VettoResult<()> {
 ///   /proc/asound (sound card state)
 pub fn mask_sensitive_proc_paths() -> VettoResult<()> {
     // INV-28: Ensure /proc/sys is masked or remounted read-only
-    let _ = remount_proc_sys_readonly();
+    remount_proc_sys_readonly()?;
 
     let sensitive_files = [
         "/proc/kcore",
@@ -659,7 +561,7 @@ pub fn mask_sensitive_proc_paths() -> VettoResult<()> {
     for p in sensitive_files {
         let path = Path::new(p);
         if path.exists() {
-            let _ = bind_devnull(path);
+            bind_devnull(path)?;
         }
     }
 
@@ -667,7 +569,7 @@ pub fn mask_sensitive_proc_paths() -> VettoResult<()> {
     for p in sensitive_dirs {
         let path = Path::new(p);
         if path.exists() && path.is_dir() {
-            let _ = empty_tmpfs(path);
+            empty_tmpfs(path)?;
         }
     }
     Ok(())
@@ -686,15 +588,28 @@ pub fn mount_ro_caches(ro_mounts: &[std::path::PathBuf]) -> VettoResult<()> {
                     std::ptr::null(),
                     MS_BIND | MS_REC,
                     std::ptr::null(),
-                ) == 0
+                ) != 0
                 {
-                    let _ = libc::mount(
-                        std::ptr::null(),
-                        dst.as_ptr(),
-                        std::ptr::null(),
-                        MS_BIND | MS_REMOUNT | MS_RDONLY | MS_REC,
-                        std::ptr::null(),
-                    );
+                    return Err(VettoError::Mount(format!(
+                        "failed to bind mount ro cache {}: {}",
+                        path.display(),
+                        std::io::Error::last_os_error()
+                    )));
+                }
+                if libc::mount(
+                    std::ptr::null(),
+                    dst.as_ptr(),
+                    std::ptr::null(),
+                    MS_BIND | MS_REMOUNT | MS_RDONLY | MS_REC,
+                    std::ptr::null(),
+                ) != 0
+                {
+                    libc::umount2(dst.as_ptr(), libc::MNT_DETACH);
+                    return Err(VettoError::Mount(format!(
+                        "failed to remount ro cache as read-only {}: {}",
+                        path.display(),
+                        std::io::Error::last_os_error()
+                    )));
                 }
             }
         }
@@ -704,19 +619,19 @@ pub fn mount_ro_caches(ro_mounts: &[std::path::PathBuf]) -> VettoResult<()> {
 
 #[cfg(test)]
 mod tests {
-
-    #[test]
-    fn mount_tmpfs_tmp_plan_is_correct() {
-        assert_eq!(TMPFS_TMP_SIZE_BYTES, 512 * 1024 * 1024);
-        assert!(TMPFS_TMP_MOUNT_OPTIONS.contains("size=536870912"));
-        assert!(TMPFS_TMP_MOUNT_OPTIONS.contains("mode=1777"));
-    }
-
     use super::*;
 
     #[test]
     fn mask_dangerous_devices_handles_absent_paths() {
-        assert!(mask_dangerous_devices().is_ok());
+        let has_devices = DANGEROUS_RAW_DEVICES.iter().any(|d| Path::new(d).exists());
+        let res = mask_dangerous_devices();
+        if has_devices {
+            if let Err(err) = res {
+                assert!(matches!(err, VettoError::Mount(_)));
+            }
+        } else {
+            assert!(res.is_ok());
+        }
     }
 
     #[test]
@@ -750,12 +665,6 @@ mod tests {
         assert!(DEVPTS_MOUNT_OPTIONS.contains("newinstance"));
         assert!(DEVPTS_MOUNT_OPTIONS.contains("ptmxmode=0666"));
         assert!(DEVPTS_MOUNT_OPTIONS.contains("mode=620"));
-    }
-
-    #[test]
-    fn mask_mandatory_secrets_handles_absent_paths() {
-        let nonexistent = Path::new("/tmp/nonexistent-vetto-test-home-mounts-xyz");
-        assert!(mask_mandatory_secrets(nonexistent, None).is_ok());
     }
 
     #[test]

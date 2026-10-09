@@ -131,7 +131,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
         "--report-dir",
         "--report-retention",
         "--report-max-age-secs",
-        "--otel-endpoint",
         "--timeout",
         "--limits",
         "--agent",
@@ -191,10 +190,6 @@ fn preprocess_cli_args(raw_args: &[String]) -> Result<Vec<String>> {
 }
 
 fn run() -> Result<()> {
-    // Activation funnel milestone (issue #27): first-ever run. Once-only via
-    // marker file; silent unless telemetry is explicitly opted in.
-    let _ = vetto::telemetry::record_funnel_milestone("install");
-
     // Check if invoked via vetto-bench executable alias
     let is_vetto_bench = std::env::args_os().next().is_some_and(|a| {
         std::path::Path::new(&a)

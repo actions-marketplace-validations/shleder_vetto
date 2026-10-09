@@ -2,7 +2,7 @@
 
 Run untrusted AI agent commands and build pipelines inside the **Vetto daemon-less sandbox** directly in your GitHub Actions workflows.
 
-Vetto provides a standard, 10-50x faster, zero-Docker replacement for Docker-in-Docker (DinD) in CI agent pipelines:
+Vetto provides a standard rootless zero-Docker sandbox for GitHub Actions runners:
 - **Sub-4ms Cold Start**: Injects security boundaries directly between `fork()` and `execve()`, eliminating the 30-120 second image pull and container boot overhead typical of Docker-in-Docker.
 - **Zero Daemon Overhead**: Fully rootless, unprivileged kernel sandboxing via Landlock LSM (ABI 1-6) and cgroups v2. Requires no `dockerd` daemon, no root privileges, and no `--privileged` container flags that compromise the runner host.
 - **Preserves Runner Toolchains & Caches**: Runs directly against host compilers, runtimes, and local package caches (`actions/cache`, `npm`, `pip`, `cargo`), avoiding custom container image rebuilds.

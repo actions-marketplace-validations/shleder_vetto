@@ -79,59 +79,7 @@ fn bench_visibility_scan(c: &mut Criterion) {
 #[cfg(not(target_os = "linux"))]
 fn bench_visibility_scan(_c: &mut Criterion) {}
 
-#[cfg(target_os = "linux")]
-fn bench_observe_seccomp(c: &mut Criterion) {
-    use std::path::PathBuf;
-    use vetto::policy::types::{EnvironmentPolicy, Policy, PolicyMetadata, ResourceLimits};
-    use vetto::sandbox::linux::observe_seccomp;
-
-    let mut group = c.benchmark_group("observe-seccomp-filter-and-classification");
-    group.bench_function("filter-build", |bench| {
-        bench.iter(|| black_box(observe_seccomp::build_tap_program()));
-    });
-
-    let root = std::env::temp_dir().join("vetto-criterion-policy");
-    let policy = Policy {
-        name: "benchmark".into(),
-        metadata: PolicyMetadata::default(),
-        limits: ResourceLimits::default(),
-        allow_write: vec![root.clone()],
-        allow_read: vec![PathBuf::from("/usr")],
-        deny_write: Vec::new(),
-        deny_read: Vec::new(),
-        deny_resolved: Vec::new(),
-        deny_network: false,
-        is_immutable: false,
-        system_log: false,
-        environment: EnvironmentPolicy {
-            pass_through: Vec::new(),
-            deny: Vec::new(),
-        },
-        warnings: Vec::new(),
-        ..Default::default()
-    };
-    let allowed = root.join("rule-0000").to_string_lossy().into_owned();
-    let blocked = std::env::temp_dir()
-        .join("outside-vetto-criterion")
-        .to_string_lossy()
-        .into_owned();
-    let cases = [Some(allowed.as_str()), Some(blocked.as_str()), None];
-    group.bench_function("notification-classification", |bench| {
-        let mut index = 0usize;
-        bench.iter(|| {
-            let path = cases[index % cases.len()];
-            index = index.wrapping_add(1);
-            black_box(observe_seccomp::classify_notification_path(
-                black_box(path),
-                black_box(std::path::Path::new("/")),
-                black_box(&policy),
-            ))
-        });
-    });
-    group.finish();
-}
-
-#[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
 fn bench_observe_seccomp(_c: &mut Criterion) {}
 
 #[cfg(unix)]

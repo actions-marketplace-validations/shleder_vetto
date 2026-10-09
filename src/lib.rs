@@ -19,7 +19,6 @@ pub mod history;
 pub mod init;
 pub mod logger;
 pub mod mcp;
-pub mod notify;
 pub mod onboard;
 pub mod policy;
 pub mod policy_ir;
@@ -32,7 +31,6 @@ pub mod sandbox;
 pub mod sanitizer;
 pub mod shim;
 pub mod supervise;
-pub mod telemetry;
 #[cfg(unix)]
 pub mod tui;
 pub mod verify;

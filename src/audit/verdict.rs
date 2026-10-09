@@ -1,6 +1,6 @@
 //! Authoritative Verdict Engine and Non-Negotiable Decision Truth Table.
 //!
-//! Fulfills Section 18 of the Next-Generation Architectural Specification:
+//! Fulfills Section 18 of the Core Architecture Specification:
 //! Implements the 2D Verdict Matrix (VerdictStatus × EvidenceStrength),
 //! fail-closed exit code assignment (Exit 125 on contract breaches), and
 //! CoW layer commit/wipe decisions.

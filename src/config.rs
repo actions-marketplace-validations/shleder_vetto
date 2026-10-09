@@ -66,8 +66,6 @@ pub struct GlobalConfig {
     pub shadow: Option<bool>,
     #[serde(default)]
     pub mask_secrets: Option<bool>,
-    #[serde(default)]
-    pub anonymous_telemetry: Option<bool>,
 }
 
 pub fn load_global_config_from_home(home: &Path) -> Option<GlobalConfig> {
@@ -107,7 +105,6 @@ pub struct RunConfig {
     pub explicit_net: bool,
     pub tui: TuiMode,
     pub backend: Option<String>,
-    pub oslog: bool,
     pub lpac: bool,
     pub observe_seccomp: bool,
     pub jsonl_path: Option<PathBuf>,
@@ -118,12 +115,8 @@ pub struct RunConfig {
     pub report_max_age_secs: Option<u64>,
     pub fail_on_block: Option<u64>,
     pub git_ssh: bool,
-    pub notify: bool,
-    pub otel_endpoint: Option<String>,
-    pub otel: bool,
     pub session_timeout: Option<std::time::Duration>,
     pub auto_timeout_requested: bool,
-    pub system_log: bool,
     pub limits_spec: Option<String>,
     pub verify_preflight: bool,
     pub shadow: bool,
@@ -139,7 +132,6 @@ pub struct RunConfig {
     pub ephemeral_force_discard: bool,
     pub auto_deny_secrets: bool,
     pub read_only_caches: bool,
-    pub anonymous_telemetry: bool,
     pub tmpfs_tmp: bool,
     pub mask_secrets: bool,
     pub net_quota: std::collections::HashMap<String, u64>,
@@ -420,13 +412,6 @@ mod tests {
     use crate::cli::Cli;
     use crate::policy::presets::{agent_network_allowlist, CANONICAL_PACKAGE_REGISTRY_DOMAINS};
     use clap::Parser;
-
-    #[test]
-    fn run_config_parses_otel_flag() {
-        let cli = Cli::try_parse_from(["vetto", "--otel", "--", "true"]).unwrap();
-        let cfg = RunConfig::from_cli(&cli).unwrap();
-        assert!(cfg.otel);
-    }
 
     fn config(args: &[&str]) -> Result<RunConfig> {
         let mut argv = vec!["vetto"];

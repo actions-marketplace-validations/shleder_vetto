@@ -61,7 +61,9 @@ impl SuperviseError {
             | Self::NetworkRelayTierMismatch { .. }
             | Self::PolicyLoadFailed(_)
             | Self::StdioAllocationFailed(_)
-            | Self::ProcessSpawnFailed(_) => exit_codes::EXIT_FAIL_CLOSED, // 125 (INV-01)
+            | Self::ProcessSpawnFailed(_)
+            | Self::Fatal(_)
+            | Self::SignalInstallationFailed(_) => exit_codes::EXIT_FAIL_CLOSED, // 125 (INV-01)
             Self::EmptyAgentCommand => exit_codes::EXIT_INVALID_USAGE,             // 2
             _ => exit_codes::EXIT_AGENT_ERROR,                                     // 1
         }
@@ -121,7 +123,7 @@ mod tests {
 
         assert_eq!(
             SuperviseError::SignalInstallationFailed("sigaction failed".into()).exit_code(),
-            1
+            125
         );
 
         assert_eq!(
@@ -140,7 +142,7 @@ mod tests {
 
         assert_eq!(
             SuperviseError::Fatal(anyhow::anyhow!("unexpected")).exit_code(),
-            1
+            125
         );
     }
 

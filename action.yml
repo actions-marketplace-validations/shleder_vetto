@@ -52,10 +52,6 @@ inputs:
     description: 'Upload generated SARIF report to GitHub Code Scanning (requires permissions: security-events: write).'
     required: false
     default: 'false'
-  telemetry:
-    description: 'Opt-in anonymous telemetry (default: false).'
-    required: false
-    default: 'false'
   token:
     description: 'GitHub token for authenticated API requests when resolving the latest release version.'
     required: false
@@ -223,7 +219,6 @@ runs:
         VETTO_ACTION_REPORT: ${{ inputs.report }}
         VETTO_ACTION_REPORT_DIR: ${{ inputs.report-dir }}
         VETTO_ACTION_FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
-        VETTO_ACTION_TELEMETRY: ${{ inputs.telemetry }}
       run: |
         if [ -f "$GITHUB_ACTION_PATH/action/entrypoint.sh" ]; then
           bash "$GITHUB_ACTION_PATH/action/entrypoint.sh"
