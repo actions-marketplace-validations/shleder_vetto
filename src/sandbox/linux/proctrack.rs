@@ -622,6 +622,9 @@ pub fn verify_child_host(pid: u32) -> crate::sandbox::capability::HostVerificati
 #[cfg(target_os = "linux")]
 fn verify_child_host_linux(pid: u32) -> crate::sandbox::capability::HostVerification {
     use crate::sandbox::capability::HostVerification;
+    if pid == 0 {
+        return HostVerification::none();
+    }
     let deadline = Instant::now() + Duration::from_millis(150);
     let mut out = HostVerification::none();
     loop {
@@ -635,7 +638,7 @@ fn verify_child_host_linux(pid: u32) -> crate::sandbox::capability::HostVerifica
             }
         }
         let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
-        if pgid == pid as libc::pid_t {
+        if pgid == pid as libc::pid_t && pgid > 0 {
             out.pgroup_separate = true;
         }
         if let (Ok(child_netns), Ok(host_netns)) = (
@@ -695,5 +698,13 @@ mod tests {
         assert_eq!(state_letter("State:\tZ (zombie)\n"), Some('Z'));
         assert_eq!(state_letter("State:\tS (sleeping)\n"), Some('S'));
         assert_eq!(state_letter("Name:\tx\n"), None);
+    }
+
+    #[test]
+    fn verify_child_host_zero_pid_returns_none() {
+        let v = verify_child_host(0);
+        assert!(!v.pgroup_separate);
+        assert!(!v.no_new_privs);
+        assert!(!v.seccomp_filter);
     }
 }
