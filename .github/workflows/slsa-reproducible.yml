@@ -41,7 +41,10 @@ jobs:
       - name: Build 1 (Clean Target A)
         env:
           CARGO_TARGET_DIR: target/build-a
-        run: cargo build --release --locked --all-features
+        run: |
+          cargo generate-lockfile
+          git diff Cargo.lock || true
+          cargo build --release --locked --all-features
 
       - name: Build 2 (Clean Target B)
         env:
