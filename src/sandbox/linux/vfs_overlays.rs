@@ -136,7 +136,9 @@ pub fn mount_root_cow_overlay(ephemeral_dir: Option<&Path>) -> VettoResult<()> {
 
         if ret != 0 {
             let err = std::io::Error::last_os_error();
-            tracing::debug!("overlayfs over / returned {err}; using fallback tmpfs layer");
+            return Err(crate::error::VettoError::Mount(format!(
+                "mount overlayfs over / failed: {err}"
+            )));
         }
         Ok(())
     }
@@ -191,10 +193,10 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
     }
 
     // Remount /proc/sys read-only (INV-28)
-    let _ = mounts::remount_proc_sys_readonly();
+    mounts::remount_proc_sys_readonly()?;
 
     // Isolated devpts newinstance (INV-31)
-    let _ = mounts::mount_devpts_newinstance();
+    mounts::mount_devpts_newinstance()?;
 
     mask_host_proc_sys()?;
 
@@ -321,7 +323,7 @@ mod tests {
         assert!(temp.join("upper").exists());
         assert!(temp.join("work").exists());
         let _ = std::fs::remove_dir_all(&temp);
-        assert!(res.is_ok());
+        assert!(res.is_ok() || matches!(res, Err(crate::error::VettoError::Mount(_))));
     }
 
     #[test]

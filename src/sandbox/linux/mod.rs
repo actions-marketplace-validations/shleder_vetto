@@ -1131,6 +1131,11 @@ unsafe fn child_full(a: FullChildArgs<'_>) -> ! {
     if let Err(e) = mounts::make_root_private() {
         child_fail(err_w, 115, &format!("make root private: {e}"));
     }
+    if policy.snapshot || std::env::var_os("VETTO_COW_ROOT").is_some() {
+        if let Err(e) = vfs_overlays::mount_root_cow_overlay(None) {
+            child_fail(err_w, 121, &format!("mount root cow overlay: {e}"));
+        }
+    }
     if let Err(e) = mounts::isolate_dev_shm() {
         child_fail(err_w, 115, &format!("isolate /dev/shm: {e}"));
     }

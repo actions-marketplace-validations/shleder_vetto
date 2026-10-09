@@ -56,26 +56,36 @@ pub struct StdioPump {
     err_reader: Option<crate::sandbox::production::AsyncPipeReader>,
     #[cfg_attr(not(unix), allow(dead_code))]
     mask_secrets: bool,
+    #[cfg_attr(not(unix), allow(dead_code))]
+    is_statusline: bool,
 }
 
 impl StdioPump {
     /// Starts asynchronous background readers for stdout and stderr pipes, and PTY master.
+    ///
+    /// In Statusline mode (`is_statusline == true`), background PTY reading is disabled
+    /// so `statusline::run` retains exclusive, uncoordinated ownership of live PTY output.
     #[cfg(unix)]
     pub fn start(
         pty_master: Option<OwnedFd>,
         stdout_r: Option<OwnedFd>,
         stderr_r: Option<OwnedFd>,
         mask_secrets: bool,
+        is_statusline: bool,
     ) -> Result<Self, SuperviseError> {
         let pty_reader = if let Some(ref master) = pty_master {
             let _ = crate::pty::set_nonblocking(master.as_raw_fd(), true);
-            master.try_clone().ok().map(|cloned| {
-                crate::sandbox::production::AsyncPipeReader::spawn(
-                    cloned,
-                    DEFAULT_MAX_PUMP_BYTES,
-                    DEFAULT_DRAIN_BUDGET,
-                )
-            })
+            if !is_statusline {
+                master.try_clone().ok().map(|cloned| {
+                    crate::sandbox::production::AsyncPipeReader::spawn(
+                        cloned,
+                        DEFAULT_MAX_PUMP_BYTES,
+                        DEFAULT_DRAIN_BUDGET,
+                    )
+                })
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -101,6 +111,7 @@ impl StdioPump {
             out_reader,
             err_reader,
             mask_secrets,
+            is_statusline,
         })
     }
 
@@ -111,8 +122,12 @@ impl StdioPump {
         _stdout_r: Option<()>,
         _stderr_r: Option<()>,
         mask_secrets: bool,
+        is_statusline: bool,
     ) -> Result<Self, SuperviseError> {
-        Ok(Self { mask_secrets })
+        Ok(Self {
+            mask_secrets,
+            is_statusline,
+        })
     }
 
     /// Access PTY master descriptor if allocated.
@@ -215,35 +230,39 @@ impl StdioPump {
                 }
             }
 
-            // Drain residual bytes from PTY master if present and combine with background pty stream
-            if self.pty_master.is_some() || !raw_pty.is_empty() {
+            // Drain residual bytes from PTY master if present and combine with background pty stream.
+            // In Statusline mode, statusline::run is the sole live reader and already drained and rendered
+            // PTY master directly to the terminal, so we skip reading/flushing PTY master here.
+            if (!self.is_statusline && self.pty_master.is_some()) || !raw_pty.is_empty() {
                 let mut residual = Vec::new();
-                if let Some(master) = &self.pty_master {
-                    let mut pty_buf = [0u8; 8192];
-                    let deadline = Instant::now() + DEFAULT_DRAIN_BUDGET;
-                    loop {
-                        let now = Instant::now();
-                        if now >= deadline {
-                            break;
-                        }
-                        let remaining_ms = (deadline - now).as_millis().min(50) as libc::c_int;
-                        let mut pfd = libc::pollfd {
-                            fd: master.as_raw_fd(),
-                            events: libc::POLLIN,
-                            revents: 0,
-                        };
-                        let pret = unsafe { libc::poll(&mut pfd, 1, remaining_ms) };
-                        if pret <= 0 {
-                            break;
-                        }
-                        if pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
-                            let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
-                            if n == 0 {
+                if !self.is_statusline {
+                    if let Some(master) = &self.pty_master {
+                        let mut pty_buf = [0u8; 8192];
+                        let deadline = Instant::now() + DEFAULT_DRAIN_BUDGET;
+                        loop {
+                            let now = Instant::now();
+                            if now >= deadline {
                                 break;
                             }
-                            residual.extend_from_slice(&pty_buf[..n]);
-                        } else {
-                            break;
+                            let remaining_ms = (deadline - now).as_millis().min(50) as libc::c_int;
+                            let mut pfd = libc::pollfd {
+                                fd: master.as_raw_fd(),
+                                events: libc::POLLIN,
+                                revents: 0,
+                            };
+                            let pret = unsafe { libc::poll(&mut pfd, 1, remaining_ms) };
+                            if pret <= 0 {
+                                break;
+                            }
+                            if pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                                let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
+                                if n == 0 {
+                                    break;
+                                }
+                                residual.extend_from_slice(&pty_buf[..n]);
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
@@ -258,13 +277,15 @@ impl StdioPump {
                     } else {
                         combined_pty
                     };
-                    #[cfg(unix)]
-                    safe_flush_output(libc::STDOUT_FILENO, &to_write);
-                    #[cfg(not(unix))]
-                    {
-                        let mut dest = std::io::stdout();
-                        let _ = dest.write_all(&to_write);
-                        let _ = dest.flush();
+                    if !self.is_statusline {
+                        #[cfg(unix)]
+                        safe_flush_output(libc::STDOUT_FILENO, &to_write);
+                        #[cfg(not(unix))]
+                        {
+                            let mut dest = std::io::stdout();
+                            let _ = dest.write_all(&to_write);
+                            let _ = dest.flush();
+                        }
                     }
                     final_out.extend_from_slice(&to_write);
                 }
@@ -342,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_stdio_pump_defaults_and_construction() {
-        let pump = StdioPump::start(None, None, None, false).expect("start empty pump");
+        let pump = StdioPump::start(None, None, None, false, false).expect("start empty pump");
         assert!(pump.pty_master().is_none());
     }
 
@@ -365,7 +386,7 @@ mod tests {
         let mut err_w = unsafe { std::fs::File::from_raw_fd(stderr_fds[1]) };
 
         let mut pump =
-            StdioPump::start(None, Some(out_r), Some(err_r), false).expect("start pump with pipes");
+            StdioPump::start(None, Some(out_r), Some(err_r), false, false).expect("start pump with pipes");
 
         out_w.write_all(b"hello stdout\n").expect("write stdout");
         err_w.write_all(b"hello stderr\n").expect("write stderr");
@@ -378,5 +399,23 @@ mod tests {
         assert!(data.stderr.starts_with(b"hello stderr"));
         assert!(!data.stdout_truncated);
         assert!(!data.stderr_truncated);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_stdio_pump_statusline_mode_does_not_spawn_pty_reader() {
+        use std::os::fd::FromRawFd;
+
+        let mut pty_fds = [0i32; 2];
+        unsafe {
+            assert_eq!(libc::pipe(pty_fds.as_mut_ptr()), 0);
+        }
+        let master = unsafe { OwnedFd::from_raw_fd(pty_fds[0]) };
+        let _slave = unsafe { OwnedFd::from_raw_fd(pty_fds[1]) };
+
+        let pump = StdioPump::start(Some(master), None, None, false, true)
+            .expect("start statusline pump");
+        assert!(pump.pty_master().is_some());
+        assert!(pump.pty_reader.is_none());
     }
 }

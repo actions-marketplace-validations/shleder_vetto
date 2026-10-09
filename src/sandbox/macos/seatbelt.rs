@@ -275,8 +275,23 @@ pub fn apply_seatbelt(
     net: &NetMode,
     proxy_port: Option<u16>,
 ) -> Result<(), String> {
+    if std::env::var_os("VETTO_SEATBELT_SHAPE_D").is_some()
+        || std::env::var_os("VETTO_SHAPE_D").is_some()
+    {
+        return apply_seatbelt_shape_d(policy, net, proxy_port);
+    }
     let (template, params) = generate_sbpl_template_and_params(policy, net, proxy_port);
     apply_seatbelt_raw(&template, &params)
+}
+
+/// Apply strict Shape D AST Seatbelt profile directly.
+pub fn apply_seatbelt_shape_d(
+    policy: &Policy,
+    net: &NetMode,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
+    let profile = generate_sbpl_shape_d(policy, net, proxy_port);
+    apply_seatbelt_raw(&profile, &[])
 }
 
 /// Apply raw SBPL profile and parameters to the calling process.
@@ -532,5 +547,18 @@ mod tests {
         assert!(profile.contains("(deny file-read* (subpath \"/test/workspace/write/.env\"))"));
         assert!(profile.contains("(deny file-write* (subpath \"/test/workspace/write/.env\"))"));
         assert!(profile.contains("(deny network*)"));
+    }
+
+    #[test]
+    fn test_apply_seatbelt_shape_d_wiring() {
+        let policy = Policy::default();
+        let profile = generate_sbpl_shape_d(&policy, &NetMode::Off, None);
+        assert!(profile.contains("(version 1)"));
+        assert!(profile.contains("require-any"));
+        let res = apply_seatbelt_shape_d(&policy, &NetMode::Off, None);
+        #[cfg(not(target_os = "macos"))]
+        assert!(res.is_err());
+        #[cfg(target_os = "macos")]
+        let _ = res;
     }
 }
