@@ -49,6 +49,8 @@ pub struct StdioPump {
     #[cfg(unix)]
     pty_master: Option<OwnedFd>,
     #[cfg(unix)]
+    pty_reader: Option<crate::sandbox::production::AsyncPipeReader>,
+    #[cfg(unix)]
     out_reader: Option<crate::sandbox::production::AsyncPipeReader>,
     #[cfg(unix)]
     err_reader: Option<crate::sandbox::production::AsyncPipeReader>,
@@ -57,7 +59,7 @@ pub struct StdioPump {
 }
 
 impl StdioPump {
-    /// Starts asynchronous background readers for stdout and stderr pipes.
+    /// Starts asynchronous background readers for stdout and stderr pipes, and PTY master.
     #[cfg(unix)]
     pub fn start(
         pty_master: Option<OwnedFd>,
@@ -65,9 +67,18 @@ impl StdioPump {
         stderr_r: Option<OwnedFd>,
         mask_secrets: bool,
     ) -> Result<Self, SuperviseError> {
-        if let Some(ref master) = pty_master {
+        let pty_reader = if let Some(ref master) = pty_master {
             let _ = crate::pty::set_nonblocking(master.as_raw_fd(), true);
-        }
+            master.try_clone().ok().map(|cloned| {
+                crate::sandbox::production::AsyncPipeReader::spawn(
+                    cloned,
+                    DEFAULT_MAX_PUMP_BYTES,
+                    DEFAULT_DRAIN_BUDGET,
+                )
+            })
+        } else {
+            None
+        };
         let out_reader = stdout_r.map(|fd| {
             crate::sandbox::production::AsyncPipeReader::spawn(
                 fd,
@@ -86,6 +97,7 @@ impl StdioPump {
 
         Ok(Self {
             pty_master,
+            pty_reader,
             out_reader,
             err_reader,
             mask_secrets,
@@ -119,6 +131,9 @@ impl StdioPump {
     pub fn notify_child_exited(&self) {
         #[cfg(unix)]
         {
+            if let Some(r) = &self.pty_reader {
+                r.notify_child_exited();
+            }
             if let Some(r) = &self.out_reader {
                 r.notify_child_exited();
             }
@@ -142,6 +157,12 @@ impl StdioPump {
             };
 
             let (raw_err, err_trunc) = if let Some(r) = self.err_reader.take() {
+                r.join_with_status()
+            } else {
+                (Vec::new(), false)
+            };
+
+            let (raw_pty, pty_trunc) = if let Some(r) = self.pty_reader.take() {
                 r.join_with_status()
             } else {
                 (Vec::new(), false)
@@ -194,44 +215,48 @@ impl StdioPump {
                 }
             }
 
-            // Drain residual bytes from PTY master if present
-            if let Some(master) = &self.pty_master {
-                let mut pty_buf = [0u8; 8192];
+            // Drain residual bytes from PTY master if present and combine with background pty stream
+            if self.pty_master.is_some() || !raw_pty.is_empty() {
                 let mut residual = Vec::new();
-                let deadline = Instant::now() + DEFAULT_DRAIN_BUDGET;
-                loop {
-                    let now = Instant::now();
-                    if now >= deadline {
-                        break;
-                    }
-                    let remaining_ms = (deadline - now).as_millis().min(50) as libc::c_int;
-                    let mut pfd = libc::pollfd {
-                        fd: master.as_raw_fd(),
-                        events: libc::POLLIN,
-                        revents: 0,
-                    };
-                    let pret = unsafe { libc::poll(&mut pfd, 1, remaining_ms) };
-                    if pret <= 0 {
-                        break;
-                    }
-                    if pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
-                        let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
-                        if n == 0 {
+                if let Some(master) = &self.pty_master {
+                    let mut pty_buf = [0u8; 8192];
+                    let deadline = Instant::now() + DEFAULT_DRAIN_BUDGET;
+                    loop {
+                        let now = Instant::now();
+                        if now >= deadline {
                             break;
                         }
-                        residual.extend_from_slice(&pty_buf[..n]);
-                    } else {
-                        break;
+                        let remaining_ms = (deadline - now).as_millis().min(50) as libc::c_int;
+                        let mut pfd = libc::pollfd {
+                            fd: master.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        };
+                        let pret = unsafe { libc::poll(&mut pfd, 1, remaining_ms) };
+                        if pret <= 0 {
+                            break;
+                        }
+                        if pfd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                            let n = crate::pty::read_ready(master.as_raw_fd(), &mut pty_buf);
+                            if n == 0 {
+                                break;
+                            }
+                            residual.extend_from_slice(&pty_buf[..n]);
+                        } else {
+                            break;
+                        }
                     }
                 }
-                if !residual.is_empty() {
+                let mut combined_pty = raw_pty;
+                combined_pty.extend_from_slice(&residual);
+                if !combined_pty.is_empty() {
                     let to_write = if self.mask_secrets {
                         let mut redactor = crate::pty::AnsiRedactor::new();
-                        let redacted = redactor.redact_chunk(&residual);
+                        let redacted = redactor.redact_chunk(&combined_pty);
                         let flushed = redactor.flush();
                         [redacted, flushed].concat()
                     } else {
-                        residual
+                        combined_pty
                     };
                     #[cfg(unix)]
                     safe_flush_output(libc::STDOUT_FILENO, &to_write);
@@ -248,7 +273,7 @@ impl StdioPump {
             Ok(PumpData {
                 stdout: final_out,
                 stderr: final_err,
-                stdout_truncated: out_trunc,
+                stdout_truncated: out_trunc || pty_trunc,
                 stderr_truncated: err_trunc,
             })
         }
@@ -308,5 +333,50 @@ fn safe_flush_output(fd: libc::c_int, data: &[u8]) {
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stdio_pump_defaults_and_construction() {
+        let pump = StdioPump::start(None, None, None, false).expect("start empty pump");
+        assert!(pump.pty_master().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_stdio_pump_drains_pipes_without_deadlock() {
+        use std::io::Write;
+        use std::os::fd::FromRawFd;
+
+        let mut stdout_fds = [0i32; 2];
+        let mut stderr_fds = [0i32; 2];
+        unsafe {
+            assert_eq!(libc::pipe(stdout_fds.as_mut_ptr()), 0);
+            assert_eq!(libc::pipe(stderr_fds.as_mut_ptr()), 0);
+        }
+
+        let out_r = unsafe { OwnedFd::from_raw_fd(stdout_fds[0]) };
+        let mut out_w = unsafe { std::fs::File::from_raw_fd(stdout_fds[1]) };
+        let err_r = unsafe { OwnedFd::from_raw_fd(stderr_fds[0]) };
+        let mut err_w = unsafe { std::fs::File::from_raw_fd(stderr_fds[1]) };
+
+        let mut pump = StdioPump::start(None, Some(out_r), Some(err_r), false)
+            .expect("start pump with pipes");
+
+        out_w.write_all(b"hello stdout\n").expect("write stdout");
+        err_w.write_all(b"hello stderr\n").expect("write stderr");
+        drop(out_w);
+        drop(err_w);
+
+        pump.notify_child_exited();
+        let data = pump.drain_and_redact().expect("drain and redact");
+        assert!(data.stdout.starts_with(b"hello stdout"));
+        assert!(data.stderr.starts_with(b"hello stderr"));
+        assert!(!data.stdout_truncated);
+        assert!(!data.stderr_truncated);
     }
 }

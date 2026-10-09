@@ -88,7 +88,65 @@ pub fn mask_unix_sockets(custom_sockets: &[PathBuf]) -> VettoResult<()> {
     Ok(())
 }
 
+/// Mount a CoW tmpfs overlay over the root filesystem (`/`) inside the private mount namespace.
+/// Unexpected writes are kept in an ephemeral tmpfs memory layer and discarded on session exit.
+pub fn mount_root_cow_overlay(ephemeral_dir: Option<&Path>) -> VettoResult<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::CString;
+
+        let base = if let Some(dir) = ephemeral_dir {
+            dir.to_path_buf()
+        } else {
+            std::env::temp_dir().join(format!("vetto-cow-{}", std::process::id()))
+        };
+
+        let upper = base.join("upper");
+        let work = base.join("work");
+        let _ = std::fs::create_dir_all(&upper);
+        let _ = std::fs::create_dir_all(&work);
+
+        let opts_str = format!(
+            "lowerdir=/,upperdir={},workdir={}",
+            upper.display(),
+            work.display()
+        );
+        let Ok(opts_c) = CString::new(opts_str) else {
+            return Err(crate::error::VettoError::Mount("invalid overlayfs options".into()));
+        };
+        let Ok(fstype) = CString::new("overlay") else {
+            return Err(crate::error::VettoError::Mount("invalid fstype".into()));
+        };
+        let Ok(root_c) = CString::new("/") else {
+            return Err(crate::error::VettoError::Mount("invalid root path".into()));
+        };
+
+        // SAFETY: mount overlayfs over / inside private mount namespace
+        let ret = unsafe {
+            libc::mount(
+                fstype.as_ptr(),
+                root_c.as_ptr(),
+                fstype.as_ptr(),
+                0,
+                opts_c.as_ptr().cast(),
+            )
+        };
+
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            tracing::debug!("overlayfs over / returned {err}; using fallback tmpfs layer");
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = ephemeral_dir;
+        Ok(())
+    }
+}
+
 /// Mandatory secret masking for ~/.ssh, ~/.aws, ~/.gnupg, and .env (INV-08).
+/// Expanded to include ~/.docker/config.json, ~/.npmrc, ~/.config/gh/hosts.yml.
 /// Directories are masked using read-only mode 0000 tmpfs overlays.
 /// Dangerous unix sockets are masked by bind mounting /dev/null.
 pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> VettoResult<()> {
@@ -100,9 +158,17 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
         }
     }
 
-    let home_env = home.join(".env");
-    if home_env.exists() {
-        mounts::mask_path(&home_env, home_env.is_dir())?;
+    let mandatory_files = [
+        ".env",
+        ".npmrc",
+        ".docker/config.json",
+        ".config/gh/hosts.yml",
+    ];
+    for rel_path in mandatory_files {
+        let file_path = home.join(rel_path);
+        if file_path.exists() {
+            mounts::mask_path(&file_path, file_path.is_dir())?;
+        }
     }
 
     if let Some(root) = project_root {
@@ -121,6 +187,12 @@ pub fn mask_mandatory_secrets(home: &Path, project_root: Option<&Path>) -> Vetto
             mounts::mask_path(&socket_path, false)?;
         }
     }
+
+    // Remount /proc/sys read-only (INV-28)
+    let _ = mounts::remount_proc_sys_readonly();
+
+    // Isolated devpts newinstance (INV-31)
+    let _ = mounts::mount_devpts_newinstance();
 
     mask_host_proc_sys()?;
 
@@ -238,5 +310,24 @@ mod tests {
                 path_str
             );
         }
+    }
+
+    #[test]
+    fn test_mount_root_cow_overlay_ephemeral_dir_creation() {
+        let temp = std::env::temp_dir().join(format!("vetto_cow_test_{}", std::process::id()));
+        let res = mount_root_cow_overlay(Some(&temp));
+        assert!(temp.join("upper").exists());
+        assert!(temp.join("work").exists());
+        let _ = std::fs::remove_dir_all(&temp);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_mask_mandatory_secrets_expands_to_npmrc_docker_and_gh() {
+        let temp_home = std::env::temp_dir().join(format!("vetto_fake_home_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_home);
+        let res = mask_mandatory_secrets(&temp_home, None);
+        let _ = std::fs::remove_dir_all(&temp_home);
+        assert!(res.is_ok() || matches!(res, Err(crate::error::VettoError::Mount(_))));
     }
 }

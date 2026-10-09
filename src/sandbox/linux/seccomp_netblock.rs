@@ -704,4 +704,22 @@ mod tests {
     fn aarch64_audit_arch_is_little_endian() {
         assert_eq!(native_audit_arch(), 0xC000_00B7);
     }
+
+    #[test]
+    fn raw_sockets_return_eacces_and_clone3_returns_enosys() {
+        let program = build_program(SocketPolicy::UnixOnly);
+        let raw_denied = SECCOMP_RET_ERRNO | libc::EACCES as u32;
+        assert_eq!(
+            eval_with_type(&program, NR_SOCKET, AF_UNIX, libc::SOCK_RAW as u32),
+            raw_denied
+        );
+        assert_eq!(
+            eval_with_type(&program, NR_SOCKET, AF_INET, libc::SOCK_RAW as u32),
+            raw_denied
+        );
+        assert_eq!(
+            eval(&program, NR_CLONE3, AF_UNIX),
+            SECCOMP_RET_ERRNO | libc::ENOSYS as u32
+        );
+    }
 }
