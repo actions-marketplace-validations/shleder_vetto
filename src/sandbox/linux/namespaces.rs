@@ -248,5 +248,8 @@ mod tests {
         assert!(gid_str.starts_with("1000 "));
         assert!(uid_str.ends_with(" 1\n"));
         assert!(gid_str.ends_with(" 1\n"));
+
+        let res = write_id_maps_with_target(-1, 1000, 1000);
+        assert!(res.is_err());
     }
 }
