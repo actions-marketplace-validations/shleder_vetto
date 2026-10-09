@@ -1165,11 +1165,11 @@ use vetto::exit_codes::EXIT_FAIL_CLOSED;
 
 /// Helper to create a sealed mock contract for Authoritative Verdict Engine tests.
 fn create_test_verdict_contract() -> SecurityContract {
+    use std::path::PathBuf;
     use vetto::policy_ir::{
         AgentIdentity, AttestationContract, EnvironmentContract, FilesystemContract,
         NetworkContract, NetworkMode, ResourceContract, UnsealedSecurityContract,
     };
-    use std::path::PathBuf;
 
     let unsealed = UnsealedSecurityContract {
         production: None,
@@ -1222,7 +1222,9 @@ fn create_test_verdict_contract() -> SecurityContract {
             evidence_level_minimum: "HOST_FACT".to_string(),
         },
     };
-    unsealed.seal().expect("seal mock contract for verdict tests")
+    unsealed
+        .seal()
+        .expect("seal mock contract for verdict tests")
 }
 
 // ----------------------------------------------------------------------------
@@ -1255,7 +1257,10 @@ fn test_fsm_12_state_canonical_happy_path() {
         assert_eq!(fsm.current_state(), step);
     }
 
-    assert!(fsm.is_terminal(), "Completed must be recognized as terminal state");
+    assert!(
+        fsm.is_terminal(),
+        "Completed must be recognized as terminal state"
+    );
     assert!(!fsm.is_fail_closed(), "Happy path must not be fail-closed");
 
     // Negative verification: no transition allowed from Completed
@@ -1267,7 +1272,11 @@ fn test_fsm_12_state_canonical_happy_path() {
 
     // History verification
     let history = fsm.history();
-    assert_eq!(history.len(), 9, "Initial + 8 transitions = 9 history records");
+    assert_eq!(
+        history.len(),
+        9,
+        "Initial + 8 transitions = 9 history records"
+    );
     assert_eq!(history.first().unwrap().0, ExecutionState::Uninitialized);
     assert_eq!(history.last().unwrap().0, ExecutionState::Completed);
 }
@@ -1290,10 +1299,16 @@ fn test_fsm_signal_received_transition() {
 
     // Disallowed jumps from SignalReceived
     let bad_jump_running = fsm.transition(ExecutionState::Running).unwrap_err();
-    assert!(matches!(bad_jump_running, StateTransitionError::InvalidTransition { .. }));
+    assert!(matches!(
+        bad_jump_running,
+        StateTransitionError::InvalidTransition { .. }
+    ));
 
     let bad_jump_completed = fsm.transition(ExecutionState::Completed).unwrap_err();
-    assert!(matches!(bad_jump_completed, StateTransitionError::InvalidTransition { .. }));
+    assert!(matches!(
+        bad_jump_completed,
+        StateTransitionError::InvalidTransition { .. }
+    ));
 
     // Valid continuation: SignalReceived -> Terminating -> CleanedUp -> Completed
     fsm.transition(ExecutionState::Terminating)
@@ -1322,7 +1337,9 @@ fn test_fsm_extinction_guard_blocks_completion_and_terminal() {
     fsm_canonical.record_extinction_result(3); // 3 escaped descendant processes
     assert_eq!(fsm_canonical.surviving_descendants(), Some(3));
 
-    let err_completed = fsm_canonical.transition(ExecutionState::Completed).unwrap_err();
+    let err_completed = fsm_canonical
+        .transition(ExecutionState::Completed)
+        .unwrap_err();
     match err_completed {
         StateTransitionError::InvalidTransition { from, to, reason } => {
             assert_eq!(from, ExecutionState::CleanedUp);
