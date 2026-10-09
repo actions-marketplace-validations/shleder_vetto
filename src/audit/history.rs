@@ -89,6 +89,156 @@ pub struct SuspiciousSignalDetail {
     pub count: u64,
 }
 
+pub const MIN_AUTO_TIMEOUT_SECS: u64 = 300; // 5 minutes
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionHistoryRecord {
+    pub agent: String,
+    pub duration_secs: u64,
+    #[serde(default)]
+    pub ts: String,
+    #[serde(default)]
+    pub exit_code: i32,
+}
+
+/// Append a completed session record to project history (legacy compatibility).
+pub fn append_session_history(project_dir: &Path, record: &SessionHistoryRecord) -> Result<()> {
+    let vetto_dir = project_dir.join(".vetto");
+    let _ = fs::create_dir_all(&vetto_dir);
+    let history_file = vetto_dir.join("history");
+
+    let line = serde_json::to_string(record)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(history_file)?;
+    writeln!(file, "{line}")?;
+    Ok(())
+}
+
+/// Extract past duration samples for a specific agent from an array of AuditRecords.
+pub fn load_agent_durations_from_records(records: &[AuditRecord], agent_name: &str) -> Vec<u64> {
+    let agent_lower = agent_name.to_ascii_lowercase();
+    records
+        .iter()
+        .filter(|r| {
+            let a = r.agent.to_ascii_lowercase();
+            a == agent_lower || a.ends_with(&agent_lower) || agent_lower.ends_with(&a)
+        })
+        .map(|r| r.duration_secs)
+        .collect()
+}
+
+/// Load past session durations for an agent from project history or ~/.vetto/history.jsonl.
+pub fn load_agent_durations(project_dir: &Path, agent_name: &str) -> Vec<u64> {
+    let mut samples = Vec::new();
+    let history_file = project_dir.join(".vetto/history");
+
+    if let Ok(file) = File::open(&history_file) {
+        let reader = BufReader::new(file);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Ok(record) = serde_json::from_str::<SessionHistoryRecord>(&line) {
+                if record.agent == agent_name || record.agent.ends_with(agent_name) {
+                    samples.push(record.duration_secs);
+                }
+            }
+        }
+    }
+
+    if samples.is_empty() {
+        if let Some(hist_path) = default_history_path() {
+            if let Ok(records) = read_history(&hist_path) {
+                samples = load_agent_durations_from_records(&records, agent_name);
+            }
+        }
+    }
+
+    samples
+}
+
+/// Calculate automated timeout for an agent based on past session history.
+pub fn compute_auto_timeout_for_agent(agent_name: &str) -> Option<std::time::Duration> {
+    let proj = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    compute_auto_timeout(&proj, agent_name)
+}
+
+/// Calculate automated timeout for an agent based on past session history.
+/// Returns p95 * 2 past session duration with a 300s lower floor.
+pub fn compute_auto_timeout(project_dir: &Path, agent_name: &str) -> Option<std::time::Duration> {
+    let mut samples = load_agent_durations(project_dir, agent_name);
+    if samples.is_empty() {
+        return None;
+    }
+
+    samples.sort_unstable();
+    let p95_index = ((samples.len() as f64 - 1.0) * 0.95).round() as usize;
+    let p95 = samples[p95_index.min(samples.len() - 1)];
+
+    let computed_secs = (p95.saturating_mul(2)).max(MIN_AUTO_TIMEOUT_SECS);
+    Some(std::time::Duration::from_secs(computed_secs))
+}
+
+/// Verifies cryptographic integrity of an audit ledger via CLI.
+pub fn verify_ledger_cli(target: Option<&str>, json_output: bool) -> Result<()> {
+    let path = if let Some(t) = target {
+        let direct = PathBuf::from(t);
+        if direct.exists() {
+            direct
+        } else if let Some(home) = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+        {
+            let logs_dir = home.join(".vetto").join("logs");
+            let c1 = logs_dir.join(format!("{t}.jsonl"));
+            let c2 = logs_dir.join(format!("vetto-audit-{t}.jsonl"));
+            let c3 = logs_dir.join(t);
+            if c1.exists() {
+                c1
+            } else if c2.exists() {
+                c2
+            } else if c3.exists() {
+                c3
+            } else {
+                direct
+            }
+        } else {
+            direct
+        }
+    } else if let Some(p) = default_history_path() {
+        p
+    } else {
+        anyhow::bail!("no audit ledger or history file found to verify");
+    };
+
+    let result = crate::audit::AuditLedger::verify_file_detailed(&path)?;
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+    } else if result.is_valid {
+        println!(
+            "Audit ledger '{}' verified successfully ({} records verified, hash chain intact).",
+            path.display(),
+            result.records_verified
+        );
+    } else if let Some(ref c) = result.corruption {
+        eprintln!(
+            "FAIL: Audit ledger '{}' verification failed at line {} (seq {:?}): {}",
+            path.display(),
+            c.line_number,
+            c.seq,
+            c.reason
+        );
+        if let (Some(ref exp), Some(ref act)) = (&c.expected_hash, &c.actual_hash) {
+            eprintln!("  Expected hash: {exp}");
+            eprintln!("  Actual hash:   {act}");
+        }
+        std::process::exit(crate::exit_codes::EXIT_FAIL_CLOSED);
+    } else {
+        eprintln!("FAIL: Audit ledger '{}' verification failed.", path.display());
+        std::process::exit(crate::exit_codes::EXIT_FAIL_CLOSED);
+    }
+    Ok(())
+}
+
 /// Resolves the default global audit history path (~/.vetto/history.jsonl).
 pub fn default_history_path() -> Option<PathBuf> {
     std::env::var_os("HOME")
@@ -1550,5 +1700,96 @@ mod tests {
         assert_eq!(parsed.session_id, "session-5555");
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_compute_auto_timeout_calculation_with_floor() {
+        let temp = std::env::temp_dir().join(format!("vetto-audit-hist-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+
+        // 1. Empty history returns None
+        assert_eq!(compute_auto_timeout(&temp, "codex"), None);
+
+        // 2. Short durations hit the 5-minute floor (300s)
+        for d in [10, 20, 30, 40, 50] {
+            append_session_history(
+                &temp,
+                &SessionHistoryRecord {
+                    agent: "codex".into(),
+                    duration_secs: d,
+                    ts: "2026-10-01T00:00:00Z".into(),
+                    exit_code: 0,
+                },
+            )
+            .unwrap();
+        }
+        let timeout = compute_auto_timeout(&temp, "codex").unwrap();
+        assert_eq!(timeout, std::time::Duration::from_secs(300));
+
+        // 3. Long durations scale properly (p95 * 2)
+        for d in 1..=100 {
+            append_session_history(
+                &temp,
+                &SessionHistoryRecord {
+                    agent: "heavy-agent".into(),
+                    duration_secs: d * 10, // 10s to 1000s, p95 ~ 950s
+                    ts: "".into(),
+                    exit_code: 0,
+                },
+            )
+            .unwrap();
+        }
+        let heavy_timeout = compute_auto_timeout(&temp, "heavy-agent").unwrap();
+        assert!(heavy_timeout.as_secs() >= 1800);
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_load_agent_durations_from_records() {
+        let records = vec![
+            AuditRecord {
+                ts: Utc::now(),
+                session_id: "s1".into(),
+                agent: "claude".into(),
+                command: None,
+                profile: "default".into(),
+                policy_path: None,
+                exit_code: 0,
+                duration_secs: 15,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                blocked_count: 0,
+                events_total: 5,
+                report_path: None,
+                log_path: None,
+            },
+            AuditRecord {
+                ts: Utc::now(),
+                session_id: "s2".into(),
+                agent: "codex".into(),
+                command: None,
+                profile: "default".into(),
+                policy_path: None,
+                exit_code: 0,
+                duration_secs: 45,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                blocked_count: 0,
+                events_total: 8,
+                report_path: None,
+                log_path: None,
+            },
+        ];
+
+        let claude_samples = load_agent_durations_from_records(&records, "claude");
+        assert_eq!(claude_samples, vec![15]);
+
+        let codex_samples = load_agent_durations_from_records(&records, "codex");
+        assert_eq!(codex_samples, vec![45]);
+
+        let unknown_samples = load_agent_durations_from_records(&records, "unknown");
+        assert!(unknown_samples.is_empty());
     }
 }

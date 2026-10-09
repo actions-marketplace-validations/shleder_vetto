@@ -27,6 +27,7 @@ pub enum ChangeType {
     Added,
     Modified,
     Deleted,
+    PermissionsChanged,
 }
 
 /// Cryptographically verifiable receipt produced upon successful state repair.

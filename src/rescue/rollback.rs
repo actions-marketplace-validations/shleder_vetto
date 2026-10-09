@@ -6,14 +6,12 @@
 //! 3. Performs an atomic swap via `std::fs::rename()` over the target file.
 //! 4. Synchronizes the parent directory.
 //!
-//! Provides `rollback_repair` to cryptographically verify pre-repair backup
-//! archives against the `RepairReceipt` and atomically restore the exact
-//! pre-repair bytes.
+//! Provides `rollback_session` for two-phase atomic workspace rollback (`vetto undo`)
+//! including deletion of untracked files added by the agent.
 
-#[cfg(unix)]
-use std::fs::File;
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::collections::HashSet;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -31,12 +29,27 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Result of a project rollback operation.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RollbackResult {
+    pub session_id: String,
+    pub target_dir: PathBuf,
+    pub files_restored: usize,
+    pub bytes_restored: u64,
+    pub files_deleted: usize,
+}
+
 /// Atomically writes `bytes` to `target_path` via a temporary sibling file
-/// and `std::fs::rename`.
-pub fn atomic_commit_bytes(target_path: &Path, bytes: &[u8]) -> Result<()> {
+/// and `std::fs::rename`, optionally setting POSIX file permissions.
+pub fn atomic_commit_bytes_with_mode(
+    target_path: &Path,
+    bytes: &[u8],
+    mode: Option<u32>,
+) -> Result<()> {
     let parent = target_path
         .parent()
-        .context("target path has no parent directory")?;
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)
         .with_context(|| format!("create parent dir {}", parent.display()))?;
 
@@ -49,25 +62,47 @@ pub fn atomic_commit_bytes(target_path: &Path, bytes: &[u8]) -> Result<()> {
     let tmp_name = format!(".{}.vetto_tmp.{}.{}", file_name, std::process::id(), nonce);
     let tmp_path = parent.join(tmp_name);
 
-    let mut file = OpenOptions::new()
+    let mut file = match OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&tmp_path)
-        .with_context(|| format!("create atomic tmp file {}", tmp_path.display()))?;
+    {
+        Ok(f) => f,
+        Err(e) => {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e).with_context(|| format!("create atomic tmp file {}", tmp_path.display()));
+        }
+    };
 
-    file.write_all(bytes)
-        .with_context(|| format!("write to atomic tmp file {}", tmp_path.display()))?;
-    file.sync_all()
-        .with_context(|| format!("sync atomic tmp file {}", tmp_path.display()))?;
+    if let Err(e) = file.write_all(bytes) {
+        drop(file);
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e).with_context(|| format!("write to atomic tmp file {}", tmp_path.display()));
+    }
+
+    if let Err(e) = file.sync_all() {
+        drop(file);
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e).with_context(|| format!("sync atomic tmp file {}", tmp_path.display()));
+    }
     drop(file);
 
-    fs::rename(&tmp_path, target_path).with_context(|| {
-        format!(
-            "atomic swap {} -> {}",
-            tmp_path.display(),
-            target_path.display()
-        )
-    })?;
+    #[cfg(unix)]
+    if let Some(m) = mode {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&tmp_path, fs::Permissions::from_mode(m));
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, target_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e).with_context(|| {
+            format!(
+                "atomic swap {} -> {}",
+                tmp_path.display(),
+                target_path.display()
+            )
+        });
+    }
 
     #[cfg(unix)]
     if let Ok(dir_file) = File::open(parent) {
@@ -75,6 +110,160 @@ pub fn atomic_commit_bytes(target_path: &Path, bytes: &[u8]) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Atomically writes `bytes` to `target_path` via a temporary sibling file
+/// and `std::fs::rename`.
+pub fn atomic_commit_bytes(target_path: &Path, bytes: &[u8]) -> Result<()> {
+    atomic_commit_bytes_with_mode(target_path, bytes, None)
+}
+
+/// Rollback / restore a project snapshot.
+/// 1. Atomically restores all snapshot files (with original permissions).
+/// 2. Deletes any untracked files added during the session.
+/// 3. Returns accurate statistics for restored files, bytes, and deleted files.
+pub fn rollback_session(
+    session: &str,
+    target_dir_override: Option<&Path>,
+) -> Result<RollbackResult> {
+    let session_path = Path::new(session);
+    let (archive_path, project_dir) = if session_path.is_file() {
+        let parent = session_path.parent().unwrap_or(Path::new("."));
+        let meta_file = parent.join("metadata.json");
+        let proj = if meta_file.exists() {
+            let text = std::fs::read_to_string(&meta_file).unwrap_or_default();
+            let meta: Option<super::snapshot::SnapshotMetadata> = serde_json::from_str(&text).ok();
+            meta.map(|m| m.project_dir)
+                .unwrap_or_else(|| PathBuf::from("."))
+        } else {
+            PathBuf::from(".")
+        };
+        (session_path.to_path_buf(), proj)
+    } else {
+        let root = super::snapshot::snapshots_root_dir()?;
+        let dir = root.join(session);
+        if !dir.exists() {
+            bail!(
+                "snapshot for session '{session}' was not found in {}",
+                root.display()
+            );
+        }
+        let archive = dir.join("snapshot.tar");
+        if !archive.exists() {
+            bail!("snapshot archive '{}' not found", archive.display());
+        }
+        let meta_file = dir.join("metadata.json");
+        let proj = if meta_file.exists() {
+            let text = std::fs::read_to_string(&meta_file).unwrap_or_default();
+            let meta: Option<super::snapshot::SnapshotMetadata> = serde_json::from_str(&text).ok();
+            meta.map(|m| m.project_dir)
+                .unwrap_or_else(|| PathBuf::from("."))
+        } else {
+            PathBuf::from(".")
+        };
+        (archive, proj)
+    };
+
+    let dest = target_dir_override.unwrap_or(&project_dir);
+    fs::create_dir_all(dest)
+        .with_context(|| format!("failed to create restore directory {}", dest.display()))?;
+
+    let mut archive_file = File::open(&archive_path)
+        .with_context(|| format!("failed to open snapshot archive {}", archive_path.display()))?;
+
+    let mut files_restored = 0;
+    let mut bytes_restored = 0u64;
+    let mut snapshot_files = HashSet::new();
+
+    loop {
+        let mut header = [0u8; 512];
+        let n = archive_file.read(&mut header)?;
+        if n < 512 || header.iter().all(|&b| b == 0) {
+            break;
+        }
+
+        let (name, size, mode) = super::snapshot::parse_tar_header_with_mode(&header)?;
+        if name.is_empty() {
+            break;
+        }
+
+        let mut data = vec![0u8; size as usize];
+        archive_file.read_exact(&mut data)?;
+
+        let padding = (512 - (size % 512)) % 512;
+        if padding > 0 {
+            let mut pad_buf = vec![0u8; padding as usize];
+            archive_file.read_exact(&mut pad_buf)?;
+        }
+
+        let clean_path = Path::new(&name);
+        if clean_path.is_absolute()
+            || clean_path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            continue;
+        }
+
+        snapshot_files.insert(clean_path.to_path_buf());
+        let out_path = dest.join(clean_path);
+        atomic_commit_bytes_with_mode(&out_path, &data, Some(mode))?;
+        files_restored += 1;
+        bytes_restored += size;
+    }
+
+    // Clean up untracked files created by the agent during session
+    let mut files_deleted = 0;
+    let mut disk_dirs = Vec::new();
+    let mut queue = vec![dest.to_path_buf()];
+
+    while let Some(dir) = queue.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
+                if !crate::fs::is_ignored_directory(&name) {
+                    disk_dirs.push(path.clone());
+                    queue.push(path);
+                }
+            } else if file_type.is_file() {
+                if let Ok(rel) = path.strip_prefix(dest) {
+                    if !snapshot_files.contains(rel) {
+                        let _ = fs::remove_file(&path);
+                        files_deleted += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean up newly created empty directories (in reverse order)
+    disk_dirs.sort_by(|a, b| b.cmp(a));
+    for dir in disk_dirs {
+        if let Ok(mut entries) = fs::read_dir(&dir) {
+            if entries.next().is_none() {
+                let _ = fs::remove_dir(&dir);
+            }
+        }
+    }
+
+    Ok(RollbackResult {
+        session_id: session.to_string(),
+        target_dir: dest.to_path_buf(),
+        files_restored,
+        bytes_restored,
+        files_deleted,
+    })
 }
 
 /// Rollback a previous repair by verifying receipt hashes and restoring
@@ -111,7 +300,6 @@ pub fn rollback_repair(
     let target_path: PathBuf = match target_override {
         Some(t) => t.to_path_buf(),
         None => {
-            // Attempt to resolve target from receipt session_key
             let candidate = PathBuf::from(&receipt.session_key);
             if candidate.exists() {
                 candidate
@@ -126,7 +314,6 @@ pub fn rollback_repair(
 
     atomic_commit_bytes(&target_path, &backup_bytes)?;
 
-    // Verify restored file hash
     let restored_bytes = fs::read(&target_path)
         .with_context(|| format!("read restored target {}", target_path.display()))?;
     let restored_sha256 = sha256_bytes(&restored_bytes);
@@ -152,8 +339,6 @@ pub fn rollback_repair(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
 

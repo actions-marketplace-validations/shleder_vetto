@@ -145,8 +145,8 @@ pub fn run_undo(args: &UndoArgs) -> Result<()> {
 
     println!("vetto: restored snapshot from session {}", res.session_id);
     println!(
-        "  Files restored: {} | Bytes: {}",
-        res.files_restored, res.bytes_restored
+        "  Files restored: {} | Bytes: {} | Files deleted: {}",
+        res.files_restored, res.bytes_restored, res.files_deleted
     );
     println!("  Target: {}", res.target_dir.display());
 

@@ -233,26 +233,9 @@ pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, Supe
         }
     }
 
-    // 7. Session Registry Unregister & Project Session History
+    // 7. Session Registry Unregister
     if let Ok(reg) = crate::cli::status::SessionRegistry::new() {
         reg.unregister(&ctx.session.session_id);
-    }
-
-    if !ctx.cfg.benchmark {
-        let agent_name = ctx
-            .cfg
-            .agent_preset
-            .clone()
-            .unwrap_or_else(|| ctx.cfg.agent.first().cloned().unwrap_or_default());
-        let _ = crate::history::append_session_history(
-            &ctx.session.project,
-            &crate::history::SessionHistoryRecord {
-                agent: agent_name,
-                duration_secs,
-                ts: events::types::now().to_rfc3339(),
-                exit_code,
-            },
-        );
     }
 
     // 8. Count blocked security events
