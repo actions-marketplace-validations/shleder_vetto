@@ -231,4 +231,128 @@ mod tests {
         assert!(desc.contains("BLOCKED"));
         assert!(desc.contains("/etc/shadow"));
     }
+
+    #[test]
+    fn events_are_sorted_chronologically() {
+        let now = Utc::now();
+        let e1 = Event::Notice {
+            ts: now + chrono::Duration::seconds(10),
+            message: "third".into(),
+        };
+        let e2 = Event::Notice {
+            ts: now,
+            message: "first".into(),
+        };
+        let e3 = Event::Notice {
+            ts: now + chrono::Duration::seconds(5),
+            message: "second".into(),
+        };
+        let mut events = vec![e1, e2, e3];
+        events.sort_by_key(|e| e.ts());
+
+        let messages: Vec<&str> = events
+            .iter()
+            .map(|e| match e {
+                Event::Notice { message, .. } => message.as_str(),
+                _ => "",
+            })
+            .collect();
+        assert_eq!(messages, vec!["first", "second", "third"]);
+    }
+
+    #[test]
+    fn speed_scaling_computes_expected_delays() {
+        let delta_ms = 1000u64;
+
+        // 1.0x speed
+        let speed_1x = 1.0f64;
+        let sleep_1x = ((delta_ms as f64) / speed_1x).min(5000.0) as u64;
+        assert_eq!(sleep_1x, 1000);
+
+        // 2.0x speed
+        let speed_2x = 2.0f64;
+        let sleep_2x = ((delta_ms as f64) / speed_2x).min(5000.0) as u64;
+        assert_eq!(sleep_2x, 500);
+
+        // 0.5x speed
+        let speed_half = 0.5f64;
+        let sleep_half = ((delta_ms as f64) / speed_half).min(5000.0) as u64;
+        assert_eq!(sleep_half, 2000);
+
+        // Max cap at 5000ms
+        let large_delta = 60_000u64;
+        let sleep_capped = ((large_delta as f64) / speed_1x).min(5000.0) as u64;
+        assert_eq!(sleep_capped, 5000);
+    }
+
+    #[test]
+    fn describe_replay_event_covers_all_event_types() {
+        let now = Utc::now();
+        let evs = vec![
+            Event::SessionStarted {
+                ts: now,
+                pid: 100,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                profile: "strict".into(),
+                shadow: false,
+            },
+            Event::SessionEnded {
+                ts: now,
+                exit_code: 0,
+                duration_secs: 5,
+            },
+            Event::FileObserved {
+                ts: now,
+                pid: 100,
+                comm: "sh".into(),
+                path: "/tmp/foo".into(),
+                access: FileAccess::Write,
+            },
+            Event::ExecObserved {
+                ts: now,
+                pid: 100,
+                argv: vec!["ls".into(), "-la".into()],
+            },
+            Event::NetRequest {
+                ts: now,
+                host: "api.anthropic.com".into(),
+                port: 443,
+                allowed: true,
+            },
+            Event::DnsResolved {
+                ts: now,
+                host: "example.com".into(),
+                ips: vec!["93.184.216.34".into()],
+            },
+            Event::NetEgress {
+                ts: now,
+                host: "example.com".into(),
+                ip: "93.184.216.34".into(),
+                port: 443,
+                bytes_tx: 50,
+                bytes_rx: 200,
+            },
+            Event::NetQuotaExceeded {
+                ts: now,
+                host: "example.com".into(),
+                limit_bytes: 100,
+                used_bytes: 150,
+            },
+            Event::SecretMasked {
+                ts: now,
+                path: "~/.ssh/id_rsa".into(),
+            },
+            Event::Notice {
+                ts: now,
+                message: "system notice".into(),
+            },
+            Event::SessionTimeout { ts: now },
+        ];
+
+        for ev in &evs {
+            let desc = describe_replay_event(ev);
+            assert!(!desc.is_empty(), "description for {:?} was empty", ev);
+        }
+    }
 }

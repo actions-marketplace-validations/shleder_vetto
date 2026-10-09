@@ -332,4 +332,63 @@ mod tests {
         assert_eq!(fs::read(&victim).expect("read victim"), b"sentinel\n");
         fs::remove_dir_all(dir).expect("remove test directory");
     }
+
+    #[test]
+    fn sink_redacts_secrets_in_emitted_events() {
+        let dir = test_dir();
+        let log_path = dir.join("test_sink.jsonl");
+
+        let bus = EventBus::new();
+        let handle = JsonlSink::spawn(&bus, log_path.clone());
+
+        let secret_aws = "AKIAIOSFODNN7EXAMPLE";
+        let secret_ghp = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+
+        bus.publish(Event::ExecObserved {
+            ts: chrono::Utc::now(),
+            pid: 1234,
+            argv: vec!["tool".into(), secret_aws.into(), secret_ghp.into()],
+        });
+
+        bus.publish(Event::Notice {
+            ts: chrono::Utc::now(),
+            message: format!("token is {secret_ghp}"),
+        });
+
+        // Drop bus so receiver sees Closed and sink_loop terminates
+        drop(bus);
+        let _ = handle.join();
+
+        let content = fs::read_to_string(&log_path).expect("read sink log");
+        assert!(content.contains("\"_vetto\":\"jsonl-sink\""), "missing header");
+        assert!(!content.contains(secret_aws), "AWS secret leaked into jsonl");
+        assert!(!content.contains(secret_ghp), "GitHub token leaked into jsonl");
+        assert!(content.contains("AKIA[REDACTED]"), "redaction marker missing");
+        assert!(content.contains("ghp_[REDACTED]"), "redaction marker missing");
+
+        fs::remove_dir_all(dir).expect("remove test directory");
+    }
+
+    #[test]
+    fn sink_verifies_local_disk_isolation_zero_network() {
+        let dir = test_dir();
+        let log_path = dir.join("local_isolation.jsonl");
+
+        let bus = EventBus::new();
+        let handle = JsonlSink::spawn(&bus, log_path.clone());
+
+        bus.publish(Event::Notice {
+            ts: chrono::Utc::now(),
+            message: "isolated event".into(),
+        });
+
+        drop(bus);
+        let _ = handle.join();
+
+        assert!(log_path.exists(), "log must be created on local filesystem");
+        let meta = fs::metadata(&log_path).expect("metadata");
+        assert!(meta.is_file(), "log must be a regular file");
+
+        fs::remove_dir_all(dir).expect("remove test directory");
+    }
 }

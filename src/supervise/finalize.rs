@@ -219,6 +219,7 @@ pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, Supe
     if !ctx.cfg.report_formats.is_empty() {
         let report_options = report::ReportOptions {
             report_dir: ctx.cfg.report_dir.clone(),
+            session_id: Some(ctx.session.session_id.clone()),
             auto_cleanup: ctx.cfg.report_auto_cleanup,
             retention: ctx.cfg.report_retention,
             max_age_secs: ctx.cfg.report_max_age_secs,
@@ -341,7 +342,7 @@ pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, Supe
             })
         );
     } else {
-        eprintln!("[vetto] protected session completed: 0 secrets leaked, host secrets masked.");
+        eprint!("{}", audit::recap::render_recap_badge());
         eprintln!(
             "vetto: agent exited {} after {}s (blocked={}, events={}, I/O: {}, tier={}{})",
             exit_code,
