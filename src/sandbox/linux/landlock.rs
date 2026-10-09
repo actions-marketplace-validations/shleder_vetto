@@ -772,8 +772,7 @@ pub fn apply_policy_advanced(
         let opened = match open_path_fd(&rule.path) {
             Ok(op) => op,
             Err(VettoError::Landlock(ref msg))
-                if msg.contains("Too many levels of symbolic links")
-                    || msg.contains("ELOOP") =>
+                if msg.contains("Too many levels of symbolic links") || msg.contains("ELOOP") =>
             {
                 // Reject symlink or magiclink traversal: Landlock rules cannot be attached
                 // to symlink inodes (e.g. /bin -> usr/bin). Real directories in the ruleset
@@ -1140,6 +1139,9 @@ mod tests {
         use std::os::fd::AsRawFd;
         let f = std::fs::File::open("/dev/null").expect("open /dev/null");
         let res = open_landlock_path_fd_beneath(f.as_raw_fd(), Path::new("/etc/shadow"));
-        assert!(res.is_err(), "open_landlock_path_fd_beneath must reject absolute path");
+        assert!(
+            res.is_err(),
+            "open_landlock_path_fd_beneath must reject absolute path"
+        );
     }
 }

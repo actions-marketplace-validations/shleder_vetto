@@ -385,8 +385,8 @@ mod tests {
         let err_r = unsafe { OwnedFd::from_raw_fd(stderr_fds[0]) };
         let mut err_w = unsafe { std::fs::File::from_raw_fd(stderr_fds[1]) };
 
-        let mut pump =
-            StdioPump::start(None, Some(out_r), Some(err_r), false, false).expect("start pump with pipes");
+        let mut pump = StdioPump::start(None, Some(out_r), Some(err_r), false, false)
+            .expect("start pump with pipes");
 
         out_w.write_all(b"hello stdout\n").expect("write stdout");
         err_w.write_all(b"hello stderr\n").expect("write stderr");
@@ -413,8 +413,8 @@ mod tests {
         let master = unsafe { OwnedFd::from_raw_fd(pty_fds[0]) };
         let _slave = unsafe { OwnedFd::from_raw_fd(pty_fds[1]) };
 
-        let pump = StdioPump::start(Some(master), None, None, false, true)
-            .expect("start statusline pump");
+        let pump =
+            StdioPump::start(Some(master), None, None, false, true).expect("start statusline pump");
         assert!(pump.pty_master().is_some());
         assert!(pump.pty_reader.is_none());
     }
