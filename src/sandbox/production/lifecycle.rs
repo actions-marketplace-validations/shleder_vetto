@@ -889,6 +889,7 @@ impl SpawnedProductionExecution {
 
         #[cfg(target_os = "linux")]
         if setsid_orphan_escaped {
+            eprintln!("vetto: agent attempted to spawn a detached daemon in an isolated PID namespace. Use foreground mode flags.");
             self.capability.note_diagnostic(
                 "setsid escaper swept in fs-only: containment gap forces fail-closed exit 125"
                     .to_string(),

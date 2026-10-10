@@ -72,6 +72,7 @@ mod test_bench_mode;
 mod test_job_control;
 mod test_shell_hook_precedence;
 mod test_startup_latency;
+mod test_user_experience_e2e;
 mod tier3_files_secrets;
 mod tier8_release;
 mod tier9_friction;

@@ -291,6 +291,8 @@ impl RawStringList {
 pub struct RawProcess {
     #[serde(default)]
     pub allowed_binaries: Option<RawStringList>,
+    #[serde(default)]
+    pub foreground_args: Option<RawStringList>,
 }
 
 pub type PolicySchema = RawLayer;

@@ -997,6 +997,16 @@ fn child_b(
             let r = unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) };
             if r == c_pid {
                 c_code = decode_status(status);
+                // Check if other processes exist in this PID namespace before killing all.
+                // If c_pid exited but other processes remain, the agent attempted
+                // to detach/daemonize in an isolated PID namespace.
+                let mut other_status = 0i32;
+                let other_r = unsafe { libc::waitpid(-1, &mut other_status, libc::WNOHANG) };
+                if other_r >= 0 {
+                    let warn = b"vetto: agent attempted to spawn a detached daemon in an isolated PID namespace. Use foreground mode flags.\n";
+                    unsafe { libc::write(libc::STDERR_FILENO, warn.as_ptr().cast(), warn.len()) };
+                    c_code = crate::exit_codes::EXIT_FAIL_CLOSED;
+                }
                 // SAFETY: scalar-only kill; PID 1 in a pidns kills the ns.
                 unsafe { libc::kill(-1, libc::SIGKILL) };
             } else if r > 0 {

@@ -20,6 +20,9 @@ use crate::config::RunConfig;
 
 /// Supervise a sandboxed AI agent session from start to authoritative verdict.
 pub fn supervise(mut cfg: RunConfig) -> Result<SupervisionVerdict, SuperviseError> {
+    // Install RAII terminal reset guard to guarantee TTY restoration on any exit path.
+    let _tty_guard = crate::tui::guard::TerminalResetGuard::install();
+
     // 0. Dry-run handler: diagnostics without process execution
     if cfg.dry_run {
         spawn::execute_dry_run(&cfg)?;

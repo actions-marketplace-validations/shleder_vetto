@@ -6,6 +6,7 @@ description = "Compatibility profile for Cline (Claude Dev) extension agent."
 allow_read = [
     "$AGENT",
     "$HOME/.cline",
+    "$HOME/.config/cline",
     "$HOME/.cline/plugins",
     "$HOME/.cline/skills",
     "$HOME/.cline/mcp",
@@ -27,6 +28,7 @@ allow_read = [
 allow_write = [
     "$AGENT",
     "$HOME/.cline",
+    "$HOME/.config/cline",
     "$HOME/.cline/plugins",
     "$HOME/.cline/skills",
     "$HOME/.cline/mcp",

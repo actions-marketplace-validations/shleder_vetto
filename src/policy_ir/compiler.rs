@@ -624,9 +624,9 @@ impl PolicyCompiler {
                 max_pids: 128,
                 max_memory_bytes: 2 * 1024 * 1024 * 1024, // 2 GB
                 max_cpu_percent: 100,
-                max_wall_time_ms: 120_000,              // 2 minutes
-                max_stdout_bytes: 10 * 1024 * 1024,     // 10 MB
-                max_file_size_bytes: 100 * 1024 * 1024, // 100 MB
+                max_wall_time_ms: 120_000,          // 2 minutes
+                max_stdout_bytes: 10 * 1024 * 1024, // 10 MB
+                max_file_size_bytes: 2147483648,    // 2 GB
             },
             environment: env_contract,
             attestation: AttestationContract {

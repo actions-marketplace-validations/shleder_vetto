@@ -5,6 +5,7 @@ description = "Compatibility profile for Hugging Face smolagents code execution 
 [filesystem]
 allow_read = [
     "$AGENT",
+    "$HOME/.smolagents",
     "$HOME/.cache/huggingface",
     "$HOME/.cache/transformers",
     "$HOME/.cache/torch",
@@ -23,6 +24,7 @@ allow_read = [
 ]
 allow_write = [
     "$AGENT",
+    "$HOME/.smolagents",
     "$HOME/.cache/huggingface",
     "$HOME/.cache/transformers",
     "$HOME/.cache/torch",

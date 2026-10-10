@@ -5,6 +5,7 @@ description = "Compatibility profile for GitHub Copilot CLI."
 [filesystem]
 allow_read = [
     "$AGENT",
+    "$HOME/.copilot",
     "$HOME/.config/github-copilot",
     "$HOME/.copilot/plugins",
     "$HOME/.copilot/skills",
@@ -17,6 +18,7 @@ allow_read = [
 ]
 allow_write = [
     "$AGENT",
+    "$HOME/.copilot",
     "$HOME/.config/github-copilot",
     "$HOME/.copilot/plugins",
     "$HOME/.copilot/skills",
