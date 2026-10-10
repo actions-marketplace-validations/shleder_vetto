@@ -87,4 +87,15 @@ mod tests {
         assert!(caps.derive_appcontainer_sid);
         assert!(caps.delete_appcontainer_profile);
     }
+
+    #[test]
+    fn wide_conversion_handles_valid_and_null_bytes() {
+        let valid = wide("test");
+        assert!(valid.is_some());
+        let w = valid.unwrap();
+        assert_eq!(w.last(), Some(&0));
+
+        let invalid = wide("test\0bad");
+        assert!(invalid.is_none());
+    }
 }

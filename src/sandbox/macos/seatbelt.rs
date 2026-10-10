@@ -130,6 +130,118 @@ pub fn generate(policy: &Policy, net: &NetMode, proxy_port: Option<u16>) -> Stri
     inlined
 }
 
+/// Generate strict Shape D AST SBPL profile:
+/// `(allow file-read* (require-any ...))` granting access only to essential Cryptex OS Shared Cache,
+/// dyld cache, system pseudodevices, and workspace paths, with trailing denies on secret files.
+pub fn generate_sbpl_shape_d(policy: &Policy, net: &NetMode, proxy_port: Option<u16>) -> String {
+    let mut sb = String::with_capacity(4096);
+    sb.push_str("(version 1)\n(deny default)\n");
+    sb.push_str("(allow process-exec)\n(allow process-fork)\n");
+    sb.push_str("(allow sysctl-read)\n");
+    sb.push_str("(allow mach-lookup)\n");
+
+    // Shape D: file-read* with require-any
+    sb.push_str("(allow file-read*\n  (require-any\n");
+    sb.push_str("    (subpath \"/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld/\")\n");
+    sb.push_str("    (subpath \"/private/var/db/dyld/\")\n");
+    sb.push_str("    (subpath \"/usr/lib/\")\n");
+    sb.push_str("    (subpath \"/System/Library/Frameworks/\")\n");
+    sb.push_str("    (literal \"/dev/null\")\n");
+    sb.push_str("    (literal \"/dev/zero\")\n");
+    sb.push_str("    (literal \"/dev/random\")\n");
+    sb.push_str("    (literal \"/dev/urandom\")\n");
+    for p in &policy.allow_read {
+        sb.push_str(&format!(
+            "    (subpath \"{}\")\n",
+            sb_escape(&p.display().to_string())
+        ));
+    }
+    for p in &policy.allow_write {
+        sb.push_str(&format!(
+            "    (subpath \"{}\")\n",
+            sb_escape(&p.display().to_string())
+        ));
+    }
+    sb.push_str("  )\n)\n");
+
+    // File-write*
+    for p in &policy.allow_write {
+        sb.push_str(&format!(
+            "(allow file-write* (subpath \"{}\"))\n",
+            sb_escape(&p.display().to_string())
+        ));
+    }
+
+    // Trailing secret denies (last matching rule wins)
+    for d in &policy.deny_resolved {
+        sb.push_str(&format!(
+            "(deny file-read* (subpath \"{}\"))\n",
+            sb_escape(&d.path.display().to_string())
+        ));
+        sb.push_str(&format!(
+            "(deny file-write* (subpath \"{}\"))\n",
+            sb_escape(&d.path.display().to_string())
+        ));
+    }
+
+    // Network isolation
+    match net {
+        NetMode::Off => {
+            sb.push_str("(deny network*)\n");
+            sb.push_str("(allow network-outbound (remote unix-socket))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
+        }
+        NetMode::Allowlist(_) => {
+            sb.push_str("(deny network*)\n");
+            sb.push_str("(allow network-outbound (remote unix-socket))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/mDNSResponder\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/mDNSResponder\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/mDNSResponder\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/mDNSResponder\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/usbmuxd\")))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/private/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/usbmuxd\"))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/private/var/run/docker.sock\")))\n");
+            sb.push_str("(deny network-outbound (remote unix-socket (path-literal \"/var/run/docker.sock\")))\n");
+            sb.push_str(
+                "(deny file-read* file-write* (literal \"/private/var/run/docker.sock\"))\n",
+            );
+            sb.push_str("(deny file-read* file-write* (literal \"/var/run/docker.sock\"))\n");
+            if let Some(port) = proxy_port {
+                sb.push_str(&format!(
+                    "(allow network-outbound (remote tcp \"localhost:{port}\"))\n\
+                     (allow network-outbound (remote ip \"localhost:{port}\"))\n"
+                ));
+            }
+        }
+        NetMode::Strict(_) | NetMode::Ask => {
+            sb.push_str("(deny network*)\n");
+            sb.push_str("(allow network-outbound (remote unix-socket))\n");
+        }
+    }
+
+    sb.push_str("\n; generated by vetto native seatbelt shape-d\n");
+    sb
+}
+
 fn sb_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -163,8 +275,23 @@ pub fn apply_seatbelt(
     net: &NetMode,
     proxy_port: Option<u16>,
 ) -> Result<(), String> {
+    if std::env::var_os("VETTO_SEATBELT_SHAPE_D").is_some()
+        || std::env::var_os("VETTO_SHAPE_D").is_some()
+    {
+        return apply_seatbelt_shape_d(policy, net, proxy_port);
+    }
     let (template, params) = generate_sbpl_template_and_params(policy, net, proxy_port);
     apply_seatbelt_raw(&template, &params)
+}
+
+/// Apply strict Shape D AST Seatbelt profile directly.
+pub fn apply_seatbelt_shape_d(
+    policy: &Policy,
+    net: &NetMode,
+    proxy_port: Option<u16>,
+) -> Result<(), String> {
+    let profile = generate_sbpl_shape_d(policy, net, proxy_port);
+    apply_seatbelt_raw(&profile, &[])
 }
 
 /// Apply raw SBPL profile and parameters to the calling process.
@@ -394,5 +521,45 @@ mod tests {
 
         let inlined = generate(&policy, &net, Some(54321));
         assert!(inlined.contains("\"localhost:54321\""));
+    }
+
+    #[test]
+    fn shape_d_profile_contains_require_any_and_secret_denies() {
+        let mut policy = Policy::default();
+        policy
+            .allow_read
+            .push(PathBuf::from("/test/workspace/read"));
+        policy
+            .allow_write
+            .push(PathBuf::from("/test/workspace/write"));
+        policy.deny_resolved.push(crate::policy::DenyEntry {
+            path: PathBuf::from("/test/workspace/write/.env"),
+            is_dir: false,
+        });
+
+        let profile = generate_sbpl_shape_d(&policy, &NetMode::Off, None);
+        assert!(profile.contains("(allow file-read*\n  (require-any"));
+        assert!(profile.contains("/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld/"));
+        assert!(profile.contains("/private/var/db/dyld/"));
+        assert!(profile.contains("/dev/null"));
+        assert!(profile.contains("/test/workspace/read"));
+        assert!(profile.contains("(allow file-write* (subpath \"/test/workspace/write\"))"));
+        assert!(profile.contains("(deny file-read* (subpath \"/test/workspace/write/.env\"))"));
+        assert!(profile.contains("(deny file-write* (subpath \"/test/workspace/write/.env\"))"));
+        assert!(profile.contains("(deny network*)"));
+    }
+
+    #[test]
+    fn test_apply_seatbelt_shape_d_wiring() {
+        let policy = Policy::default();
+        let profile = generate_sbpl_shape_d(&policy, &NetMode::Off, None);
+        assert!(profile.contains("(version 1)"));
+        assert!(profile.contains("require-any"));
+        assert!(profile.contains("(deny default)"));
+        #[cfg(not(target_os = "macos"))]
+        {
+            let res = apply_seatbelt_shape_d(&policy, &NetMode::Off, None);
+            assert!(res.is_err());
+        }
     }
 }

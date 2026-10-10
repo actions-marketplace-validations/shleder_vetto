@@ -432,6 +432,12 @@ fn child(
                 child_fail(err_w, 120, &format!("apply seatbelt ({mode}): {err}"));
             }
         }
+        Some("shape-d") => {
+            child_trace("seatbelt-shape-d-mode");
+            if let Err(err) = seatbelt::apply_seatbelt_shape_d(policy, net, proxy_port) {
+                child_fail(err_w, 120, &format!("apply seatbelt (shape-d): {err}"));
+            }
+        }
         _ => {
             if let Err(err) = seatbelt::apply_seatbelt(policy, net, proxy_port) {
                 child_fail(err_w, 120, &format!("apply seatbelt: {err}"));
@@ -441,9 +447,12 @@ fn child(
     child_trace("seatbelt-applied");
     if std::env::var_os("VETTO_CHILD_TRACE").is_some() {
         eprintln!(
-            "vetto: child seatbelt profile:
-{}",
-            seatbelt::generate(policy, net, proxy_port)
+            "vetto: child seatbelt profile:\n{}",
+            if std::env::var_os("VETTO_SEATBELT_SHAPE_D").is_some() {
+                seatbelt::generate_sbpl_shape_d(policy, net, proxy_port)
+            } else {
+                seatbelt::generate(policy, net, proxy_port)
+            }
         );
     }
 
