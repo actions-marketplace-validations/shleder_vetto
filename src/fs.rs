@@ -14,6 +14,8 @@ pub fn is_ignored_directory(name: &str) -> bool {
             | "vendor"
             | ".venv"
             | "venv"
+            | "dist"
+            | "build"
             | "__pycache__"
             | ".vetto"
             | ".vetto-reports"

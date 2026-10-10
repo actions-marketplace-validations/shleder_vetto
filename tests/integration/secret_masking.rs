@@ -57,6 +57,8 @@ fn json_report_is_sanitized_and_written() {
             "--tui=none",
             "--report",
             "json",
+            "--report-dir",
+            ".vetto/reports",
             "--",
             "/bin/sh",
             "-c",

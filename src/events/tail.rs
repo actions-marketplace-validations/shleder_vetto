@@ -49,8 +49,15 @@ impl EventTailFilter {
             Self::Deny => {
                 matches!(event, Event::BlockedAttempt { .. })
                     || matches!(event, Event::NetRequest { allowed: false, .. })
+                    || matches!(event, Event::NetQuotaExceeded { .. })
             }
-            Self::Network => matches!(event, Event::NetRequest { .. }),
+            Self::Network => matches!(
+                event,
+                Event::NetRequest { .. }
+                    | Event::DnsResolved { .. }
+                    | Event::NetEgress { .. }
+                    | Event::NetQuotaExceeded { .. }
+            ),
             Self::Files => {
                 matches!(
                     event,
@@ -58,7 +65,7 @@ impl EventTailFilter {
                 )
             }
             Self::Exec => matches!(event, Event::ExecObserved { .. }),
-            Self::Notice => matches!(event, Event::Notice { .. }),
+            Self::Notice => matches!(event, Event::Notice { .. } | Event::SessionTimeout { .. }),
             Self::Custom(query) => {
                 let q = query.to_ascii_lowercase();
                 let kind_match = event.kind().to_ascii_lowercase().contains(&q);
@@ -200,8 +207,64 @@ pub fn resolve_session_path(session_arg: &Path) -> Result<PathBuf> {
     if with_ext.is_file() {
         return Ok(with_ext);
     }
-    // Check in .vetto/reports/ or ~/.vetto/
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+
+    let session_str = session_arg.to_string_lossy();
+    let raw = session_str.trim_end_matches(".jsonl");
+    let stripped = raw.strip_prefix("session-").unwrap_or(raw);
+
+    // Check in ~/.vetto/logs/ and ~/.vetto/
+    if let Some(home) = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+    {
+        let logs_dir = home.join(".vetto").join("logs");
+
+        // 1. ~/.vetto/logs/<session>.jsonl
+        let direct_log = logs_dir.join(format!("{raw}.jsonl"));
+        if direct_log.is_file() {
+            return Ok(direct_log);
+        }
+
+        // 2. ~/.vetto/logs/session-<session>.jsonl
+        let session_log = logs_dir.join(format!("session-{raw}.jsonl"));
+        if session_log.is_file() {
+            return Ok(session_log);
+        }
+
+        // If session was already prefixed with "session-", check the stripped variant too
+        let stripped_log = logs_dir.join(format!("{stripped}.jsonl"));
+        if stripped_log.is_file() {
+            return Ok(stripped_log);
+        }
+        let stripped_session_log = logs_dir.join(format!("session-{stripped}.jsonl"));
+        if stripped_session_log.is_file() {
+            return Ok(stripped_session_log);
+        }
+
+        let in_logs = logs_dir.join(session_arg);
+        if in_logs.is_file() {
+            return Ok(in_logs);
+        }
+
+        // Check in ~/.vetto/reports/
+        let in_reports = home.join(".vetto").join("reports").join(session_arg);
+        if in_reports.is_file() {
+            return Ok(in_reports);
+        }
+        let in_reports_ext = home.join(".vetto").join("reports").join(&with_ext);
+        if in_reports_ext.is_file() {
+            return Ok(in_reports_ext);
+        }
+        let in_reports_sub = home
+            .join(".vetto")
+            .join("reports")
+            .join(raw)
+            .join(format!("{raw}.jsonl"));
+        if in_reports_sub.is_file() {
+            return Ok(in_reports_sub);
+        }
+
+        // Check in ~/.vetto/
         let in_home = home.join(".vetto").join(session_arg);
         if in_home.is_file() {
             return Ok(in_home);
@@ -211,6 +274,7 @@ pub fn resolve_session_path(session_arg: &Path) -> Result<PathBuf> {
             return Ok(in_home_ext);
         }
     }
+
     let in_dot_vetto = Path::new(".vetto").join("reports").join(session_arg);
     if in_dot_vetto.is_file() {
         return Ok(in_dot_vetto);
@@ -333,5 +397,102 @@ mod tests {
         let custom = EventTailFilter::Custom("shadow".into());
         assert!(custom.matches(&blocked));
         assert!(!custom.matches(&file_obs));
+    }
+
+    #[test]
+    fn test_resolve_session_path_direct_file() {
+        let temp_dir = std::env::temp_dir().join(format!("vetto-tail-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("direct_session.jsonl");
+        std::fs::write(&file_path, b"{}\n").expect("write test file");
+
+        let resolved = resolve_session_path(&file_path).expect("resolve direct file");
+        assert_eq!(resolved, file_path);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_session_path_in_logs_dir() {
+        if let Some(home) = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+        {
+            let logs_dir = home.join(".vetto").join("logs");
+            let _ = std::fs::create_dir_all(&logs_dir);
+
+            // Test <session>.jsonl
+            let s1 = format!("test-tail-unit-{}", std::process::id());
+            let log1 = logs_dir.join(format!("{s1}.jsonl"));
+            std::fs::write(&log1, b"{}\n").expect("write log1");
+
+            let res1 = resolve_session_path(Path::new(&s1)).expect("resolve s1");
+            assert_eq!(res1, log1);
+
+            // Test session-<session>.jsonl
+            let s2 = format!("test-tail-sup-{}", std::process::id());
+            let log2 = logs_dir.join(format!("session-{s2}.jsonl"));
+            std::fs::write(&log2, b"{}\n").expect("write log2");
+
+            let res2 = resolve_session_path(Path::new(&s2)).expect("resolve s2");
+            assert_eq!(res2, log2);
+
+            let res2_prefixed = resolve_session_path(Path::new(&format!("session-{s2}")))
+                .expect("resolve prefixed");
+            assert_eq!(res2_prefixed, log2);
+
+            let _ = std::fs::remove_file(log1);
+            let _ = std::fs::remove_file(log2);
+        }
+    }
+
+    #[test]
+    fn test_filter_matches_additional_categories() {
+        let exec_ev = Event::ExecObserved {
+            ts: Utc::now(),
+            pid: 10,
+            argv: vec!["cargo".into(), "test".into()],
+        };
+        let notice_ev = Event::Notice {
+            ts: Utc::now(),
+            message: "hello notice".into(),
+        };
+        let timeout_ev = Event::SessionTimeout { ts: Utc::now() };
+        let quota_ev = Event::NetQuotaExceeded {
+            ts: Utc::now(),
+            host: "api.anthropic.com".into(),
+            limit_bytes: 1000,
+            used_bytes: 2000,
+        };
+        let dns_ev = Event::DnsResolved {
+            ts: Utc::now(),
+            host: "api.openai.com".into(),
+            ips: vec!["1.1.1.1".into()],
+        };
+
+        assert!(EventTailFilter::Exec.matches(&exec_ev));
+        assert!(!EventTailFilter::Exec.matches(&notice_ev));
+
+        assert!(EventTailFilter::Notice.matches(&notice_ev));
+        assert!(EventTailFilter::Notice.matches(&timeout_ev));
+
+        assert!(EventTailFilter::Deny.matches(&quota_ev));
+        assert!(EventTailFilter::Network.matches(&quota_ev));
+        assert!(EventTailFilter::Network.matches(&dns_ev));
+
+        assert_eq!(EventTailFilter::parse("procs"), EventTailFilter::Exec);
+        assert_eq!(EventTailFilter::parse("network"), EventTailFilter::Network);
+        assert_eq!(EventTailFilter::parse("blocked"), EventTailFilter::Deny);
+    }
+
+    #[test]
+    fn test_format_event_row_outputs() {
+        let ev = Event::Notice {
+            ts: Utc::now(),
+            message: "recap complete".into(),
+        };
+        let row = format_event_row(&ev);
+        assert!(row.contains("NOTICE"));
+        assert!(row.contains("recap complete"));
     }
 }

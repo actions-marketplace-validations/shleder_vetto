@@ -8,7 +8,14 @@ pub mod lock;
 pub mod rollback;
 pub mod snapshot;
 
-pub use ephemeral::handle_ephemeral_completion;
+pub use ephemeral::{handle_ephemeral_completion, EphemeralGuard};
+pub use rollback::{
+    atomic_commit_bytes, atomic_commit_bytes_with_mode, rollback_repair, rollback_session,
+    RollbackResult,
+};
+pub use snapshot::{
+    create_snapshot, list_snapshots, snapshots_root_dir, try_reflink_clone, SnapshotMetadata,
+};
 
 /// Security telemetry collected from session logs and reports.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -27,6 +34,7 @@ pub enum ChangeType {
     Added,
     Modified,
     Deleted,
+    PermissionsChanged,
 }
 
 /// Cryptographically verifiable receipt produced upon successful state repair.

@@ -423,6 +423,10 @@ fn sweep_tree_by_nonce_linux(nonce: &str, root_pid: u32) -> SweepOutcome {
         outcome.blind = true;
         return outcome;
     }
+    if root_pid == 0 || nonce.is_empty() {
+        outcome.clean = true;
+        return outcome;
+    }
     let me = unsafe { libc::getpid() } as u32;
     let me_uid = unsafe { libc::geteuid() };
     let needle = nonce.as_bytes();
@@ -720,5 +724,18 @@ mod tests {
         assert_eq!(sweep_reparented(100, -1), 0);
         assert!(root_settled(0, 100));
         assert!(root_settled(-1, 100));
+    }
+
+    #[test]
+    fn zero_root_pid_settled_and_sweep_return_immediately() {
+        assert_eq!(sweep_reparented(100, 0), 0);
+        assert_eq!(sweep_reparented(100, -1), 0);
+        assert!(root_settled(0, 1));
+        assert!(root_settled(-1, 1));
+
+        let outcome = sweep_tree_by_nonce("test_nonce", 0);
+        if let Some(outcome) = outcome {
+            assert!(outcome.clean || outcome.blind);
+        }
     }
 }
