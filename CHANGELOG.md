@@ -5,6 +5,22 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-10
+
+### Added
+- **Terminal Reset Guard (`src/supervise/mod.rs`, `src/supervise/finalize.rs`)**:
+  - Implemented RAII `TerminalResetGuard` sending ANSI resets for mouse reporting, alternative screen exit, cursor restoration, `tcsetattr(TCSANOW)`, and non-blocking PTY flush on error or signal exit.
+- **Agent Daemon Foreground Harmonization (`src/cli/harmonize.rs`)**:
+  - Added foreground execution argument injection for daemon-spawning CLI agents (e.g. `--no-daemon` for Codex) and explicit interception of orphan fork attempts in isolated PID namespaces.
+- **Agent Profile Authentication Parity (`profiles/agents/*.toml`, `src/policy/loader/merge.rs`)**:
+  - Audited all 32 agent profiles to allow legit session tokens and configs (`~/.claude.json`, `~/.codex/auth.json`, `~/.aider.conf.yml`), guaranteed with path materialization.
+- **Quota & Resource Limit Alignment (`profiles/default.toml`, `src/audit/verdict.rs`)**:
+  - Raised default `file_size_bytes` quota from 100MB to 2GB and intercepted `SIGXFSZ` with actionable user guidance.
+- **Shim Self-Diagnostics (`src/cli/enable.rs`, `src/shim/mod.rs`)**:
+  - Added diagnostic discovery for agent binaries outside standard `$PATH` (`~/.local/share/nodejs/bin`, `~/.cargo/bin`, etc.) and bash `hash -r` hints on disable.
+- **E2E Agent Compatibility Test Suite (`tests/integration/test_user_experience_e2e.rs`)**:
+  - Added comprehensive test suite verifying non-blocking UX across top 10 AI coding agents (Claude, Codex, Cursor, Aider, OpenCode, Goose, Cline, OpenHands, Qwen-Code, Windsurf).
+
 ## [0.6.2] - 2026-10-10
 
 ### Added
