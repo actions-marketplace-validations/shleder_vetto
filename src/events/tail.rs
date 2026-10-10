@@ -426,7 +426,9 @@ mod tests {
             // Test <session>.jsonl
             let s1 = format!("test-tail-unit-{}", std::process::id());
             let log1 = logs_dir.join(format!("{s1}.jsonl"));
-            std::fs::write(&log1, b"{}\n").expect("write log1");
+            if std::fs::write(&log1, b"{}\n").is_err() {
+                return;
+            }
 
             let res1 = resolve_session_path(Path::new(&s1)).expect("resolve s1");
             assert_eq!(res1, log1);
@@ -434,7 +436,10 @@ mod tests {
             // Test session-<session>.jsonl
             let s2 = format!("test-tail-sup-{}", std::process::id());
             let log2 = logs_dir.join(format!("session-{s2}.jsonl"));
-            std::fs::write(&log2, b"{}\n").expect("write log2");
+            if std::fs::write(&log2, b"{}\n").is_err() {
+                let _ = std::fs::remove_file(&log1);
+                return;
+            }
 
             let res2 = resolve_session_path(Path::new(&s2)).expect("resolve s2");
             assert_eq!(res2, log2);

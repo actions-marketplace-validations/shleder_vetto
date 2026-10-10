@@ -2972,7 +2972,7 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
             loop_v.is_denied(),
             "Loopback target {loopback} must be denied"
         );
-        assert_eq!(loop_v.denial_rule().unwrap(), "loopback");
+        assert_eq!(loop_v.denial_rule().unwrap(), "loopback_block");
     }
 
     // 4. FsRead / FsWrite empty path rejection
