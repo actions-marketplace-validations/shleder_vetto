@@ -47,6 +47,11 @@ fn agent_shim_execution_supported() -> bool {
             return false;
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        return false;
+    }
+    #[allow(unreachable_code)]
     true
 }
 
