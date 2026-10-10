@@ -27,6 +27,10 @@ const TOP_AGENTS: &[&str] = &[
 ];
 
 #[cfg(target_os = "windows")]
+const WINDOWS_SKIP: &str =
+    "SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host";
+
+#[cfg(target_os = "windows")]
 fn windows_backend_available() -> bool {
     let doctor = doctor_output();
     doctor.contains("appcontainer-api=yes")
@@ -174,7 +178,7 @@ fn path_with_bin_dir(bin_dir: &Path) -> std::ffi::OsString {
 fn test_e2e_top_agents_zero_args_graceful_handling() {
     #[cfg(target_os = "windows")]
     if !windows_backend_available() {
-        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        eprintln!("{WINDOWS_SKIP}");
         return;
     }
 
@@ -278,7 +282,7 @@ fn test_e2e_top_agents_sigint_translation_and_terminal_reset() {
 fn test_e2e_top_agents_project_read_write_unblocked() {
     #[cfg(target_os = "windows")]
     if !windows_backend_available() {
-        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        eprintln!("{WINDOWS_SKIP}");
         return;
     }
 
@@ -339,7 +343,7 @@ fn test_e2e_top_agents_project_read_write_unblocked() {
 fn test_e2e_top_agents_ssh_key_strictly_blocked() {
     #[cfg(target_os = "windows")]
     if !windows_backend_available() {
-        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        eprintln!("{WINDOWS_SKIP}");
         return;
     }
 
@@ -545,7 +549,7 @@ fn test_e2e_shim_resolution_missing_path_diagnostics() {
 fn test_e2e_top_agents_adversarial_arguments_integrity() {
     #[cfg(target_os = "windows")]
     if !windows_backend_available() {
-        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        eprintln!("{WINDOWS_SKIP}");
         return;
     }
 
