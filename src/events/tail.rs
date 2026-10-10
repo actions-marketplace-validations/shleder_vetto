@@ -501,8 +501,8 @@ mod tests {
             "res2 {res2:?} does not match log2 {log2:?}"
         );
 
-        let res2_prefixed = resolve_session_path(Path::new(&format!("session-{s2}")))
-            .expect("resolve prefixed");
+        let res2_prefixed =
+            resolve_session_path(Path::new(&format!("session-{s2}"))).expect("resolve prefixed");
         assert!(
             res2_prefixed == log2 || res2_prefixed.file_name() == log2.file_name(),
             "res2_prefixed {res2_prefixed:?} does not match log2 {log2:?}"
