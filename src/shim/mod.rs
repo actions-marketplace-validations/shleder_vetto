@@ -4,7 +4,10 @@
 //! this module intercepts execution, prevents recursive sandbox nesting via `VETTO_SANDBOXED=1`,
 //! discovers project policy, and delegates to the real host binary.
 
+pub mod harmonize;
 pub mod registry;
+
+pub use harmonize::harmonize_agent_args;
 
 use anyhow::{bail, Context, Result};
 use std::env;
@@ -372,18 +375,63 @@ pub fn parse_shim_args(args: &[String]) -> (bool, bool, Option<std::time::Durati
 }
 
 /// Normalizes and prepares agent arguments before invocation.
-/// Injects `--no-daemon` for OpenAI Codex CLI to prevent background daemon failures in private PID namespaces.
 pub fn prepare_shim_args(binary_name: &str, clean_args: &[String]) -> Vec<String> {
-    let mut args = clean_args.to_vec();
-    let is_codex = binary_name == "codex"
-        || binary_name.ends_with("/codex")
-        || binary_name.ends_with("\\codex")
-        || binary_name.ends_with("\\codex.exe")
-        || binary_name == "codex-cli";
-    if is_codex && !args.iter().any(|a| a == "--no-daemon") {
-        args.push("--no-daemon".to_string());
+    harmonize_agent_args(binary_name, clean_args)
+}
+
+/// Inspects candidate directories when host binary resolution fails and produces an actionable error message.
+pub fn diagnose_missing_host_binary(binary_name: &str) -> String {
+    let home = env::var_os("HOME")
+        .map(PathBuf::from)
+        .or_else(|| crate::cli::hook::get_home_dir().ok());
+
+    if let Some(home) = home {
+        let candidate_dirs = [
+            home.join(".local/share/nodejs/bin"),
+            home.join(".cargo/bin"),
+            home.join(".local/bin"),
+        ];
+
+        let path_dirs: Vec<PathBuf> = env::var_os("PATH")
+            .map(|val| env::split_paths(&val).collect())
+            .unwrap_or_default();
+
+        let mut candidate_names = vec![binary_name.to_string()];
+        for &alt in crate::onboard::agent_candidate_binaries(binary_name) {
+            if !candidate_names.iter().any(|c| c == alt) {
+                candidate_names.push(alt.to_string());
+            }
+        }
+        #[cfg(windows)]
+        {
+            let base_names = candidate_names.clone();
+            for base in base_names {
+                candidate_names.push(format!("{base}.exe"));
+                candidate_names.push(format!("{base}.cmd"));
+            }
+        }
+
+        // Check if binary physically exists in any candidate dir
+        for dir in &candidate_dirs {
+            for name in &candidate_names {
+                let candidate_file = dir.join(name);
+                if candidate_file.is_file() {
+                    let dir_in_path = path_dirs.iter().any(|p| p == dir);
+                    if !dir_in_path {
+                        return format!(
+                            "shim: failed to resolve host binary for '{binary_name}'. Found at '{}', but its directory is not in your $PATH. Add it to $PATH: export PATH=\"{}:$PATH\"",
+                            candidate_file.display(),
+                            dir.display()
+                        );
+                    }
+                }
+            }
+        }
     }
-    args
+
+    format!(
+        "shim: failed to resolve host binary for '{binary_name}'. Ensure '{binary_name}' is installed and accessible in your $PATH (typical locations: ~/.local/share/nodejs/bin, ~/.cargo/bin, ~/.local/bin)."
+    )
 }
 
 /// Fast native dispatch entrypoint for shimmed binaries.
@@ -396,9 +444,14 @@ pub fn dispatch(binary_name: &str, args: &[String]) -> Result<i32> {
             .map(|v| v == "1")
             .unwrap_or(false);
 
-    let real_binary = find_real_binary(binary_name)
+    let real_binary = match find_real_binary(binary_name)
         .or_else(|_| crate::onboard::find_real_agent_binary(binary_name).map(|(_, path)| path))
-        .with_context(|| format!("shim: failed to resolve host binary for '{binary_name}'"))?;
+    {
+        Ok(path) => path,
+        Err(_) => {
+            bail!("{}", diagnose_missing_host_binary(binary_name));
+        }
+    };
 
     // Git guard check: block destructive git commands
     if (binary_name == "git" || binary_name.ends_with("/git") || binary_name.ends_with("\\git.exe"))
@@ -957,5 +1010,14 @@ mod tests {
         let claude_args = vec!["run".to_string()];
         let prepped_claude = prepare_shim_args("claude", &claude_args);
         assert_eq!(prepped_claude, vec!["run".to_string()]);
+    }
+
+    #[test]
+    fn test_diagnose_missing_host_binary_output() {
+        let diag = diagnose_missing_host_binary("nonexistent_test_agent_xyz");
+        assert!(diag.contains("shim: failed to resolve host binary for 'nonexistent_test_agent_xyz'"));
+        assert!(diag.contains("~/.local/share/nodejs/bin"));
+        assert!(diag.contains("~/.cargo/bin"));
+        assert!(diag.contains("~/.local/bin"));
     }
 }
