@@ -1991,7 +1991,7 @@ fn test_m3_permissive_profile_explicit_vs_default_fail_closed() {
         perm_policy
             .allow_read
             .iter()
-            .any(|p| p.to_string_lossy() == "/etc"),
+            .any(|p| p.to_string_lossy().replace('\\', "/") == "/etc"),
         "Permissive policy must contain /etc in allow_read"
     );
 
@@ -2003,7 +2003,7 @@ fn test_m3_permissive_profile_explicit_vs_default_fail_closed() {
         !default_policy
             .allow_read
             .iter()
-            .any(|p| p.to_string_lossy() == "/etc"),
+            .any(|p| p.to_string_lossy().replace('\\', "/") == "/etc"),
         "Default profile must NOT grant unrestricted /etc in allow_read"
     );
 
