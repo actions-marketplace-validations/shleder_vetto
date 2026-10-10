@@ -1002,7 +1002,7 @@ fn child_b(
                 // to detach/daemonize in an isolated PID namespace.
                 let mut other_status = 0i32;
                 let other_r = unsafe { libc::waitpid(-1, &mut other_status, libc::WNOHANG) };
-                if other_r == 0 || other_r > 0 {
+                if other_r >= 0 {
                     let warn = b"vetto: agent attempted to spawn a detached daemon in an isolated PID namespace. Use foreground mode flags.\n";
                     unsafe { libc::write(libc::STDERR_FILENO, warn.as_ptr().cast(), warn.len()) };
                     c_code = crate::exit_codes::EXIT_FAIL_CLOSED;
