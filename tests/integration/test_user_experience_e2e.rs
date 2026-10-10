@@ -26,6 +26,13 @@ const TOP_AGENTS: &[&str] = &[
     "windsurf",
 ];
 
+#[cfg(target_os = "windows")]
+fn windows_backend_available() -> bool {
+    let doctor = doctor_output();
+    doctor.contains("appcontainer-api=yes")
+        && doctor.contains("experimental-process-sandbox=yes")
+}
+
 fn create_single_mock_agent(bin_dir: &Path, agent_name: &str) {
     let script_content = format!(
         r#"#!/bin/sh
@@ -165,6 +172,12 @@ fn path_with_bin_dir(bin_dir: &Path) -> std::ffi::OsString {
 /// Scenario 1: Launching top agents via shim without arguments/keys handles absence gracefully without crashing Vetto.
 #[test]
 fn test_e2e_top_agents_zero_args_graceful_handling() {
+    #[cfg(target_os = "windows")]
+    if !windows_backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        return;
+    }
+
     let project = TempProject::new("e2e-zero-args");
     let bin_dir = project.path().join("host_bin");
     create_mock_agents(&bin_dir);
@@ -263,6 +276,12 @@ fn test_e2e_top_agents_sigint_translation_and_terminal_reset() {
 /// Scenario 3: Reading and writing within $PROJECT succeeds without EACCES.
 #[test]
 fn test_e2e_top_agents_project_read_write_unblocked() {
+    #[cfg(target_os = "windows")]
+    if !windows_backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        return;
+    }
+
     let project = TempProject::new("e2e-project-rw");
     let bin_dir = project.path().join("host_bin");
     create_mock_agents(&bin_dir);
@@ -318,6 +337,12 @@ fn test_e2e_top_agents_project_read_write_unblocked() {
 /// Scenario 4: Attempted read of ~/.ssh/id_rsa strictly fails with Permission denied and is BLOCKED.
 #[test]
 fn test_e2e_top_agents_ssh_key_strictly_blocked() {
+    #[cfg(target_os = "windows")]
+    if !windows_backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        return;
+    }
+
     ensure_fake_ssh_key();
     let ssh_key_path = test_home().join(".ssh").join("id_rsa");
     assert!(ssh_key_path.exists(), "fake ssh key must exist");
@@ -471,11 +496,15 @@ fn test_e2e_shim_resolution_missing_path_diagnostics() {
     );
     let err_missing = stderr(&out_missing);
     assert!(
-        err_missing.contains(&format!("shim: failed to resolve host binary for '{missing_agent}'")),
+        err_missing.contains(&format!(
+            "shim: failed to resolve host binary for '{missing_agent}'"
+        )),
         "stderr must explain failure to resolve binary:\n{err_missing}"
     );
     assert!(
-        err_missing.contains("PATH") || err_missing.contains(".local") || err_missing.contains(".cargo"),
+        err_missing.contains("PATH")
+            || err_missing.contains(".local")
+            || err_missing.contains(".cargo"),
         "diagnostic must provide candidate path hints:\n{err_missing}"
     );
 
@@ -498,11 +527,15 @@ fn test_e2e_shim_resolution_missing_path_diagnostics() {
     );
     let err_candidate = stderr(&out_candidate);
     assert!(
-        err_candidate.contains(&format!("shim: failed to resolve host binary for '{candidate_agent}'")),
+        err_candidate.contains(&format!(
+            "shim: failed to resolve host binary for '{candidate_agent}'"
+        )),
         "stderr must report resolution failure:\n{err_candidate}"
     );
     assert!(
-        err_candidate.contains("PATH") || err_candidate.contains(".cargo/bin") || err_candidate.contains("export PATH="),
+        err_candidate.contains("PATH")
+            || err_candidate.contains(".cargo/bin")
+            || err_candidate.contains("export PATH="),
         "stderr must diagnose candidate directory and suggest PATH export:\n{err_candidate}"
     );
 }
@@ -510,6 +543,12 @@ fn test_e2e_shim_resolution_missing_path_diagnostics() {
 /// Adversarial verification: argument passing with special characters and quotes across shims.
 #[test]
 fn test_e2e_top_agents_adversarial_arguments_integrity() {
+    #[cfg(target_os = "windows")]
+    if !windows_backend_available() {
+        eprintln!("SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host");
+        return;
+    }
+
     let project = TempProject::new("e2e-adv-args");
     let bin_dir = project.path().join("host_bin");
     create_mock_agents(&bin_dir);

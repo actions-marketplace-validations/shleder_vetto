@@ -975,10 +975,18 @@ fn test_all_32_agent_profiles_auth_and_config_coverage_tier_full() {
                 } else {
                     std::path::PathBuf::from(raw_path)
                 };
+                let resolved = vetto::policy::types::lexical_normalize(&resolved);
 
                 // Every agent preset path must be in allow_read
+                let path_matches = |list: &[std::path::PathBuf], target: &std::path::Path| {
+                    list.iter().any(|p| {
+                        p == target
+                            || p.to_string_lossy().replace('\\', "/")
+                                == target.to_string_lossy().replace('\\', "/")
+                    })
+                };
                 assert!(
-                    pol.allow_read.contains(&resolved),
+                    path_matches(&pol.allow_read, &resolved),
                     "Agent '{}' must have {:?} (from {}) in allow_read under Tier::Full",
                     agent,
                     resolved,
@@ -988,7 +996,7 @@ fn test_all_32_agent_profiles_auth_and_config_coverage_tier_full() {
                 // For write: all agents except swebench must also have preset paths in allow_write
                 if agent != "swebench" {
                     assert!(
-                        pol.allow_write.contains(&resolved),
+                        path_matches(&pol.allow_write, &resolved),
                         "Agent '{}' must have {:?} (from {}) in allow_write under Tier::Full",
                         agent,
                         resolved,
