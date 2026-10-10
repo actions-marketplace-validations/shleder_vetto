@@ -38,6 +38,32 @@ pub fn render_recap_badge() -> &'static str {
     "[vetto] protected session completed: 0 secrets leaked, host secrets masked.\n[vetto] daemon-less sandbox runtime • https://github.com/shleder/vetto\n"
 }
 
+/// Formats the session recap badge specified by Stage 3 Goal 4.8.
+pub fn render_session_recap_badge(
+    files_modified: usize,
+    leaks_count: usize,
+    integrity_ok: bool,
+) -> String {
+    format!(
+        "[vetto] protected session completed: {} files modified, {} leaks, integrity: {}\n",
+        files_modified,
+        leaks_count,
+        if integrity_ok { "OK" } else { "FAILED" }
+    )
+}
+
+/// Emits the session recap badge directly to stderr to ensure zero stdout pollution.
+pub fn emit_session_recap_badge_stderr(
+    files_modified: usize,
+    leaks_count: usize,
+    integrity_ok: bool,
+) {
+    eprint!(
+        "{}",
+        render_session_recap_badge(files_modified, leaks_count, integrity_ok)
+    );
+}
+
 /// Render the recap lines (without the `vetto: recap: ` prefix).
 /// Returns `None` when the session was fully clean — stay silent like before.
 pub fn format_session_recap(input: &SessionRecapInput) -> Option<Vec<String>> {
@@ -195,5 +221,20 @@ mod tests {
         );
         assert!(badge.contains("0 secrets leaked, host secrets masked."));
         assert!(badge.contains("daemon-less sandbox runtime • https://github.com/shleder/vetto"));
+    }
+
+    #[test]
+    fn test_render_session_recap_badge() {
+        let badge_ok = render_session_recap_badge(3, 0, true);
+        assert_eq!(
+            badge_ok,
+            "[vetto] protected session completed: 3 files modified, 0 leaks, integrity: OK\n"
+        );
+
+        let badge_failed = render_session_recap_badge(1, 2, false);
+        assert_eq!(
+            badge_failed,
+            "[vetto] protected session completed: 1 files modified, 2 leaks, integrity: FAILED\n"
+        );
     }
 }

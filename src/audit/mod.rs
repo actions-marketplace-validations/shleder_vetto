@@ -16,8 +16,13 @@ pub use history::{
     verify_ledger_cli, AuditRecord, SessionAuditDetail, SessionHistoryRecord,
     MIN_AUTO_TIMEOUT_SECS,
 };
-pub use ledger::{AuditLedger, LedgerCorruption, LedgerVerificationResult, GENESIS_HASH};
-pub use recap::{format_session_recap, render_recap_badge, SessionRecapInput, RECAP_TOP_N};
+pub use ledger::{
+    AuditLedger, LedgerCorruption, LedgerError, LedgerVerificationResult, GENESIS_HASH,
+};
+pub use recap::{
+    emit_session_recap_badge_stderr, format_session_recap, render_recap_badge,
+    render_session_recap_badge, SessionRecapInput, RECAP_TOP_N,
+};
 pub use record::{
     AuditPayload, FsMutationPayload, FsMutationType, RecordType, ResourceSamplePayload,
     SessionInitPayload, SessionVerdictPayload, SyscallActionTaken, SyscallDenialPayload,

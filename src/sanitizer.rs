@@ -40,7 +40,7 @@ fn redact_pem(s: &str) -> String {
         .map(|i| begin + i + 1)
         .unwrap_or(begin);
     out.push_str(&s[..header_line_end]);
-    out.push_str("[REDACTED PEM BODY]\n");
+    out.push_str("[REDACTED PEM BODY]");
     out.push_str(&redact_pem(&s[block_end..]));
     out
 }
@@ -50,18 +50,19 @@ fn redact_pem(s: &str) -> String {
 fn redact_prefixed_tokens(s: &str) -> String {
     let mut out = s.to_string();
     for (prefix, min_run) in [
-        ("AKIA", 16usize), // AWS access key id
-        ("ASIA", 16),      // AWS temporary access key id
-        ("ghp_", 20),      // GitHub PAT
-        ("gho_", 20),      // GitHub OAuth
-        ("ghu_", 20),      // GitHub user token
-        ("ghs_", 20),      // GitHub server token
-        ("ghr_", 20),      // GitHub refresh token
-        ("sk-", 24),       // generic API secret / OpenAI-style
-        ("xoxb-", 20),     // Slack bot token
-        ("xoxp-", 20),     // Slack user token
-        ("xoxa-", 20),     // Slack app token
-        ("xoxs-", 20),     // Slack secret
+        ("AKIA", 16usize),   // AWS access key id
+        ("ASIA", 16),        // AWS temporary access key id
+        ("ghp_", 20),        // GitHub PAT
+        ("github_pat_", 20), // GitHub Fine-grained PAT
+        ("gho_", 20),        // GitHub OAuth
+        ("ghu_", 20),        // GitHub user token
+        ("ghs_", 20),        // GitHub server token
+        ("ghr_", 20),        // GitHub refresh token
+        ("sk-", 24),         // generic API secret / OpenAI-style
+        ("xoxb-", 20),       // Slack bot token
+        ("xoxp-", 20),       // Slack user token
+        ("xoxa-", 20),       // Slack app token
+        ("xoxs-", 20),       // Slack secret
     ] {
         out = redact_run(&out, prefix, min_run);
     }
@@ -470,6 +471,32 @@ mod tests {
         assert_eq!(
             std::str::from_utf8(&bytes).unwrap(),
             "prefix ******************************* suffix"
+        );
+    }
+
+    #[test]
+    fn redacts_github_fine_grained_pat() {
+        let pat = "github_pat_11AAAAAAA0123456789_abcdefghijklmnopqrstuvwxyz";
+        let out = sanitize_line(&format!("GH_TOKEN={pat}"));
+        assert!(
+            out.contains("github_pat_[REDACTED]") || out.contains("GH_TOKEN=[REDACTED]"),
+            "{out}"
+        );
+
+        let raw_token = sanitize_line(pat);
+        assert!(raw_token.contains("github_pat_[REDACTED]"), "{raw_token}");
+    }
+
+    #[test]
+    fn redacts_pem_without_breaking_single_line_jsonl() {
+        let single_line_event = r#"{"msg":"-----BEGIN RSA PRIVATE KEY-----MIIEowIBAAKCAQEA0-----END RSA PRIVATE KEY-----"}"#;
+        let out = sanitize_line(single_line_event);
+        assert!(out.contains("[REDACTED PEM BODY]"), "{out}");
+        assert!(!out.contains("MIIEow"), "{out}");
+        assert_eq!(
+            out.lines().count(),
+            1,
+            "PEM redaction must not break single-line JSONL format: {out}"
         );
     }
 }
