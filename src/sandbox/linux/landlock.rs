@@ -1151,8 +1151,10 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let base_dir =
-            std::env::temp_dir().join(format!("vetto_symlink_ext_test_{}_{nanos}", std::process::id()));
+        let base_dir = std::env::temp_dir().join(format!(
+            "vetto_symlink_ext_test_{}_{nanos}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&base_dir).expect("create test dir");
 
         let symlink_path = base_dir.join("link_out");
@@ -1160,7 +1162,10 @@ mod tests {
 
         let dir_fd = open_landlock_path_fd(&base_dir).expect("open base dir");
         let res = open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("link_out"));
-        assert!(res.is_err(), "resolving symlink beneath must fail with error");
+        assert!(
+            res.is_err(),
+            "resolving symlink beneath must fail with error"
+        );
 
         let _ = std::fs::remove_dir_all(&base_dir);
     }
