@@ -6,6 +6,7 @@ description = "Hardened compatibility profile for Qwen Code CLI agent."
 allow_read = [
     "$AGENT",
     "$HOME/.qwen",
+    "$HOME/.config/qwen",
     "$HOME/.qwen-code",
     "$HOME/.config/qwen-code",
     "$HOME/.local/share/qwen-code",
@@ -22,6 +23,7 @@ allow_read = [
 allow_write = [
     "$AGENT",
     "$HOME/.qwen",
+    "$HOME/.config/qwen",
     "$HOME/.qwen-code",
     "$HOME/.config/qwen-code",
     "$HOME/.local/share/qwen-code",

@@ -13,6 +13,10 @@ pub const MARKER_END: &str = "# <<< vetto shim environment <<<";
 pub const CMD_MARKER_START: &str = "rem >>> vetto shim environment >>>";
 pub const CMD_MARKER_END: &str = "rem <<< vetto shim environment <<<";
 
+/// Hint displayed when shims are removed to advise users on shell binary cache clearance.
+pub const SHELL_PATH_CACHE_HINT: &str =
+    "vetto: disabled wrapper. If your current shell still caches the path, run 'hash -r' (bash) or 'rehash' (zsh).";
+
 /// Supported shell kinds.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, clap::ValueEnum, serde::Serialize, serde::Deserialize,

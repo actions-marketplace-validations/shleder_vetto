@@ -31,7 +31,6 @@ pub mod sandbox;
 pub mod sanitizer;
 pub mod shim;
 pub mod supervise;
-#[cfg(unix)]
 pub mod tui;
 pub mod verify;
 pub mod version;

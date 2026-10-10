@@ -264,6 +264,10 @@ impl StdioPump {
                                 break;
                             }
                         }
+                        #[cfg(unix)]
+                        unsafe {
+                            libc::tcflush(master.as_raw_fd(), libc::TCIFLUSH);
+                        }
                     }
                 }
                 let mut combined_pty = raw_pty;

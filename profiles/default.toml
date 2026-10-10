@@ -59,14 +59,14 @@ pass_through = [
 ]
 
 # Resource ceilings applied right before the agent execve. Any --limits CLI
-# value merges strictest-wins on top of these. file_size_bytes enforces the 100 MB
+# value merges strictest-wins on top of these. file_size_bytes enforces the 2 GB
 # ceiling under INV-13.
 [limits]
 cpu_seconds = 14400
 address_space_bytes = 8589934592
 processes = 2048
 open_files = 1024
-file_size_bytes = 104857600
+file_size_bytes = 2147483648
 
 
 [display_only_deny]

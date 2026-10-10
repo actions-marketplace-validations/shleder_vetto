@@ -6,6 +6,7 @@ description = "Hardened compatibility profile for Roo Code (Roo Cline) autonomou
 allow_read = [
     "$AGENT",
     "$HOME/.roo",
+    "$HOME/.config/roo",
     "$HOME/.roo-code",
     "$HOME/.config/roo-code",
     "$HOME/.config/Code/User/globalStorage/roovetgit.roo-cline",
@@ -22,6 +23,7 @@ allow_read = [
 allow_write = [
     "$AGENT",
     "$HOME/.roo",
+    "$HOME/.config/roo",
     "$HOME/.roo-code",
     "$HOME/.config/roo-code",
     "$HOME/.config/Code/User/globalStorage/roovetgit.roo-cline",

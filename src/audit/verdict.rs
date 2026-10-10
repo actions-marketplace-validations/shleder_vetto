@@ -315,6 +315,37 @@ impl VerdictEngine {
             }
         }
 
+        // Check for SIGXFSZ termination (signal 25, exit code 153 or -25)
+        let is_sigxfsz = {
+            #[cfg(unix)]
+            {
+                agent_exit_code == 128 + libc::SIGXFSZ
+                    || agent_exit_code == -libc::SIGXFSZ
+                    || agent_exit_code == 153
+                    || agent_exit_code == -25
+            }
+            #[cfg(not(unix))]
+            {
+                agent_exit_code == 153 || agent_exit_code == -25
+            }
+        };
+
+        if is_sigxfsz {
+            let limit = contract.resources.max_file_size_bytes;
+            let msg = format!(
+                "vetto: process killed by kernel with SIGXFSZ (file size limit exceeded: {} bytes). Increase limit via --limits fsize=<bytes> or policy TOML.",
+                limit
+            );
+            eprintln!("{msg}");
+            return FinalVerdict {
+                status: VerdictStatus::Pass,
+                strength,
+                security_verdict: SecurityVerdict::Satisfied,
+                exit_code: agent_exit_code,
+                reason: msg,
+            };
+        }
+
         // Invariant 4: Clean execution or workload error without security violations yields Satisfied
         FinalVerdict {
             status: VerdictStatus::Pass,
@@ -722,5 +753,21 @@ mod tests {
         assert_eq!(SecurityVerdict::Violated.label(), "VIOLATED");
         assert_eq!(SecurityVerdict::Inconclusive.label(), "INCONCLUSIVE");
         assert_eq!(SecurityVerdict::NotApplicable.label(), "NOT_APPLICABLE");
+    }
+
+    #[test]
+    fn test_sigxfsz_diagnostic_emitted_and_preserves_satisfied_verdict() {
+        let contract = mock_contract();
+        for &sig_exit in &[153, -25] {
+            let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, sig_exit);
+            assert_eq!(verdict.status, VerdictStatus::Pass);
+            assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
+            assert_eq!(verdict.exit_code, sig_exit);
+            let expected_msg = format!(
+                "vetto: process killed by kernel with SIGXFSZ (file size limit exceeded: {} bytes). Increase limit via --limits fsize=<bytes> or policy TOML.",
+                contract.resources.max_file_size_bytes
+            );
+            assert_eq!(verdict.reason, expected_msg);
+        }
     }
 }
