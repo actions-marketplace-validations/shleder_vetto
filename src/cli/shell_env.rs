@@ -440,14 +440,33 @@ pub fn emit_shell_env(
     let sid = session_id.unwrap_or("active");
     let t = tier.unwrap_or("full");
     let p = profile.unwrap_or("default");
-    format!(
-        "export VETTO_SANDBOX=1\n\
-         export VETTO_SESSION_ID=\"{sid}\"\n\
-         export VETTO_TIER=\"{t}\"\n\
-         export VETTO_PROFILE=\"{p}\"\n\
-         export VETTO_VERSION=\"{}\"\n",
-        env!("CARGO_PKG_VERSION")
-    )
+    let version = env!("CARGO_PKG_VERSION");
+
+    let is_fish = std::env::var("SHELL")
+        .map(|s| s.ends_with("/fish"))
+        .unwrap_or(false);
+
+    if is_fish {
+        format!(
+            "set -gx VETTO_ACTIVE 1;\n\
+             set -gx VETTO_PROMPT \"[vetto:locked]\";\n\
+             set -gx VETTO_SANDBOX 1;\n\
+             set -gx VETTO_SESSION_ID \"{sid}\";\n\
+             set -gx VETTO_TIER \"{t}\";\n\
+             set -gx VETTO_PROFILE \"{p}\";\n\
+             set -gx VETTO_VERSION \"{version}\";\n"
+        )
+    } else {
+        format!(
+            "export VETTO_ACTIVE=1\n\
+             export VETTO_PROMPT=\"[vetto:locked]\"\n\
+             export VETTO_SANDBOX=1\n\
+             export VETTO_SESSION_ID=\"{sid}\"\n\
+             export VETTO_TIER=\"{t}\"\n\
+             export VETTO_PROFILE=\"{p}\"\n\
+             export VETTO_VERSION=\"{version}\"\n"
+        )
+    }
 }
 
 /// Print shell environment export lines to stdout.

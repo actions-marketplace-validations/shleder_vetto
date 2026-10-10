@@ -201,6 +201,13 @@ pub fn build_wrap_policy(args: &McpWrapArgs) -> Result<(Policy, NetMode)> {
             }
         }
     }
+    if args.allow.is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            if !allow_write.contains(&cwd) {
+                allow_write.push(cwd);
+            }
+        }
+    }
     for path in &args.allow {
         let pb = PathBuf::from(path);
         if !allow_write.contains(&pb) {
@@ -427,6 +434,28 @@ pub fn run_wrap(args: &McpWrapArgs) -> Result<()> {
             crate::config::NetMode::Allowlist(_) | crate::config::NetMode::Strict(_)
         );
         let bus = crate::events::EventBus::new();
+        let mut rx = bus.subscribe();
+        std::thread::Builder::new()
+            .name("vetto-mcp-stderr-monitor".to_string())
+            .spawn(move || {
+                while let Ok(ev) = rx.blocking_recv() {
+                    match &ev {
+                        crate::events::Event::BlockedAttempt { path, comm, .. } => {
+                            eprintln!("vetto[mcp]: BLOCKED filesystem access: {comm} -> {path}");
+                        }
+                        crate::events::Event::NetRequest {
+                            host,
+                            port,
+                            allowed: false,
+                            ..
+                        } => {
+                            eprintln!("vetto[mcp]: BLOCKED network access: {host}:{port}");
+                        }
+                        _ => {}
+                    }
+                }
+            })
+            .ok();
         crate::sandbox::linux::net_relay::spawn_broker(fd.into_raw_fd(), broker_config, bus);
     }
 

@@ -74,12 +74,9 @@ pub fn load_user_config() -> Result<UserConfig> {
     Ok(config)
 }
 
-/// Effective auto-update decision for the current process.
-pub fn auto_update_enabled(config: &UserConfig) -> bool {
-    if std::env::var("VETTO_NO_SELF_UPDATE").is_ok() || std::env::var("CI").is_ok() {
-        return false;
-    }
-    config.auto_update
+/// Effective auto-update decision for the current process (100% offline runtime invariant).
+pub fn auto_update_enabled(_config: &UserConfig) -> bool {
+    false
 }
 
 pub fn load_config_from_file(path: &Path) -> Result<UserConfig> {

@@ -428,16 +428,14 @@ pub enum Command {
         command: PolicyCommand,
     },
     /// Print shell completion script for the requested shell.
-    #[command(hide = true)]
     Completions {
         #[arg(value_enum)]
         shell: Shell,
     },
     /// Generate man page to stdout.
-    #[command(hide = true)]
     Man,
     /// Print environment variable export lines for shell integration and PS1.
-    #[command(name = "shell-env", hide = true)]
+    #[command(name = "shell-env")]
     ShellEnv {
         /// Session ID to export.
         #[arg(long)]
@@ -1455,6 +1453,37 @@ mod tests {
                 "error for {subcmd}: {err_str}"
             );
         }
+    }
+
+    #[test]
+    fn test_completions_for_all_shells() {
+        use clap_complete::Shell;
+        for shell in [
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Elvish,
+        ] {
+            let mut cmd = Cli::command();
+            let mut buf = Vec::new();
+            clap_complete::generate(shell, &mut cmd, "vetto", &mut buf);
+            assert!(!buf.is_empty(), "failed generation for {shell:?}");
+        }
+    }
+
+    #[test]
+    fn test_man_generation_valid_output() {
+        let cmd = Cli::command();
+        let man = clap_mangen::Man::new(cmd);
+        let mut buf = Vec::new();
+        man.render(&mut buf).expect("render man");
+        assert!(!buf.is_empty(), "man page should not be empty");
+        let rendered = String::from_utf8_lossy(&buf);
+        assert!(
+            rendered.contains(".TH"),
+            "man page should have troff header"
+        );
     }
 }
 
