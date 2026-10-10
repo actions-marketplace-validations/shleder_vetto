@@ -123,16 +123,10 @@ static long run_probe(const char *name) {
     if (strcmp(name, "clone3") == 0)
         return syscall(SYS_clone3, NULL, 0);
 #endif
-    if (strcmp(name, "socket_raw") == 0) {
-        long r = syscall(SYS_socket, 2, 3, 0);
-        int saved = errno;
-        if (r == -1 && saved == EACCES) {
-            printf("blocked:socket_raw:EACCES\n");
-            return 0;
-        }
-        errno = saved;
-        return r;
-    }
+#ifdef SYS_socket
+    if (strcmp(name, "socket_raw") == 0)
+        return syscall(SYS_socket, 2, 3, 0);
+#endif
 
     fprintf(stderr, "unsupported probe: %s\n", name);
     return -2;
@@ -154,6 +148,10 @@ int main(int argc, char **argv) {
     }
     if (result == -1 && saved == ENOSYS) {
         printf("blocked:%s:ENOSYS\n", argv[1]);
+        return 0;
+    }
+    if (result == -1 && saved == EACCES) {
+        printf("blocked:%s:EACCES\n", argv[1]);
         return 0;
     }
     fprintf(stderr, "probe was not blocked: %s result=%ld errno=%d\n", argv[1], result, saved);

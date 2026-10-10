@@ -71,6 +71,10 @@ allow_read = ["$PROJECT", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/dev/null"
         "io_uring_enter",
         "io_uring_register",
         "userfaultfd",
+        "unshare",
+        "setns",
+        "clone3",
+        "socket_raw",
     ] {
         // Exercise the syscall filter even on kernels where FULL's private
         // proc mount is unavailable; the FS-ONLY tier has the same filter.
@@ -97,9 +101,14 @@ allow_read = ["$PROJECT", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/dev/null"
             stdout(&out),
             stderr(&out)
         );
+        let expected_err = match operation {
+            "clone3" => "ENOSYS",
+            "socket_raw" => "EACCES",
+            _ => "EPERM",
+        };
         assert!(
-            stdout(&out).contains(&format!("blocked:{operation}:EPERM")),
-            "unexpected {operation} result: stdout={} stderr={}",
+            stdout(&out).contains(&format!("blocked:{operation}:{expected_err}")),
+            "unexpected {operation} result (expected {expected_err}): stdout={} stderr={}",
             stdout(&out),
             stderr(&out)
         );
