@@ -47,8 +47,12 @@ pub struct EnableArgs {
 #[derive(clap::Args, Debug, Clone)]
 pub struct DisableArgs {
     /// Name of the AI agent to unwrap (e.g. claude, codex, opencode, windsurf, goose, cursor, aider)
-    #[arg(value_name = "AGENT")]
-    pub agent: String,
+    #[arg(value_name = "AGENT", required_unless_present = "all")]
+    pub agent: Option<String>,
+
+    /// Remove all active shims from the shims directory
+    #[arg(long = "all", conflicts_with = "agent")]
+    pub all: bool,
 
     /// Scope to remove shim from (global or local)
     #[arg(long, value_enum, default_value = "global")]
@@ -204,8 +208,19 @@ pub fn enable_all(force: bool, fix: bool, scope: HookScope) -> Result<()> {
 
 /// Entrypoint for `vetto disable`.
 pub fn run_disable(args: &DisableArgs) -> Result<()> {
-    let agent_name = args.agent.trim().to_lowercase();
-    disable_agent(&agent_name, args.scope)
+    if args.all {
+        return disable_all(args.scope);
+    }
+
+    match &args.agent {
+        Some(agent_raw) => {
+            let agent_name = agent_raw.trim().to_lowercase();
+            disable_agent(&agent_name, args.scope)
+        }
+        None => {
+            bail!("specify an agent name to disable or use '--all'");
+        }
+    }
 }
 
 /// Enables transparent sandbox wrapping for a specific agent without banner output.
@@ -362,6 +377,43 @@ pub fn disable_agent(agent: &str, scope: HookScope) -> Result<()> {
 
     println!("vetto: disabled sandbox wrapper for '{agent}' (removed {removed_count} shim(s))");
     println!("'{agent}' will now run unconfined as a standard host binary.");
+
+    Ok(())
+}
+
+/// Disables transparent sandbox wrapping for all active agents.
+pub fn disable_all(scope: HookScope) -> Result<()> {
+    let shims_dir = get_shims_dir(scope)?;
+    if !shims_dir.exists() {
+        println!("vetto: no active shims found in {}", shims_dir.display());
+        return Ok(());
+    }
+
+    let mut removed_count = 0;
+    for entry in fs::read_dir(&shims_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() || path.is_symlink() {
+            if is_vetto_shim_content(&path) {
+                fs::remove_file(&path)
+                    .with_context(|| format!("failed to remove shim: {}", path.display()))?;
+                removed_count += 1;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("cmd") {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+
+    if removed_count == 0 {
+        println!("vetto: no active shims found in {}", shims_dir.display());
+        return Ok(());
+    }
+
+    println!(
+        "vetto: disabled all sandbox wrappers (removed {removed_count} shim(s) from {})",
+        shims_dir.display()
+    );
+    println!("All agents will now run unconfined as standard host binaries.");
 
     Ok(())
 }
@@ -595,11 +647,29 @@ mod tests {
             TestCli::try_parse_from(["vetto", "disable", "claude"]).expect("parse disable");
         match cli_disable.command {
             TestSubcommand::Disable(args) => {
-                assert_eq!(args.agent, "claude");
+                assert_eq!(args.agent.as_deref(), Some("claude"));
+                assert!(!args.all);
                 assert_eq!(args.scope, HookScope::Global);
             }
             _ => panic!("expected disable"),
         }
+
+        let cli_disable_all =
+            TestCli::try_parse_from(["vetto", "disable", "--all"]).expect("parse disable --all");
+        match cli_disable_all.command {
+            TestSubcommand::Disable(args) => {
+                assert!(args.all);
+                assert_eq!(args.agent, None);
+                assert_eq!(args.scope, HookScope::Global);
+            }
+            _ => panic!("expected disable --all"),
+        }
+
+        // disable with no args must fail (required_unless_present = "all")
+        assert!(TestCli::try_parse_from(["vetto", "disable"]).is_err());
+
+        // disable with both agent and --all must fail (conflicts_with = "agent")
+        assert!(TestCli::try_parse_from(["vetto", "disable", "claude", "--all"]).is_err());
     }
 
     #[test]
