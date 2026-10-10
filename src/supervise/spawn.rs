@@ -253,14 +253,17 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
 
     // Injects `--no-daemon` for OpenAI Codex CLI to ensure clean foreground execution in private PID namespaces
     let is_codex = cfg.agent_preset.as_deref() == Some("codex")
-        || agent_cmd.first().map(|c| {
-            let norm = c.replace('\\', "/");
-            let stem = std::path::Path::new(&norm)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-            stem.eq_ignore_ascii_case("codex")
-        }).unwrap_or(false);
+        || agent_cmd
+            .first()
+            .map(|c| {
+                let norm = c.replace('\\', "/");
+                let stem = std::path::Path::new(&norm)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("");
+                stem.eq_ignore_ascii_case("codex")
+            })
+            .unwrap_or(false);
     if is_codex && !agent_cmd.iter().any(|a| a == "--no-daemon") {
         agent_cmd.push("--no-daemon".to_string());
         if !cfg.agent.iter().any(|a| a == "--no-daemon") {

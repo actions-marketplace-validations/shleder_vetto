@@ -938,11 +938,21 @@ mod tests {
 
         let custom_args = vec!["exec".to_string(), "task".to_string()];
         let prepped_custom = prepare_shim_args("codex", &custom_args);
-        assert_eq!(prepped_custom, vec!["exec".to_string(), "task".to_string(), "--no-daemon".to_string()]);
+        assert_eq!(
+            prepped_custom,
+            vec![
+                "exec".to_string(),
+                "task".to_string(),
+                "--no-daemon".to_string()
+            ]
+        );
 
         let explicit_args = vec!["--no-daemon".to_string(), "run".to_string()];
         let prepped_explicit = prepare_shim_args("codex", &explicit_args);
-        assert_eq!(prepped_explicit, vec!["--no-daemon".to_string(), "run".to_string()]);
+        assert_eq!(
+            prepped_explicit,
+            vec!["--no-daemon".to_string(), "run".to_string()]
+        );
 
         let claude_args = vec!["run".to_string()];
         let prepped_claude = prepare_shim_args("claude", &claude_args);
