@@ -270,16 +270,42 @@ impl SandboxHandle {
     /// Attempt graceful termination (SIGTERM) before escalating to SIGKILL.
     /// Safe to call multiple times; does not consume kill strategy.
     pub fn terminate_graceful(&mut self) {
+        #[cfg(target_os = "linux")]
+        {
+            const SYS_PIDFD_SEND_SIGNAL: libc::c_long = 424;
+            if let Some(ref pfd) = self.pidfd {
+                unsafe {
+                    libc::syscall(
+                        SYS_PIDFD_SEND_SIGNAL,
+                        pfd.as_raw_fd(),
+                        libc::SIGTERM,
+                        std::ptr::null::<libc::siginfo_t>(),
+                        0u32,
+                    );
+                }
+            }
+        }
         #[cfg(unix)]
         {
             match self.strategy.as_ref() {
                 #[cfg(target_os = "linux")]
-                Some(KillStrategy::PidNsPipe(_)) => unsafe {
-                    libc::kill(self.root_pid as i32, libc::SIGTERM);
-                },
+                Some(KillStrategy::PidNsPipe(_)) =>
+                {
+                    #[cfg(target_os = "linux")]
+                    if self.pidfd.is_none() {
+                        unsafe {
+                            libc::kill(self.root_pid as i32, libc::SIGTERM);
+                        }
+                    }
+                }
                 #[cfg(unix)]
                 Some(KillStrategy::ProcessGroup { pid, pgid, .. }) => unsafe {
                     libc::kill(-*pgid, libc::SIGTERM);
+                    #[cfg(target_os = "linux")]
+                    if self.pidfd.is_none() {
+                        libc::kill(*pid, libc::SIGTERM);
+                    }
+                    #[cfg(not(target_os = "linux"))]
                     libc::kill(*pid, libc::SIGTERM);
                 },
                 _ => {}

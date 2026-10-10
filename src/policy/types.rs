@@ -95,6 +95,122 @@ impl NetMode {
     }
 }
 
+/// An intercepted or proposed agent workload action subject to capability gate authorization.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Action {
+    /// Read access to a filesystem path.
+    FsRead(PathBuf),
+    /// Write, modify, or create access to a filesystem path.
+    FsWrite(PathBuf),
+    /// Attempt to spawn or execute a child process binary with optional arguments.
+    ProcessExec {
+        binary: PathBuf,
+        #[serde(default)]
+        args: Vec<String>,
+    },
+    /// Outbound TCP/UDP network connection attempt to a domain/host and port.
+    NetConnect { domain: String, port: u16 },
+}
+
+impl Action {
+    /// Action category identifier for metrics and audit logging.
+    pub fn action_type(&self) -> &'static str {
+        match self {
+            Action::FsRead(_) => "fs:read",
+            Action::FsWrite(_) => "fs:write",
+            Action::ProcessExec { .. } => "process:exec",
+            Action::NetConnect { .. } => "net:connect",
+        }
+    }
+
+    /// Descriptive target string (path, binary name with arguments, or domain:port).
+    pub fn target_display(&self) -> String {
+        match self {
+            Action::FsRead(path) => path.display().to_string(),
+            Action::FsWrite(path) => path.display().to_string(),
+            Action::ProcessExec { binary, args } => {
+                if args.is_empty() {
+                    binary.display().to_string()
+                } else {
+                    format!("{} {}", binary.display(), args.join(" "))
+                }
+            }
+            Action::NetConnect { domain, port } => format!("{domain}:{port}"),
+        }
+    }
+}
+
+/// Definitive verdict from the capability gate authorization evaluation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActionVerdict {
+    /// The action is explicitly authorized under the active security contract.
+    Allowed,
+    /// The action is denied due to policy boundaries, secret masking, or execution ceilings.
+    Denied { reason: String, rule: String },
+}
+
+impl ActionVerdict {
+    /// Constructs an `Allowed` verdict.
+    pub fn allow() -> Self {
+        Self::Allowed
+    }
+
+    /// Constructs a `Denied` verdict with a descriptive reason and offending rule.
+    pub fn deny(reason: impl Into<String>, rule: impl Into<String>) -> Self {
+        Self::Denied {
+            reason: reason.into(),
+            rule: rule.into(),
+        }
+    }
+
+    /// Returns true if the action is authorized.
+    pub fn is_allowed(&self) -> bool {
+        matches!(self, Self::Allowed)
+    }
+
+    /// Returns true if the action was rejected.
+    pub fn is_denied(&self) -> bool {
+        matches!(self, Self::Denied { .. })
+    }
+
+    /// Returns the denial reason if rejected.
+    pub fn denial_reason(&self) -> Option<&str> {
+        match self {
+            Self::Denied { reason, .. } => Some(reason.as_str()),
+            Self::Allowed => None,
+        }
+    }
+
+    /// Returns the security rule that triggered the denial, if rejected.
+    pub fn denial_rule(&self) -> Option<&str> {
+        match self {
+            Self::Denied { rule, .. } => Some(rule.as_str()),
+            Self::Allowed => None,
+        }
+    }
+}
+
+/// Policy compilation, lockdown, and contract verification errors.
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+pub enum PolicyError {
+    #[error("Policy compilation failed: {0}")]
+    CompilationFailed(String),
+    #[error("Policy lockdown violation: {0}")]
+    LockdownViolation(String),
+    #[error("Sealed contract verification failed: {0}")]
+    VerificationFailed(String),
+}
+
+impl PolicyError {
+    /// Deterministic exit code for policy errors (Exit 125 fail-closed, Exit 126 lockdown).
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::CompilationFailed(_) | Self::VerificationFailed(_) => 125,
+            Self::LockdownViolation(_) => 126,
+        }
+    }
+}
+
 /// Optional cgroup v2 resource limits configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CgroupConfig {

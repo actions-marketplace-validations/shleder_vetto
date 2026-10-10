@@ -290,10 +290,10 @@ pub enum Command {
         #[arg(long)]
         global: bool,
     },
-    /// Explicitly deny reads of a path (secret masking) in the policy
+    /// Explicitly deny reads of a path (secret masking) or network domain in the policy
     Deny {
-        /// Filesystem path to mask, e.g. ~/.aws/credentials
-        #[arg(value_name = "PATH")]
+        /// Filesystem path or network domain to deny, e.g. ~/.aws/credentials or evil.com
+        #[arg(value_name = "PATH|DOMAIN")]
         target: Option<String>,
         /// Deny preset name (ssh, aws, gcp, kube, docker, antigravity, etc.)
         #[arg(long, value_name = "NAME")]
@@ -301,6 +301,9 @@ pub enum Command {
         /// Treat target as a glob pattern (e.g. **/*.pem) and add to deny_glob
         #[arg(long = "glob")]
         glob: bool,
+        /// Treat target as a network domain to deny
+        #[arg(long = "net")]
+        net: bool,
         /// Edit ~/.vetto/config.toml instead of the project policy
         #[arg(long)]
         global: bool,
@@ -339,6 +342,18 @@ pub enum Command {
         /// Emit machine-readable JSON.
         #[arg(long)]
         json: bool,
+
+        /// Built-in policy profile to verify (e.g. claude, codex, default, strict)
+        #[arg(long, value_name = "NAME")]
+        profile: Option<String>,
+
+        /// Explicit policy TOML layer applied after the profile
+        #[arg(long, value_name = "PATH")]
+        policy: Option<PathBuf>,
+
+        /// Fast simulated verification mode (evaluates sealed contract without sandbox spawn)
+        #[arg(long)]
+        simulate: bool,
     },
     /// Run an agent command under the Vetto sandbox supervisor
     #[command(alias = "exec")]
@@ -413,16 +428,14 @@ pub enum Command {
         command: PolicyCommand,
     },
     /// Print shell completion script for the requested shell.
-    #[command(hide = true)]
     Completions {
         #[arg(value_enum)]
         shell: Shell,
     },
     /// Generate man page to stdout.
-    #[command(hide = true)]
     Man,
     /// Print environment variable export lines for shell integration and PS1.
-    #[command(name = "shell-env", hide = true)]
+    #[command(name = "shell-env")]
     ShellEnv {
         /// Session ID to export.
         #[arg(long)]
@@ -498,6 +511,9 @@ pub enum Command {
         recap: bool,
         #[arg(long)]
         digest: bool,
+        /// Verify cryptographic integrity of the session audit ledger
+        #[arg(long)]
+        verify: bool,
     },
     /// Compare two session JSON audit reports (metric deltas and violation diffs).
     #[command(name = "diff-sessions", hide = true)]
@@ -610,6 +626,9 @@ pub enum PolicyCommand {
         /// Exit non-zero when any finding is reported.
         #[arg(long)]
         strict: bool,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Import permissions from external agent configurations (e.g. claude, codex)
     Import {
@@ -723,7 +742,7 @@ impl Cli {
 
         let fail_on_block = cli.fail_on_block.or(global.fail_on_block);
         if fail_on_block == Some(0) {
-            return Err(anyhow::Error::new(crate::error::VettoError::Policy(
+            return Err(anyhow::Error::new(crate::error::VettoError::Cli(
                 "--fail-on-block threshold must be greater than zero".into(),
             )));
         }
@@ -1305,6 +1324,17 @@ mod tests {
             })
         ));
 
+        let audit_verify = Cli::try_parse_from(["vetto", "audit", "session-12345", "--verify"])
+            .expect("audit verify parsing");
+        assert!(matches!(
+            audit_verify.command,
+            Some(Command::Audit {
+                ref session_id,
+                verify: true,
+                ..
+            }) if session_id.as_deref() == Some("session-12345")
+        ));
+
         let diff_cli =
             Cli::try_parse_from(["vetto", "diff-sessions", "s1.json", "s2.json", "--json"])
                 .expect("diff-sessions parsing");
@@ -1423,6 +1453,37 @@ mod tests {
                 "error for {subcmd}: {err_str}"
             );
         }
+    }
+
+    #[test]
+    fn test_completions_for_all_shells() {
+        use clap_complete::Shell;
+        for shell in [
+            Shell::Bash,
+            Shell::Zsh,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Elvish,
+        ] {
+            let mut cmd = Cli::command();
+            let mut buf = Vec::new();
+            clap_complete::generate(shell, &mut cmd, "vetto", &mut buf);
+            assert!(!buf.is_empty(), "failed generation for {shell:?}");
+        }
+    }
+
+    #[test]
+    fn test_man_generation_valid_output() {
+        let cmd = Cli::command();
+        let man = clap_mangen::Man::new(cmd);
+        let mut buf = Vec::new();
+        man.render(&mut buf).expect("render man");
+        assert!(!buf.is_empty(), "man page should not be empty");
+        let rendered = String::from_utf8_lossy(&buf);
+        assert!(
+            rendered.contains(".TH"),
+            "man page should have troff header"
+        );
     }
 }
 

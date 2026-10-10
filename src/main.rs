@@ -257,34 +257,17 @@ fn run() -> Result<()> {
             benchmark,
         }) => {
             let mut cfg = RunConfig::from_cli(&args)?;
-            if let Some(cmd) = command {
-                if let Some(canon) =
-                    vetto::policy::defaults::canonical_agent_name(cmd).filter(|&c| c != "custom")
-                {
-                    if let Ok(shims_dir) =
-                        vetto::cli::hook::get_shims_dir(vetto::cli::hook::HookScope::Global)
-                    {
-                        let shim_path = shims_dir.join(canon);
-                        let is_wrapped =
-                            shim_path.exists() && vetto::shim::is_vetto_shim_content(&shim_path);
-                        if !is_wrapped {
-                            let target_agent =
-                                if let Ok((bin, _)) = vetto::onboard::find_real_agent_binary(cmd) {
-                                    bin
-                                } else {
-                                    canon.to_string()
-                                };
-                            let _ = vetto::cli::enable::enable_agent_silent(
-                                &target_agent,
-                                false,
-                                vetto::cli::hook::HookScope::Global,
-                            );
-                        }
-                    }
-                }
+            let (target_cmd, target_args) = if let Some(cmd) = command {
+                (Some(cmd.clone()), run_args.clone())
+            } else if !run_args.is_empty() {
+                (Some(run_args[0].clone()), run_args[1..].to_vec())
+            } else {
+                (None, Vec::new())
+            };
 
+            if let Some(ref cmd) = target_cmd {
                 let mut full_cmd = vec![cmd.clone()];
-                full_cmd.extend(run_args.clone());
+                full_cmd.extend(target_args);
                 cfg.agent = full_cmd;
                 if cfg.agent_preset.is_none() {
                     cfg.agent_preset = vetto::config::detect_agent_preset(&cfg.agent);
@@ -431,11 +414,13 @@ fn run() -> Result<()> {
             target,
             preset,
             glob,
+            net,
             global,
         }) => vetto::policy::edit::run_deny(
             target.as_deref(),
             preset.as_deref(),
             *glob,
+            *net,
             *global,
             args.policy.as_deref().map(Path::new),
         ),
@@ -456,8 +441,11 @@ fn run() -> Result<()> {
             json,
             recap,
             digest,
+            verify,
         }) => {
-            if *digest {
+            if *verify {
+                vetto::audit::verify_ledger_cli(session_id.as_deref(), *json)
+            } else if *digest {
                 vetto::audit::run_digest(since.as_deref(), *json)
             } else {
                 vetto::audit::run_audit_command(
@@ -496,13 +484,23 @@ fn run() -> Result<()> {
             speed,
             json,
         }) => events::run_replay(session, *speed, *json),
-        Some(cli::Command::Verify { json }) => {
+        Some(cli::Command::Verify {
+            json,
+            profile,
+            policy,
+            simulate,
+        }) => {
+            let effective_profile = profile.as_deref().unwrap_or(&args.profile);
+            let effective_policy = policy
+                .as_deref()
+                .or(args.policy.as_deref().map(std::path::Path::new));
             let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
-            vetto::verify::run_cli(
+            vetto::verify::run_cli_with_options(
                 *json,
-                &args.profile,
-                args.policy.as_deref().map(PathBuf::from).as_deref(),
+                effective_profile,
+                effective_policy,
                 &net,
+                *simulate,
             )
         }
 
@@ -566,12 +564,13 @@ fn run() -> Result<()> {
                     backend,
                 )
             }
-            cli::PolicyCommand::Lint { strict } => {
+            cli::PolicyCommand::Lint { strict, json } => {
                 let tier = sandbox::Backend::detect(NetMode::Off, false)
                     .ok()
                     .and_then(|b| b.tier());
                 vetto::policy::lint::run_cli(
                     *strict,
+                    *json,
                     &args.profile,
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     tier,
@@ -726,19 +725,6 @@ fn resolve_target_agent(
         {
             cfg.tui = TuiMode::None;
         }
-        let canon = vetto::policy::defaults::canonical_agent_name(agent_name).unwrap_or(agent_name);
-        if let Ok(shims_dir) = vetto::cli::hook::get_shims_dir(vetto::cli::hook::HookScope::Global)
-        {
-            let shim_path = shims_dir.join(canon);
-            let is_wrapped = shim_path.exists() && vetto::shim::is_vetto_shim_content(&shim_path);
-            if !is_wrapped {
-                let _ = vetto::cli::enable::enable_agent_silent(
-                    canon,
-                    false,
-                    vetto::cli::hook::HookScope::Global,
-                );
-            }
-        }
         return Ok(());
     }
 
@@ -775,17 +761,6 @@ fn resolve_target_agent(
         && vetto::config::should_default_to_no_tui(cfg.agent_preset.as_deref(), &cfg.agent)
     {
         cfg.tui = TuiMode::None;
-    }
-    if let Ok(shims_dir) = vetto::cli::hook::get_shims_dir(vetto::cli::hook::HookScope::Global) {
-        let shim_path = shims_dir.join(detected.name);
-        let is_wrapped = shim_path.exists() && vetto::shim::is_vetto_shim_content(&shim_path);
-        if !is_wrapped {
-            let _ = vetto::cli::enable::enable_agent_silent(
-                detected.name,
-                false,
-                vetto::cli::hook::HookScope::Global,
-            );
-        }
     }
     Ok(())
 }

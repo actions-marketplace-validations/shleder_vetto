@@ -29,6 +29,28 @@ impl VerdictStatus {
     }
 }
 
+/// Authoritative security contract verdict (§18.1, Goal 2.5).
+///
+/// Decouples workload process exit codes from authoritative sandbox security invariants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SecurityVerdict {
+    Satisfied,
+    Violated,
+    Inconclusive,
+    NotApplicable,
+}
+
+impl SecurityVerdict {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Satisfied => "SATISFIED",
+            Self::Violated => "VIOLATED",
+            Self::Inconclusive => "INCONCLUSIVE",
+            Self::NotApplicable => "NOT_APPLICABLE",
+        }
+    }
+}
+
 /// Evidence strength dimension of the 2D matrix (§18.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EvidenceStrength {
@@ -52,44 +74,111 @@ impl EvidenceStrength {
 pub struct FinalVerdict {
     pub status: VerdictStatus,
     pub strength: EvidenceStrength,
+    pub security_verdict: SecurityVerdict,
     pub exit_code: i32,
     pub reason: String,
 }
 
 impl FinalVerdict {
+    /// Canonical constructor with explicit security verdict.
+    pub fn new(
+        status: VerdictStatus,
+        strength: EvidenceStrength,
+        security_verdict: SecurityVerdict,
+        exit_code: i32,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            status,
+            strength,
+            security_verdict,
+            exit_code,
+            reason: reason.into(),
+        }
+    }
+
+    /// Backward-compatible constructor deriving `security_verdict` from status.
+    pub fn with_status(
+        status: VerdictStatus,
+        strength: EvidenceStrength,
+        exit_code: i32,
+        reason: impl Into<String>,
+    ) -> Self {
+        let security_verdict = match status {
+            VerdictStatus::Pass => SecurityVerdict::Satisfied,
+            VerdictStatus::Fail => SecurityVerdict::Violated,
+            VerdictStatus::Inconclusive => SecurityVerdict::Inconclusive,
+            VerdictStatus::NotApplicable => SecurityVerdict::NotApplicable,
+        };
+        Self {
+            status,
+            strength,
+            security_verdict,
+            exit_code,
+            reason: reason.into(),
+        }
+    }
+
     /// Formatted two-dimensional verdict badge (e.g. `PASS [STRONG]`, `FAIL [STRONG]`).
     pub fn display_badge(&self) -> String {
         format!("{} [{}]", self.status.label(), self.strength.label())
     }
 
+    /// Formatted security verdict badge (e.g. `SATISFIED [STRONG]`, `VIOLATED [STRONG]`).
+    pub fn security_badge(&self) -> String {
+        format!(
+            "{} [{}]",
+            self.security_verdict.label(),
+            self.strength.label()
+        )
+    }
+
     /// Action mandated by the Decision Truth Table (§18.2).
     pub fn recommended_action(&self) -> &'static str {
-        match (self.status, self.strength) {
-            (VerdictStatus::Pass, EvidenceStrength::Strong) => {
+        match (self.security_verdict, self.strength) {
+            (SecurityVerdict::Satisfied, EvidenceStrength::Strong) => {
                 "Commit CoW changes to host workspace."
             }
-            (VerdictStatus::Pass, EvidenceStrength::Partial) => {
+            (SecurityVerdict::Satisfied, EvidenceStrength::Partial) => {
                 "Commit CoW changes to host workspace with partial warning."
             }
-            (VerdictStatus::Pass, EvidenceStrength::Unsupported) => {
+            (SecurityVerdict::Satisfied, EvidenceStrength::Unsupported) => {
                 "Invalid verdict: unsupported platform cannot pass."
             }
-            (VerdictStatus::Fail, _) => "Wipe CoW layer; abort session immediately.",
-            (VerdictStatus::Inconclusive, _) => "Wipe CoW layer; audit ledger inconclusive.",
-            (VerdictStatus::NotApplicable, _) => "Execution aborted pre-launch.",
+            (SecurityVerdict::Violated, _) => "Wipe CoW layer; abort session immediately.",
+            (SecurityVerdict::Inconclusive, _) => "Wipe CoW layer; audit ledger inconclusive.",
+            (SecurityVerdict::NotApplicable, _) => "Execution aborted pre-launch.",
         }
     }
 
-    /// Whether the execution cleanly succeeded (contract satisfied and workload exit code == 0).
+    /// Whether the execution cleanly succeeded (contract satisfied, status pass, and workload exit code == 0).
     pub fn is_success(&self) -> bool {
-        self.status == VerdictStatus::Pass
+        self.security_verdict == SecurityVerdict::Satisfied
+            && self.status == VerdictStatus::Pass
             && self.strength != EvidenceStrength::Unsupported
             && self.exit_code == 0
     }
 
     /// Whether the security contract invariants were satisfied (regardless of workload exit code).
     pub fn is_contract_satisfied(&self) -> bool {
-        self.status == VerdictStatus::Pass && self.strength != EvidenceStrength::Unsupported
+        self.security_verdict == SecurityVerdict::Satisfied
+            && self.strength != EvidenceStrength::Unsupported
+    }
+
+    /// Structured export interface for audit subsystem and ledger serialization.
+    pub fn to_audit_export(&self) -> serde_json::Value {
+        serde_json::json!({
+            "status": self.status.label(),
+            "strength": self.strength.label(),
+            "security_verdict": self.security_verdict.label(),
+            "exit_code": self.exit_code,
+            "reason": self.reason,
+            "badge": self.display_badge(),
+            "security_badge": self.security_badge(),
+            "is_success": self.is_success(),
+            "is_contract_satisfied": self.is_contract_satisfied(),
+            "recommended_action": self.recommended_action(),
+        })
     }
 }
 
@@ -138,6 +227,7 @@ impl VerdictEngine {
             return FinalVerdict {
                 status: VerdictStatus::Fail,
                 strength: EvidenceStrength::Unsupported,
+                security_verdict: SecurityVerdict::Violated,
                 exit_code: 125,
                 reason: "Platform lacks necessary kernel enforcement primitives: fail-closed"
                     .to_string(),
@@ -149,11 +239,24 @@ impl VerdictEngine {
             return FinalVerdict {
                 status: VerdictStatus::Fail,
                 strength,
+                security_verdict: SecurityVerdict::Violated,
                 exit_code: 125,
                 reason: format!(
                     "Contract violation: {} kernel capability denials recorded",
                     kernel_denials
                 ),
+            };
+        }
+
+        // Invariant 2: Interrupted evidence channel yields INCONCLUSIVE
+        if !evidence_channel_intact {
+            return FinalVerdict {
+                status: VerdictStatus::Inconclusive,
+                strength,
+                security_verdict: SecurityVerdict::Inconclusive,
+                exit_code: 125,
+                reason: "Evidence capture channel dropped events: audit ledger inconclusive"
+                    .to_string(),
             };
         }
 
@@ -163,6 +266,7 @@ impl VerdictEngine {
                 return FinalVerdict {
                     status: VerdictStatus::Pass,
                     strength,
+                    security_verdict: SecurityVerdict::Satisfied,
                     exit_code: agent_exit_code,
                     reason: format!(
                         "[SHADOW VIOLATION] VFS violation: {} writes outside authorized workspace",
@@ -173,6 +277,7 @@ impl VerdictEngine {
             return FinalVerdict {
                 status: VerdictStatus::Fail,
                 strength,
+                security_verdict: SecurityVerdict::Violated,
                 exit_code: 125,
                 reason: format!(
                     "VFS violation: {} writes outside authorized workspace",
@@ -185,22 +290,12 @@ impl VerdictEngine {
             return FinalVerdict {
                 status: VerdictStatus::Fail,
                 strength,
+                security_verdict: SecurityVerdict::Violated,
                 exit_code: 125,
                 reason: format!(
                     "Lifecycle breach: {} descendant processes escaped extinction",
                     zombies_survived
                 ),
-            };
-        }
-
-        // Invariant 2: Interrupted evidence channel yields INCONCLUSIVE
-        if !evidence_channel_intact {
-            return FinalVerdict {
-                status: VerdictStatus::Inconclusive,
-                strength,
-                exit_code: 125,
-                reason: "Evidence capture channel dropped events: audit ledger inconclusive"
-                    .to_string(),
             };
         }
 
@@ -210,6 +305,7 @@ impl VerdictEngine {
                 return FinalVerdict {
                     status: VerdictStatus::Fail,
                     strength: EvidenceStrength::Strong,
+                    security_verdict: SecurityVerdict::Violated,
                     exit_code: 125,
                     reason: format!(
                         "Cryptographic signing verification failed (INV-36): {}",
@@ -219,10 +315,11 @@ impl VerdictEngine {
             }
         }
 
-        // Invariant 4: Clean execution yields PASS
+        // Invariant 4: Clean execution or workload error without security violations yields Satisfied
         FinalVerdict {
             status: VerdictStatus::Pass,
             strength,
+            security_verdict: SecurityVerdict::Satisfied,
             exit_code: agent_exit_code,
             reason: "All security contract invariants satisfied with authoritative host facts"
                 .to_string(),
@@ -362,8 +459,10 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Pass);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
         assert_eq!(verdict.exit_code, 0);
         assert_eq!(verdict.display_badge(), "PASS [STRONG]");
+        assert_eq!(verdict.security_badge(), "SATISFIED [STRONG]");
         assert!(verdict.is_success());
         assert!(verdict.is_contract_satisfied());
         assert_eq!(
@@ -378,6 +477,7 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 1);
         assert_eq!(verdict.status, VerdictStatus::Pass);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
         assert_eq!(verdict.exit_code, 1);
         assert!(verdict.is_contract_satisfied());
         assert!(!verdict.is_success()); // Failed workload exit code is not a success
@@ -389,9 +489,12 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 3, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Fail);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
         assert_eq!(verdict.display_badge(), "FAIL [STRONG]");
+        assert_eq!(verdict.security_badge(), "VIOLATED [STRONG]");
         assert!(!verdict.is_success());
+        assert!(!verdict.is_contract_satisfied());
         assert_eq!(
             verdict.recommended_action(),
             "Wipe CoW layer; abort session immediately."
@@ -403,7 +506,9 @@ mod tests {
         let contract = mock_contract();
         let verdict = VerdictEngine::evaluate(&contract, 0, 1, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Fail);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -411,7 +516,9 @@ mod tests {
         let contract = mock_contract();
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 2, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Fail);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -419,8 +526,11 @@ mod tests {
         let contract = mock_contract();
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, false, 0);
         assert_eq!(verdict.status, VerdictStatus::Inconclusive);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Inconclusive);
         assert_eq!(verdict.exit_code, 125);
         assert_eq!(verdict.display_badge(), "INCONCLUSIVE [STRONG]");
+        assert_eq!(verdict.security_badge(), "INCONCLUSIVE [STRONG]");
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -437,8 +547,10 @@ mod tests {
         );
         assert_eq!(verdict.status, VerdictStatus::Fail);
         assert_eq!(verdict.strength, EvidenceStrength::Unsupported);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
         assert_eq!(verdict.display_badge(), "FAIL [UNSUPPORTED]");
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -451,9 +563,11 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Fail);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
         assert!(verdict.reason.contains("INV-36"));
         assert!(verdict.reason.contains("missing"));
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -466,8 +580,10 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Fail);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
         assert_eq!(verdict.exit_code, 125);
         assert!(verdict.reason.contains("INV-36"));
+        assert!(!verdict.is_contract_satisfied());
     }
 
     #[test]
@@ -483,6 +599,7 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Pass);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
         assert_eq!(verdict.exit_code, 0);
         assert!(verdict.is_success());
         assert!(verdict.is_contract_satisfied());
@@ -496,7 +613,114 @@ mod tests {
         let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
         assert_eq!(verdict.status, VerdictStatus::Pass);
         assert_eq!(verdict.strength, EvidenceStrength::Strong);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
         assert_eq!(verdict.exit_code, 0);
         assert!(verdict.is_success());
+        assert!(verdict.is_contract_satisfied());
+    }
+
+    #[test]
+    fn test_decoupled_workload_crashes_preserve_satisfied_security_verdict() {
+        let contract = mock_contract();
+        // Child crashes with non-zero exit codes: SIGSEGV (139), OOM (137), panic (101), general error (1)
+        for crash_code in [1, 2, 101, 127, 137, 139] {
+            let verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, crash_code);
+            assert_eq!(verdict.status, VerdictStatus::Pass);
+            assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
+            assert_eq!(verdict.exit_code, crash_code);
+            assert!(verdict.is_contract_satisfied());
+            assert!(!verdict.is_success());
+            assert_eq!(
+                verdict.recommended_action(),
+                "Commit CoW changes to host workspace."
+            );
+        }
+    }
+
+    #[test]
+    fn test_security_violation_overrides_clean_workload_exit_code() {
+        let contract = mock_contract();
+        // Child cleanly exits with code 0, but committed a kernel capability violation
+        let verdict = VerdictEngine::evaluate(&contract, 1, 0, 0, true, 0);
+        assert_eq!(verdict.status, VerdictStatus::Fail);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Violated);
+        assert_eq!(verdict.exit_code, 125);
+        assert!(!verdict.is_contract_satisfied());
+        assert!(!verdict.is_success());
+        assert_eq!(
+            verdict.recommended_action(),
+            "Wipe CoW layer; abort session immediately."
+        );
+    }
+
+    #[test]
+    fn test_shadow_mode_unauthorized_writes_satisfied() {
+        let mut contract = mock_contract();
+        contract.filesystem.shadow = true;
+        let verdict = VerdictEngine::evaluate(&contract, 0, 5, 0, true, 42);
+        assert_eq!(verdict.status, VerdictStatus::Pass);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Satisfied);
+        assert_eq!(verdict.exit_code, 42);
+        assert!(verdict.is_contract_satisfied());
+        assert!(!verdict.is_success());
+        assert!(verdict.reason.contains("[SHADOW VIOLATION]"));
+    }
+
+    #[test]
+    fn test_shadow_mode_with_severed_evidence_channel_is_inconclusive() {
+        let mut contract = mock_contract();
+        contract.filesystem.shadow = true;
+        let verdict = VerdictEngine::evaluate(&contract, 0, 5, 0, false, 0);
+        assert_eq!(verdict.status, VerdictStatus::Inconclusive);
+        assert_eq!(verdict.security_verdict, SecurityVerdict::Inconclusive);
+        assert_eq!(verdict.exit_code, 125);
+        assert!(!verdict.is_contract_satisfied());
+    }
+
+    #[test]
+    fn test_to_audit_export_schema() {
+        let contract = mock_contract();
+        let pass_verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, true, 0);
+        let export_json = pass_verdict.to_audit_export();
+        assert_eq!(export_json["status"], "PASS");
+        assert_eq!(export_json["strength"], "STRONG");
+        assert_eq!(export_json["security_verdict"], "SATISFIED");
+        assert_eq!(export_json["exit_code"], 0);
+        assert_eq!(export_json["badge"], "PASS [STRONG]");
+        assert_eq!(export_json["security_badge"], "SATISFIED [STRONG]");
+        assert_eq!(export_json["is_success"], true);
+        assert_eq!(export_json["is_contract_satisfied"], true);
+        assert_eq!(
+            export_json["recommended_action"],
+            "Commit CoW changes to host workspace."
+        );
+
+        let fail_verdict = VerdictEngine::evaluate(&contract, 2, 0, 0, true, 0);
+        let fail_json = fail_verdict.to_audit_export();
+        assert_eq!(fail_json["status"], "FAIL");
+        assert_eq!(fail_json["strength"], "STRONG");
+        assert_eq!(fail_json["security_verdict"], "VIOLATED");
+        assert_eq!(fail_json["exit_code"], 125);
+        assert_eq!(fail_json["is_success"], false);
+        assert_eq!(fail_json["is_contract_satisfied"], false);
+        assert_eq!(
+            fail_json["recommended_action"],
+            "Wipe CoW layer; abort session immediately."
+        );
+
+        let inconcl_verdict = VerdictEngine::evaluate(&contract, 0, 0, 0, false, 0);
+        let inconcl_json = inconcl_verdict.to_audit_export();
+        assert_eq!(inconcl_json["status"], "INCONCLUSIVE");
+        assert_eq!(inconcl_json["security_verdict"], "INCONCLUSIVE");
+        assert_eq!(inconcl_json["exit_code"], 125);
+        assert_eq!(inconcl_json["is_contract_satisfied"], false);
+    }
+
+    #[test]
+    fn test_security_verdict_labels() {
+        assert_eq!(SecurityVerdict::Satisfied.label(), "SATISFIED");
+        assert_eq!(SecurityVerdict::Violated.label(), "VIOLATED");
+        assert_eq!(SecurityVerdict::Inconclusive.label(), "INCONCLUSIVE");
+        assert_eq!(SecurityVerdict::NotApplicable.label(), "NOT_APPLICABLE");
     }
 }

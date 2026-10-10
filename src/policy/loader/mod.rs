@@ -27,16 +27,20 @@ use anyhow::Result;
 pub use crate::policy::types::parse_byte_size as parse_bandwidth_str;
 use crate::policy::types::{Policy, Tier};
 pub use merge::{
-    apply_overrides, LayeredPolicyLoader, MergedPolicy, PolicyLoadOptions, PolicyOverrides,
+    apply_overrides, LayeredPolicyLoader, MergedPolicy, PolicyLoadOptions, PolicyLoader,
+    PolicyOverrides,
 };
 pub use resolve::{
     agent_root, build_policy, resolve_package_cache_paths, FS_ONLY_ENUMERATION_BUDGET,
     PACKAGE_CACHE_PATHS,
 };
 pub use schema::{
-    expand_net_preset, parse_layer, parse_quota_bytes, RawCgroup, RawDeny, RawEnvironment,
-    RawFilesystem, RawIoRate, RawLayer, RawLimits, RawMetadata, RawNetPorts, RawNetwork,
-    RawSeccompNotify, RawSecrets, RawSecurity, RawStringList, RawUnixSockets, RawValueOrString,
+    expand_net_preset, parse_layer, parse_quota_bytes, CgroupSchema, DenySchema, EnvironmentSchema,
+    FilesystemSchema, IoRateSchema, MetadataSchema, NetPortsSchema, NetworkSchema, PolicySchema,
+    ProcessSchema, RawCgroup, RawDeny, RawEnvironment, RawFilesystem, RawIoRate, RawLayer,
+    RawLimits, RawMetadata, RawNetPorts, RawNetwork, RawProcess, RawSeccompNotify, RawSecrets,
+    RawSecurity, RawStringList, RawUnixSockets, RawValueOrString, ResourceLimitsSchema,
+    SeccompNotifySchema, SecretsSchema, SecuritySchema, UnixSocketsSchema,
 };
 
 /// Load a policy either from a built-in profile name or a custom TOML path,

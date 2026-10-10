@@ -165,6 +165,9 @@ extern "C" fn exit_sweep() {
 /// documented residual (the nonce-targeted sweep still catches every
 /// non-exec-cleaned one). Any lookup error skips the victim conservatively.
 pub fn sweep_reparented(deadline_ms: u64, root_pid: i32) -> usize {
+    if root_pid <= 0 {
+        return 0;
+    }
     // SAFETY: scalar getpid.
     let me = unsafe { libc::getpid() } as u32;
     // SAFETY: scalar getsid on our own process; always succeeds.
@@ -270,6 +273,9 @@ pub fn session_of(pid: libc::pid_t) -> Option<libc::pid_t> {
 /// (reaped, or never existed), its pid was reused by a non-child, or it is a
 /// zombie — at termination the kernel already reparented its children.
 fn root_settled(root_pid: i32, me: u32) -> bool {
+    if root_pid <= 0 {
+        return true;
+    }
     let Ok(status) = std::fs::read_to_string(format!("/proc/{root_pid}/status")) else {
         return true;
     };
@@ -415,6 +421,10 @@ fn sweep_tree_by_nonce_linux(nonce: &str, root_pid: u32) -> SweepOutcome {
     };
     if !subreaper {
         outcome.blind = true;
+        return outcome;
+    }
+    if root_pid == 0 || nonce.is_empty() {
+        outcome.clean = true;
         return outcome;
     }
     let me = unsafe { libc::getpid() } as u32;
@@ -706,5 +716,26 @@ mod tests {
         assert!(!v.pgroup_separate);
         assert!(!v.no_new_privs);
         assert!(!v.seccomp_filter);
+    }
+
+    #[test]
+    fn sweep_reparented_and_root_settled_zero_or_negative_pid() {
+        assert_eq!(sweep_reparented(100, 0), 0);
+        assert_eq!(sweep_reparented(100, -1), 0);
+        assert!(root_settled(0, 100));
+        assert!(root_settled(-1, 100));
+    }
+
+    #[test]
+    fn zero_root_pid_settled_and_sweep_return_immediately() {
+        assert_eq!(sweep_reparented(100, 0), 0);
+        assert_eq!(sweep_reparented(100, -1), 0);
+        assert!(root_settled(0, 1));
+        assert!(root_settled(-1, 1));
+
+        let outcome = sweep_tree_by_nonce("test_nonce", 0);
+        if let Some(outcome) = outcome {
+            assert!(outcome.clean || outcome.blind);
+        }
     }
 }

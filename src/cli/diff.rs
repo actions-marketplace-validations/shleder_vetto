@@ -5,7 +5,6 @@
 //! (blocked file reads, blocked network egress, contacted domains).
 
 use std::collections::BTreeSet;
-use std::fmt::Write;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -86,6 +85,8 @@ pub struct DiffFilesSummaryJson {
     pub added: Vec<DiffFileStatJson>,
     pub modified: Vec<DiffFileStatJson>,
     pub deleted: Vec<DiffFileStatJson>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions_changed: Vec<DiffFileStatJson>,
     pub total_changed: usize,
     pub total_lines_added: usize,
     pub total_lines_deleted: usize,
@@ -114,6 +115,7 @@ impl SessionReview {
         let mut added = Vec::new();
         let mut modified = Vec::new();
         let mut deleted = Vec::new();
+        let mut permissions_changed = Vec::new();
         let mut diffs = Vec::new();
 
         let mut total_lines_added = 0;
@@ -134,6 +136,7 @@ impl SessionReview {
                 ChangeType::Added => added.push(stat),
                 ChangeType::Modified => modified.push(stat),
                 ChangeType::Deleted => deleted.push(stat),
+                ChangeType::PermissionsChanged => permissions_changed.push(stat),
             }
 
             if include_patches && !f.patch.is_empty() {
@@ -143,6 +146,7 @@ impl SessionReview {
                         ChangeType::Added => "added".to_string(),
                         ChangeType::Modified => "modified".to_string(),
                         ChangeType::Deleted => "deleted".to_string(),
+                        ChangeType::PermissionsChanged => "permissions_changed".to_string(),
                     },
                     patch: f.patch.clone(),
                 });
@@ -163,6 +167,7 @@ impl SessionReview {
                 added,
                 modified,
                 deleted,
+                permissions_changed,
                 total_changed: self.files.len(),
                 total_lines_added,
                 total_lines_deleted,
@@ -198,6 +203,7 @@ pub fn run_diff(args: &DiffArgs) -> Result<()> {
                     added: Vec::new(),
                     modified: Vec::new(),
                     deleted: Vec::new(),
+                    permissions_changed: Vec::new(),
                     total_changed: 0,
                     total_lines_added: 0,
                     total_lines_deleted: 0,
@@ -358,6 +364,9 @@ fn render_human_review(review: &SessionReview, stat_only: bool) {
                         );
                     }
                 }
+                ChangeType::PermissionsChanged => {
+                    println!("\x1b[35m  * {} (mode changed)\x1b[0m", change.path);
+                }
             }
         }
     }
@@ -467,7 +476,7 @@ pub fn compare_snapshot_against_disk(
     telemetry: &SecurityTelemetry,
     session_id: &str,
 ) -> Result<SessionReview> {
-    let snapshot_files = read_tar_archive(archive_path)?;
+    let snapshot_files = read_tar_archive_with_modes(archive_path)?;
     let mut disk_files = scan_disk_files(project_dir)?;
     if let Ok(rel_archive) = archive_path.strip_prefix(project_dir) {
         let rel_str = rel_archive.to_string_lossy().replace('\\', "/");
@@ -510,15 +519,46 @@ pub fn compare_snapshot_against_disk(
         });
     }
 
-    // 2. Modified files: present in both, content differ
+    // 2. Modified files: present in both, content differ or permissions changed
     for path in disk_keys.intersection(&snapshot_keys) {
         if !matches_path_filter(path, path_filter) {
             continue;
         }
-        let snap_bytes = &snapshot_files[*path];
-        let disk_bytes = &disk_files[*path];
+        let (snap_bytes, snap_mode) = {
+            let (b, m) = &snapshot_files[*path];
+            (b.as_slice(), *m & 0o7777)
+        };
+        let disk_bytes = disk_files[*path].as_slice();
+
+        #[cfg(unix)]
+        let disk_mode = {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::symlink_metadata(project_dir.join(path))
+                .ok()
+                .map(|m| m.permissions().mode() & 0o7777)
+                .unwrap_or(snap_mode)
+        };
+        #[cfg(not(unix))]
+        let disk_mode = snap_mode;
 
         if snap_bytes == disk_bytes {
+            if snap_mode != disk_mode {
+                files.push(FileChange {
+                    path: (*path).clone(),
+                    change_type: ChangeType::PermissionsChanged,
+                    lines_added: 0,
+                    lines_deleted: 0,
+                    is_binary: is_binary(snap_bytes),
+                    color_patch: format!(
+                        "\x1b[35m  * {} (mode changed: {:04o} -> {:04o})\x1b[0m\n",
+                        path, snap_mode, disk_mode
+                    ),
+                    patch: format!(
+                        "Mode changed for {}: {:04o} -> {:04o}\n",
+                        path, snap_mode, disk_mode
+                    ),
+                });
+            }
             continue;
         }
 
@@ -554,7 +594,7 @@ pub fn compare_snapshot_against_disk(
         if !matches_path_filter(path, path_filter) {
             continue;
         }
-        let snap_bytes = &snapshot_files[*path];
+        let (snap_bytes, _) = &snapshot_files[*path];
         let is_bin = is_binary(snap_bytes);
         let (added, deleted, color_patch, plain_patch) = if is_bin {
             (
@@ -590,7 +630,9 @@ pub fn compare_snapshot_against_disk(
     })
 }
 
-pub use crate::rescue::snapshot::{read_tar_archive, read_tar_entries, scan_disk_files};
+pub use crate::rescue::snapshot::{
+    read_tar_archive, read_tar_archive_with_modes, read_tar_entries, scan_disk_files,
+};
 
 /// Read and aggregate security telemetry for session from logs, reports, and history.
 pub fn load_security_telemetry(session_id: &str, project_dir: &Path) -> SecurityTelemetry {
@@ -840,14 +882,6 @@ fn parse_json_report_telemetry(path: &Path, telemetry: &mut SecurityTelemetry) {
     }
 }
 
-fn is_binary(bytes: &[u8]) -> bool {
-    let probe_len = bytes.len().min(8192);
-    if bytes[..probe_len].contains(&0) {
-        return true;
-    }
-    std::str::from_utf8(bytes).is_err()
-}
-
 fn matches_path_filter(file_path: &str, filter: Option<&str>) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -864,305 +898,9 @@ fn matches_path_filter(file_path: &str, filter: Option<&str>) -> bool {
         || Path::new(file_path).starts_with(Path::new(norm_filter))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DiffOp<'a> {
-    Equal(&'a str),
-    Delete(&'a str),
-    Insert(&'a str),
-}
-
-fn format_unified_diff(
-    path: &str,
-    old_lines: &[&str],
-    new_lines: &[&str],
-    is_added: bool,
-    is_deleted: bool,
-) -> (usize, usize, String, String) {
-    if is_added {
-        let lines_added = new_lines.len();
-        let mut color_patch = format!(
-            "\x1b[1;37m--- /dev/null\n+++ b/{path}\x1b[0m\n\
-             \x1b[36m@@ -0,0 +1,{lines_added} @@\x1b[0m\n"
-        );
-        let mut plain_patch = format!(
-            "--- /dev/null\n+++ b/{path}\n\
-             @@ -0,0 +1,{lines_added} @@\n"
-        );
-        for l in new_lines {
-            color_patch.push_str("\x1b[32m+");
-            color_patch.push_str(l);
-            color_patch.push_str("\x1b[0m\n");
-            plain_patch.push('+');
-            plain_patch.push_str(l);
-            plain_patch.push('\n');
-        }
-        return (lines_added, 0, color_patch, plain_patch);
-    }
-
-    if is_deleted {
-        let lines_deleted = old_lines.len();
-        let mut color_patch = format!(
-            "\x1b[1;37m--- a/{path}\n+++ /dev/null\x1b[0m\n\
-             \x1b[36m@@ -1,{lines_deleted} +0,0 @@\x1b[0m\n"
-        );
-        let mut plain_patch = format!(
-            "--- a/{path}\n+++ /dev/null\n\
-             @@ -1,{lines_deleted} +0,0 @@\n"
-        );
-        for l in old_lines {
-            color_patch.push_str("\x1b[31m-");
-            color_patch.push_str(l);
-            color_patch.push_str("\x1b[0m\n");
-            plain_patch.push('-');
-            plain_patch.push_str(l);
-            plain_patch.push('\n');
-        }
-        return (0, lines_deleted, color_patch, plain_patch);
-    }
-
-    let ops = compute_diff_ops(old_lines, new_lines);
-    let lines_added = ops
-        .iter()
-        .filter(|op| matches!(op, DiffOp::Insert(_)))
-        .count();
-    let lines_deleted = ops
-        .iter()
-        .filter(|op| matches!(op, DiffOp::Delete(_)))
-        .count();
-
-    if lines_added == 0 && lines_deleted == 0 {
-        return (0, 0, String::new(), String::new());
-    }
-
-    let (color_body, plain_body) = render_hunks(&ops);
-    let color_patch = format!("\x1b[1;37m--- a/{path}\n+++ b/{path}\x1b[0m\n{color_body}");
-    let plain_patch = format!("--- a/{path}\n+++ b/{path}\n{plain_body}");
-
-    (lines_added, lines_deleted, color_patch, plain_patch)
-}
-
-fn compute_diff_ops<'a>(old_lines: &[&'a str], new_lines: &[&'a str]) -> Vec<DiffOp<'a>> {
-    let n = old_lines.len();
-    let m = new_lines.len();
-
-    let mut prefix_len = 0;
-    while prefix_len < n && prefix_len < m && old_lines[prefix_len] == new_lines[prefix_len] {
-        prefix_len += 1;
-    }
-
-    let mut suffix_len = 0;
-    while suffix_len < (n - prefix_len)
-        && suffix_len < (m - prefix_len)
-        && old_lines[n - 1 - suffix_len] == new_lines[m - 1 - suffix_len]
-    {
-        suffix_len += 1;
-    }
-
-    let a = &old_lines[prefix_len..n - suffix_len];
-    let b = &new_lines[prefix_len..m - suffix_len];
-    let len_a = a.len();
-    let len_b = b.len();
-
-    let mut middle_ops = Vec::new();
-
-    if len_a == 0 {
-        for &line in b {
-            middle_ops.push(DiffOp::Insert(line));
-        }
-    } else if len_b == 0 {
-        for &line in a {
-            middle_ops.push(DiffOp::Delete(line));
-        }
-    } else {
-        let max_edits = len_a + len_b;
-        let limit_d = max_edits.min(2000);
-        let offset = max_edits as isize;
-        let mut v = vec![0usize; 2 * max_edits + 1];
-        let mut trace = Vec::with_capacity(limit_d + 1);
-        let mut solved_d = None;
-
-        for d in 0..=limit_d {
-            trace.push(v.clone());
-            let mut k = -(d as isize);
-            while k <= d as isize {
-                let k_idx = (k + offset) as usize;
-                let mut x = if k == -(d as isize)
-                    || (k != d as isize
-                        && v[(k - 1 + offset) as usize] < v[(k + 1 + offset) as usize])
-                {
-                    v[(k + 1 + offset) as usize]
-                } else {
-                    v[(k - 1 + offset) as usize] + 1
-                };
-                let mut y = (x as isize - k) as usize;
-                while x < len_a && y < len_b && a[x] == b[y] {
-                    x += 1;
-                    y += 1;
-                }
-                v[k_idx] = x;
-                if x >= len_a && y >= len_b {
-                    solved_d = Some(d);
-                    break;
-                }
-                k += 2;
-            }
-            if solved_d.is_some() {
-                break;
-            }
-        }
-
-        if let Some(mut d) = solved_d {
-            let mut x = len_a;
-            let mut y = len_b;
-            while d > 0 {
-                let k = x as isize - y as isize;
-                let prev_v = &trace[d];
-                let prev_k = if k == -(d as isize)
-                    || (k != d as isize
-                        && prev_v[(k - 1 + offset) as usize] < prev_v[(k + 1 + offset) as usize])
-                {
-                    k + 1
-                } else {
-                    k - 1
-                };
-                let prev_x = prev_v[(prev_k + offset) as usize];
-                let prev_y = (prev_x as isize - prev_k) as usize;
-
-                while x > prev_x && y > prev_y {
-                    middle_ops.push(DiffOp::Equal(a[x - 1]));
-                    x -= 1;
-                    y -= 1;
-                }
-                if x == prev_x {
-                    middle_ops.push(DiffOp::Insert(b[y - 1]));
-                    y -= 1;
-                } else {
-                    middle_ops.push(DiffOp::Delete(a[x - 1]));
-                    x -= 1;
-                }
-                d -= 1;
-            }
-            while x > 0 && y > 0 {
-                middle_ops.push(DiffOp::Equal(a[x - 1]));
-                x -= 1;
-                y -= 1;
-            }
-            middle_ops.reverse();
-        } else {
-            for &line in a {
-                middle_ops.push(DiffOp::Delete(line));
-            }
-            for &line in b {
-                middle_ops.push(DiffOp::Insert(line));
-            }
-        }
-    }
-
-    let mut ops = Vec::with_capacity(n + m);
-    for &line in &old_lines[..prefix_len] {
-        ops.push(DiffOp::Equal(line));
-    }
-    ops.extend(middle_ops);
-    for &line in &old_lines[n - suffix_len..] {
-        ops.push(DiffOp::Equal(line));
-    }
-
-    ops
-}
-
-fn render_hunks(ops: &[DiffOp]) -> (String, String) {
-    let mut change_indices = Vec::new();
-    for (i, op) in ops.iter().enumerate() {
-        if !matches!(op, DiffOp::Equal(_)) {
-            change_indices.push(i);
-        }
-    }
-
-    if change_indices.is_empty() {
-        return (String::new(), String::new());
-    }
-
-    let mut clusters: Vec<(usize, usize)> = Vec::new();
-    let mut cur_start = change_indices[0];
-    let mut cur_end = change_indices[0];
-
-    for &idx in &change_indices[1..] {
-        if idx <= cur_end + 6 {
-            cur_end = idx;
-        } else {
-            clusters.push((cur_start, cur_end));
-            cur_start = idx;
-            cur_end = idx;
-        }
-    }
-    clusters.push((cur_start, cur_end));
-
-    let mut color_out = String::new();
-    let mut plain_out = String::new();
-
-    for (c_start, c_end) in clusters {
-        let h_start = c_start.saturating_sub(3);
-        let h_end = (c_end + 4).min(ops.len());
-
-        let old_start = 1 + ops[..h_start]
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Equal(_) | DiffOp::Delete(_)))
-            .count();
-        let new_start = 1 + ops[..h_start]
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Equal(_) | DiffOp::Insert(_)))
-            .count();
-
-        let old_count = ops[h_start..h_end]
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Equal(_) | DiffOp::Delete(_)))
-            .count();
-        let new_count = ops[h_start..h_end]
-            .iter()
-            .filter(|op| matches!(op, DiffOp::Equal(_) | DiffOp::Insert(_)))
-            .count();
-
-        let _ = writeln!(
-            color_out,
-            "\x1b[36m@@ -{old_start},{old_count} +{new_start},{new_count} @@\x1b[0m"
-        );
-        let _ = writeln!(
-            plain_out,
-            "@@ -{old_start},{old_count} +{new_start},{new_count} @@"
-        );
-
-        for op in &ops[h_start..h_end] {
-            match op {
-                DiffOp::Equal(l) => {
-                    color_out.push(' ');
-                    color_out.push_str(l);
-                    color_out.push('\n');
-                    plain_out.push(' ');
-                    plain_out.push_str(l);
-                    plain_out.push('\n');
-                }
-                DiffOp::Delete(l) => {
-                    color_out.push_str("\x1b[31m-");
-                    color_out.push_str(l);
-                    color_out.push_str("\x1b[0m\n");
-                    plain_out.push('-');
-                    plain_out.push_str(l);
-                    plain_out.push('\n');
-                }
-                DiffOp::Insert(l) => {
-                    color_out.push_str("\x1b[32m+");
-                    color_out.push_str(l);
-                    color_out.push_str("\x1b[0m\n");
-                    plain_out.push('+');
-                    plain_out.push_str(l);
-                    plain_out.push('\n');
-                }
-            }
-        }
-    }
-
-    (color_out, plain_out)
-}
+pub use crate::report::diff_project::{
+    compute_diff_ops, format_unified_diff, is_binary, render_hunks, DiffOp,
+};
 
 #[cfg(test)]
 mod tests {
@@ -1371,5 +1109,55 @@ mod tests {
         assert_eq!(parsed["files"]["deleted"].as_array().unwrap().len(), 1);
         assert_eq!(parsed["files"]["added"].as_array().unwrap().len(), 0);
         assert_eq!(parsed["diffs"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_compare_snapshot_permissions_changed() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto_diff_perm_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let file_path = temp_dir.join("script.sh");
+        let content = b"#!/bin/sh\necho hello\n";
+        std::fs::write(&file_path, content).unwrap();
+
+        let archive_path = temp_dir.join("snapshot.tar");
+        let mut tar_file = std::fs::File::create(&archive_path).unwrap();
+        crate::rescue::snapshot::write_tar_entry_with_mode(
+            &mut tar_file,
+            "script.sh",
+            content,
+            std::time::SystemTime::now(),
+            0o644,
+        )
+        .unwrap();
+        tar_file.write_all(&[0u8; 1024]).unwrap();
+        tar_file.flush().unwrap();
+        drop(tar_file);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+            let telemetry = SecurityTelemetry::default();
+            let review = compare_snapshot_against_disk(
+                &archive_path,
+                &temp_dir,
+                None,
+                &telemetry,
+                "test_perm_session",
+            )
+            .unwrap();
+
+            assert_eq!(review.files.len(), 1);
+            assert_eq!(review.files[0].path, "script.sh");
+            assert_eq!(review.files[0].change_type, ChangeType::PermissionsChanged);
+            assert_eq!(review.files[0].lines_added, 0);
+            assert_eq!(review.files[0].lines_deleted, 0);
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

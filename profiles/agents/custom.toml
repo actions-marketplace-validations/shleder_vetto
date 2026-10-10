@@ -36,3 +36,7 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+mode = "off"
+allow = []

@@ -11,7 +11,7 @@ use super::set_winsize;
 
 /// Apply a resize now (ignores the SIGWINCH latch). Returns the inner size.
 pub fn apply_now(master_fd: RawFd) -> Option<(u16, u16)> {
-    let (rows, cols) = crossterm::terminal::size().ok()?;
+    let (cols, rows) = crossterm::terminal::size().ok()?;
     let inner_rows = rows.saturating_sub(1).max(1);
     set_winsize(master_fd, inner_rows, cols);
     Some((inner_rows, cols))

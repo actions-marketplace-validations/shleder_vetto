@@ -1,15 +1,15 @@
 //! SARIF 2.1.0 report renderer.
 //!
-//! Blocked file attempts and denied CONNECT requests are represented as
-//! SARIF results. Allowed observations remain session properties rather than
-//! findings, keeping SARIF consumers focused on actionable violations.
+//! Exports security denials and policy violations in OASIS SARIF 2.1.0 standard
+//! format for seamless GitHub Code Scanning and CodeQL action integration.
 
 use super::{clean, stats::SessionStats};
 
 /// Normalizes an artifact file path for GitHub Code Scanning:
 /// Converts absolute host paths to clean relative paths anchored to `%SRCROOT%`.
 fn normalize_path(raw_path: &str) -> String {
-    let cleaned = clean(raw_path).replace(['\r', '\n'], " ");
+    let sanitized = crate::sanitizer::sanitize_line(raw_path);
+    let cleaned = clean(&sanitized).replace(['\r', '\n'], " ");
     let p = std::path::Path::new(&cleaned);
 
     // If path is inside current working directory, strip prefix to get repo-relative path
@@ -50,17 +50,20 @@ fn normalize_path(raw_path: &str) -> String {
 
 pub fn render(stats: &SessionStats) -> String {
     let mut results = Vec::new();
+
+    // VETTO-FS-001: Filesystem denial
     for blocked in &stats.blocked_attempts {
         let uri = normalize_path(&blocked.path);
+        let comm = clean(&crate::sanitizer::sanitize_line(&blocked.comm));
+        let source = clean(&crate::sanitizer::sanitize_line(&blocked.source));
+
         results.push(serde_json::json!({
-            "ruleId": "vetto.blocked-attempt",
+            "ruleId": "VETTO-FS-001",
             "ruleIndex": 0,
             "level": "error",
             "message": {
                 "text": format!(
-                    "Blocked file attempt by {} from {} ({} occurrence(s))",
-                    clean(&blocked.comm),
-                    clean(&blocked.source),
+                    "Blocked filesystem access attempt by {comm} from {source} ({} occurrence(s))",
                     blocked.count
                 )
             },
@@ -74,19 +77,21 @@ pub fn render(stats: &SessionStats) -> String {
             }],
             "properties": {
                 "count": blocked.count,
-                "process": clean(&blocked.comm),
-                "source": clean(&blocked.source)
+                "process": comm,
+                "source": source
             }
         }));
     }
+
+    // VETTO-NET-001: Denied network egress
     for request in stats.net_requests.iter().filter(|request| !request.allowed) {
-        let host = clean(&request.host);
+        let host = clean(&crate::sanitizer::sanitize_line(&request.host));
         results.push(serde_json::json!({
-            "ruleId": "vetto.network-denied",
+            "ruleId": "VETTO-NET-001",
             "ruleIndex": 1,
             "level": "error",
             "message": {
-                "text": format!("Denied network CONNECT to {host}:{}", request.port)
+                "text": format!("Denied network CONNECT attempt to {host}:{}", request.port)
             },
             "locations": [{
                 "physicalLocation": {
@@ -103,19 +108,24 @@ pub fn render(stats: &SessionStats) -> String {
             }
         }));
     }
+
+    // VETTO-SYS-001: Suspicious security signal / heuristic
     for signal in &stats.suspicious_signals {
+        let category = clean(&crate::sanitizer::sanitize_line(&signal.category));
+        let severity = clean(&crate::sanitizer::sanitize_line(&signal.severity));
+        let subject = clean(&crate::sanitizer::sanitize_line(&signal.subject));
+        let reason = clean(&crate::sanitizer::sanitize_line(&signal.reason));
+
         results.push(serde_json::json!({
-            "ruleId": "vetto.suspicious-signal",
+            "ruleId": "VETTO-SYS-001",
             "ruleIndex": 2,
-            "level": match signal.severity.as_str() {
+            "level": match severity.as_str() {
                 "high" => "warning",
                 _ => "note",
             },
             "message": {
                 "text": format!(
-                    "Best-effort suspicious signal: {} ({}, {} occurrence(s))",
-                    clean(&signal.reason),
-                    clean(&signal.subject),
+                    "Suspicious signal intercepted: {reason} ({subject}, {} occurrence(s))",
                     signal.count
                 )
             },
@@ -128,9 +138,9 @@ pub fn render(stats: &SessionStats) -> String {
                 }
             }],
             "properties": {
-                "category": clean(&signal.category),
-                "severity": clean(&signal.severity),
-                "subject": clean(&signal.subject),
+                "category": category,
+                "severity": severity,
+                "subject": subject,
                 "count": signal.count,
                 "advisoryOnly": true
             }
@@ -148,22 +158,37 @@ pub fn render(stats: &SessionStats) -> String {
                     "informationUri": "https://github.com/shleder/vetto",
                     "rules": [
                         {
-                            "id": "vetto.blocked-attempt",
-                            "name": "BlockedAttempt",
-                            "shortDescription": { "text": "A sandbox policy blocked a file attempt." },
+                            "id": "VETTO-FS-001",
+                            "name": "FilesystemAccessViolation",
+                            "shortDescription": { "text": "Filesystem access attempt blocked by sandbox security policy." },
+                            "fullDescription": { "text": "The agent process attempted to access, read, or modify a filesystem path restricted by Landlock LSM or sandbox mount policies." },
+                            "help": {
+                                "text": "Review the accessed path in policy.toml and explicitly allow it with 'vetto allow <path>' if the access was intended.",
+                                "markdown": "Review the accessed path in `policy.toml` and explicitly allow it with `vetto allow <path>` if the access was intended."
+                            },
                             "defaultConfiguration": { "level": "error" }
                         },
                         {
-                            "id": "vetto.network-denied",
-                            "name": "NetworkDenied",
-                            "shortDescription": { "text": "The network broker denied a CONNECT request." },
+                            "id": "VETTO-NET-001",
+                            "name": "NetworkEgressViolation",
+                            "shortDescription": { "text": "Outbound network CONNECT denied by security policy." },
+                            "fullDescription": { "text": "The agent attempted an outbound TCP connection to a domain or port not permitted by policy.toml or preset allowlists." },
+                            "help": {
+                                "text": "Review the destination domain and permit it with 'vetto allow --net <domain>' if legitimate.",
+                                "markdown": "Review the destination domain and permit it with `vetto allow --net <domain>` if legitimate."
+                            },
                             "defaultConfiguration": { "level": "error" }
                         },
                         {
-                            "id": "vetto.suspicious-signal",
-                            "name": "SuspiciousSignal",
-                            "shortDescription": { "text": "Best-effort advisory pattern classifier signal." },
-                            "defaultConfiguration": { "level": "note" }
+                            "id": "VETTO-SYS-001",
+                            "name": "SecurityHeuristicViolation",
+                            "shortDescription": { "text": "Security heuristic or suspicious syscall intercepted." },
+                            "fullDescription": { "text": "A potentially dangerous syscall or anomalous process behavior pattern was detected by runtime observability." },
+                            "help": {
+                                "text": "Inspect the event details in ~/.vetto/history.jsonl to confirm whether this indicates an exploit attempt.",
+                                "markdown": "Inspect the event details in `~/.vetto/history.jsonl` to confirm whether this indicates an exploit attempt."
+                            },
+                            "defaultConfiguration": { "level": "warning" }
                         }
                     ]
                 }
@@ -225,8 +250,8 @@ mod tests {
         let results = value["runs"][0]["results"].as_array().unwrap();
         assert_eq!(results.len(), 3);
 
-        // Result 0: blocked-attempt
-        assert_eq!(results[0]["ruleId"], "vetto.blocked-attempt");
+        // Result 0: VETTO-FS-001
+        assert_eq!(results[0]["ruleId"], "VETTO-FS-001");
         assert_eq!(results[0]["ruleIndex"], 0);
         assert_eq!(results[0]["level"], "error");
         assert!(results[0]["message"]["text"]
@@ -237,16 +262,16 @@ mod tests {
         assert_eq!(loc0["uri"], "tmp/secret value");
         assert_eq!(loc0["uriBaseId"], "%SRCROOT%");
 
-        // Result 1: network-denied
-        assert_eq!(results[1]["ruleId"], "vetto.network-denied");
+        // Result 1: VETTO-NET-001
+        assert_eq!(results[1]["ruleId"], "VETTO-NET-001");
         assert_eq!(results[1]["ruleIndex"], 1);
         assert_eq!(results[1]["level"], "error");
         let loc1 = &results[1]["locations"][0]["physicalLocation"]["artifactLocation"];
         assert_eq!(loc1["uri"], ".vetto/policy.toml");
         assert_eq!(loc1["uriBaseId"], "%SRCROOT%");
 
-        // Result 2: suspicious-signal
-        assert_eq!(results[2]["ruleId"], "vetto.suspicious-signal");
+        // Result 2: VETTO-SYS-001
+        assert_eq!(results[2]["ruleId"], "VETTO-SYS-001");
         assert_eq!(results[2]["ruleIndex"], 2);
         assert_eq!(results[2]["level"], "warning");
         let loc2 = &results[2]["locations"][0]["physicalLocation"]["artifactLocation"];

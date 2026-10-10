@@ -57,7 +57,7 @@ pub fn handle_ephemeral_completion(
     auto_accept: bool,
     force_discard: bool,
 ) -> Result<()> {
-    if force_discard || exit_code != 0 {
+    let res = if force_discard || exit_code != 0 {
         if find_snapshot_archive(session_id).is_some() {
             crate::rescue::snapshot::rollback_snapshot(session_id, Some(project_dir))?;
             eprintln!(
@@ -70,16 +70,11 @@ pub fn handle_ephemeral_completion(
                  No pre-session snapshot found for automatic rollback."
             );
         }
-        return Ok(());
-    }
-
-    // exit_code == 0
-    if auto_accept {
+        Ok(())
+    } else if auto_accept {
         eprintln!("[VETTO EPHEMERAL] Session succeeded. Changes kept in workspace.");
-        return Ok(());
-    }
-
-    if std::io::stdin().is_terminal() {
+        Ok(())
+    } else if std::io::stdin().is_terminal() {
         print_change_preview(session_id, project_dir);
         eprint!("[VETTO EPHEMERAL] Apply changes to workspace? [Y/n]: ");
         let _ = std::io::stderr().flush();
@@ -99,12 +94,57 @@ pub fn handle_ephemeral_completion(
         } else {
             eprintln!("[VETTO EPHEMERAL] Changes kept in workspace.");
         }
+        Ok(())
     } else {
         // Non-interactive (piped / CI): default to keeping changes on exit 0
         eprintln!("[VETTO EPHEMERAL] Changes kept in workspace.");
+        Ok(())
+    };
+
+    // Clean up temporary snapshot directory for ephemeral session
+    if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
+        let snap_dir = root.join(session_id);
+        if snap_dir.exists() {
+            let _ = std::fs::remove_dir_all(&snap_dir);
+        }
     }
 
-    Ok(())
+    res
+}
+
+/// RAII guard that automatically triggers rollback and snapshot cleanup if dropped prematurely.
+pub struct EphemeralGuard {
+    session_id: String,
+    project_dir: PathBuf,
+    completed: bool,
+}
+
+impl EphemeralGuard {
+    pub fn new(session_id: String, project_dir: PathBuf) -> Self {
+        Self {
+            session_id,
+            project_dir,
+            completed: false,
+        }
+    }
+
+    pub fn complete(mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for EphemeralGuard {
+    fn drop(&mut self) {
+        if !self.completed {
+            let _ = crate::rescue::snapshot::rollback_snapshot(
+                &self.session_id,
+                Some(&self.project_dir),
+            );
+            if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
+                let _ = std::fs::remove_dir_all(root.join(&self.session_id));
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -245,5 +285,66 @@ mod tests {
         assert!(res_discard.is_ok());
 
         let _ = fs::remove_dir_all(&project_dir);
+    }
+
+    #[test]
+    fn test_ephemeral_guard_drop_rolls_back() {
+        let project_dir = temp_test_dir("guard-drop");
+        let file_path = project_dir.join("code.rs");
+        fs::write(&file_path, "fn main() { /* original */ }\n").unwrap();
+
+        let session_id = format!(
+            "test-guard-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        create_snapshot(&project_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        {
+            let _guard = EphemeralGuard::new(session_id.clone(), project_dir.clone());
+            fs::write(&file_path, "fn main() { /* crashed halfway */ }\n").unwrap();
+            // Drop without complete()
+        }
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "fn main() { /* original */ }\n"
+        );
+
+        let _ = fs::remove_dir_all(&project_dir);
+    }
+
+    #[test]
+    fn test_ephemeral_guard_complete_keeps_changes() {
+        let project_dir = temp_test_dir("guard-complete");
+        let file_path = project_dir.join("code.rs");
+        fs::write(&file_path, "fn main() { /* original */ }\n").unwrap();
+
+        let session_id = format!(
+            "test-guard-complete-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        create_snapshot(&project_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        {
+            let guard = EphemeralGuard::new(session_id.clone(), project_dir.clone());
+            fs::write(&file_path, "fn main() { /* kept */ }\n").unwrap();
+            guard.complete();
+        }
+
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "fn main() { /* kept */ }\n"
+        );
+
+        let _ = fs::remove_dir_all(&project_dir);
+        if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
+            let _ = fs::remove_dir_all(root.join(&session_id));
+        }
     }
 }

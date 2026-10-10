@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use serde::Deserialize;
 
 use crate::policy::types::{IoRateLimit, ResourceLimits};
@@ -32,6 +32,8 @@ pub struct RawLayer {
     pub limits: Option<RawLimits>,
     #[serde(default)]
     pub cgroup: Option<RawCgroup>,
+    #[serde(default)]
+    pub process: Option<RawProcess>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -284,8 +286,35 @@ impl RawStringList {
     }
 }
 
+#[derive(Deserialize, Debug, Clone, Default, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RawProcess {
+    #[serde(default)]
+    pub allowed_binaries: Option<RawStringList>,
+}
+
+pub type PolicySchema = RawLayer;
+pub type FilesystemSchema = RawFilesystem;
+pub type NetworkSchema = RawNetwork;
+pub type ProcessSchema = RawProcess;
+pub type ResourceLimitsSchema = RawLimits;
+pub type SecuritySchema = RawSecurity;
+pub type MetadataSchema = RawMetadata;
+pub type EnvironmentSchema = RawEnvironment;
+pub type CgroupSchema = RawCgroup;
+pub type NetPortsSchema = RawNetPorts;
+pub type UnixSocketsSchema = RawUnixSockets;
+pub type IoRateSchema = RawIoRate;
+pub type DenySchema = RawDeny;
+pub type SecretsSchema = RawSecrets;
+pub type SeccompNotifySchema = RawSeccompNotify;
+
 pub fn parse_layer(text: &str, label: &str) -> Result<RawLayer> {
-    toml::from_str(text).with_context(|| format!("failed to parse policy '{label}'"))
+    toml::from_str(text).map_err(|err| {
+        anyhow::Error::new(crate::policy::types::PolicyError::CompilationFailed(
+            format!("failed to parse policy '{label}': {err}"),
+        ))
+    })
 }
 
 pub fn expand_net_preset(name: &str) -> Result<Vec<String>> {

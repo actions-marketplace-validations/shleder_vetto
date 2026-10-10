@@ -14,3 +14,4 @@ f72f0c0ad2007498ea9fb69b84f28e7d2d213468:docs/schema/agent-requirements-50.json:
 9cd9344070231e0cfa6e7dd4f7c35a212e9f7649:tests/integration/secret_masking.rs:github-pat:43
 4326909b1a1b57d80a7201c8560a2624ed49f582:src/logger/sanitizer.rs:github-pat:201
 03d9a01cb82152fe0e8267344524b8308ee66f17:src/tui/app.rs:github-pat:472
+20272c8b7d8a15ef2ca000766511abfe3346f6eb:src/logger/jsonl.rs:github-pat:345

@@ -333,4 +333,18 @@ mod tests {
         assert!(cline_domains.contains(&"data.cline.bot"));
         assert!(cline_domains.contains(&"otel.cline.bot"));
     }
+
+    #[test]
+    fn every_agent_preset_has_explicit_network_and_parses_as_raw_layer() {
+        for name in AGENT_PROFILE_NAMES {
+            let text = agent_builtin(name).expect("agent preset must be embedded");
+            let layer: crate::policy::loader::RawLayer = toml::from_str(text)
+                .unwrap_or_else(|e| panic!("agent {name} failed RawLayer parse: {e}"));
+            assert!(layer.metadata.is_some(), "agent {name} lacks metadata");
+            assert!(
+                layer.network.is_some(),
+                "agent {name} lacks explicit [network] section"
+            );
+        }
+    }
 }

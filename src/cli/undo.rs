@@ -138,15 +138,15 @@ pub fn run_undo(args: &UndoArgs) -> Result<()> {
         return Ok(());
     }
 
-    let res = snapshot::rollback_snapshot(
+    let res = crate::rescue::rollback::rollback_session(
         &target_snapshot.session_id,
         args.target.as_deref().map(Path::new),
     )?;
 
     println!("vetto: restored snapshot from session {}", res.session_id);
     println!(
-        "  Files restored: {} | Bytes: {}",
-        res.files_restored, res.bytes_restored
+        "  Files restored: {} | Bytes: {} | Files deleted: {}",
+        res.files_restored, res.bytes_restored, res.files_deleted
     );
     println!("  Target: {}", res.target_dir.display());
 
@@ -231,9 +231,12 @@ mod tests {
                 .expect("create snapshot");
         assert_eq!(meta.file_count, 2);
 
-        // Modify files
+        // Modify files and add rogue untracked file
         fs::write(&file_a, "corrupted content a").unwrap();
         fs::write(&file_b, "corrupted content b").unwrap();
+        let rogue_file = proj_dir.join("rogue.txt");
+        fs::write(&rogue_file, "rogue agent mutation").unwrap();
+        assert!(rogue_file.exists());
 
         let args = UndoArgs {
             session_id: Some(session_id),
@@ -247,6 +250,10 @@ mod tests {
 
         assert_eq!(fs::read_to_string(&file_a).unwrap(), "original content a");
         assert_eq!(fs::read_to_string(&file_b).unwrap(), "original content b");
+        assert!(
+            !rogue_file.exists(),
+            "rogue file should be deleted on rollback"
+        );
 
         if let Some(h) = old_home {
             std::env::set_var("HOME", h);

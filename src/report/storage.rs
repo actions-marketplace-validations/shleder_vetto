@@ -19,6 +19,30 @@ use std::os::unix::fs::MetadataExt;
 
 static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Resolves the default reports directory (`~/.vetto/reports/<session_id>/` or `~/.vetto/reports/`).
+///
+/// Avoids cluttering the project directory by defaulting to the per-user
+/// configuration directory while isolating reports per session.
+pub fn default_reports_dir(session_id: Option<&str>) -> PathBuf {
+    let base = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .map(|home| home.join(".vetto").join("reports"))
+        .unwrap_or_else(|| PathBuf::from(".vetto/reports"));
+    if let Some(session) = session_id {
+        let mut sanitized = session.trim().to_string();
+        while sanitized.contains("..") {
+            sanitized = sanitized.replace("..", "");
+        }
+        let sanitized = sanitized.replace(['/', '\\'], "_");
+        let clean = sanitized.trim_matches('_');
+        if !clean.is_empty() {
+            return base.join(clean);
+        }
+    }
+    base
+}
+
 pub struct ReportStorage {
     root: PathBuf,
     auto_cleanup: bool,
@@ -31,7 +55,7 @@ impl ReportStorage {
         let requested = options
             .report_dir
             .clone()
-            .unwrap_or_else(|| PathBuf::from(".vetto/reports"));
+            .unwrap_or_else(|| default_reports_dir(options.session_id.as_deref()));
         let root = if requested.is_absolute() {
             requested
         } else {
@@ -367,5 +391,45 @@ mod tests {
         assert!(path.exists());
         assert!(hardlink.exists());
         fs::remove_dir_all(root).expect("remove root");
+    }
+
+    #[test]
+    fn default_reports_dir_resolves_home_and_session() {
+        let dir = default_reports_dir(Some("session-12345"));
+        let path_str = dir.to_string_lossy();
+        assert!(path_str.contains(".vetto"));
+        assert!(path_str.contains("reports"));
+        assert!(path_str.ends_with("session-12345"));
+    }
+
+    #[test]
+    fn default_reports_dir_without_session() {
+        let dir = default_reports_dir(None);
+        let path_str = dir.to_string_lossy();
+        assert!(path_str.contains(".vetto"));
+        assert!(path_str.ends_with("reports"));
+    }
+
+    #[test]
+    fn storage_uses_session_id_when_report_dir_is_none() {
+        let options = ReportOptions {
+            report_dir: None,
+            session_id: Some("session-storage-test".to_string()),
+            ..ReportOptions::default()
+        };
+        let storage = ReportStorage::new(&options).expect("storage");
+        let root_str = storage.root().to_string_lossy();
+        assert!(root_str.ends_with("session-storage-test"));
+        let _ = fs::remove_dir(storage.root());
+    }
+
+    #[test]
+    fn default_reports_dir_sanitizes_path_traversal() {
+        let dir = default_reports_dir(Some("../../etc/passwd"));
+        let path_str = dir.to_string_lossy();
+        assert!(!path_str.contains(".."));
+        assert!(path_str.ends_with("etc_passwd"));
+        assert!(path_str.contains(".vetto"));
+        assert!(path_str.contains("reports"));
     }
 }

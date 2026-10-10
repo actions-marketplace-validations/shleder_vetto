@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+pub use crate::policy::types::{Action, ActionVerdict, PolicyError};
+
 /// Unsealed contract payload used for deterministic canonical hashing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UnsealedSecurityContract {
@@ -40,9 +42,23 @@ impl UnsealedSecurityContract {
         Ok(hasher.finalize().to_hex())
     }
 
-    /// Seal the contract, binding the cryptographic digest.
+    /// Compute deterministic cryptographic digest (SHA-256) of canonical serialization (INV-36).
+    pub fn compute_sha256_digest(&self) -> Result<String, serde_json::Error> {
+        use sha2::{Digest, Sha256};
+        let mut payload = self.clone();
+        payload.crypto.signature = None;
+        let value = serde_json::to_value(payload)?;
+        let json_bytes = serde_json::to_vec(&value)?;
+        let mut hasher = Sha256::new();
+        hasher.update(&json_bytes);
+        let hash_bytes = hasher.finalize();
+        Ok(hash_bytes.iter().map(|b| format!("{b:02x}")).collect())
+    }
+
+    /// Seal the contract, binding the cryptographic digests (BLAKE3 and deterministic SHA-256).
     pub fn seal(self) -> Result<SecurityContract, serde_json::Error> {
         let digest = self.compute_digest()?;
+        let sha256_digest = self.compute_sha256_digest()?;
         Ok(SecurityContract {
             production: self.production,
             contract_version: self.contract_version,
@@ -56,6 +72,7 @@ impl UnsealedSecurityContract {
             attestation: self.attestation,
             crypto: self.crypto,
             contract_digest_blake3: digest,
+            sealed_contract_hash: sha256_digest,
         })
     }
 }
@@ -80,6 +97,10 @@ pub struct SecurityContract {
     /// Skipped during canonical serialization to avoid circular dependencies.
     #[serde(default, skip_serializing)]
     pub contract_digest_blake3: String,
+    /// Deterministic SHA-256 digest of CanonicalJSON(UnsealedSecurityContract) (INV-36).
+    /// Skipped during canonical serialization to avoid circular dependencies.
+    #[serde(default, skip_serializing)]
+    pub sealed_contract_hash: String,
 }
 
 impl SecurityContract {
@@ -108,12 +129,50 @@ impl SecurityContract {
         }
     }
 
+    /// Verify that the sealed contract SHA-256 hash matches the unsealed payload (INV-36).
+    pub fn verify_sha256(&self) -> bool {
+        match self.unsealed().compute_sha256_digest() {
+            Ok(expected) => {
+                !self.sealed_contract_hash.is_empty() && expected == self.sealed_contract_hash
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Verify that all cryptographic digests match the unsealed payload.
+    /// Returns Err(PolicyError::VerificationFailed) on any mismatch, enforcing fail-closed Exit 125.
+    pub fn verify_sealed(&self) -> Result<(), crate::policy::types::PolicyError> {
+        if !self.verify_sha256() {
+            return Err(crate::policy::types::PolicyError::VerificationFailed(
+                format!(
+                    "Contract tamper detected: SHA-256 mismatch (expected: {}, found: {})",
+                    self.unsealed().compute_sha256_digest().unwrap_or_default(),
+                    self.sealed_contract_hash
+                ),
+            ));
+        }
+        if !self.verify_digest() {
+            return Err(crate::policy::types::PolicyError::VerificationFailed(
+                format!(
+                    "Contract tamper detected: BLAKE3 mismatch (expected: {}, found: {})",
+                    self.unsealed().compute_digest().unwrap_or_default(),
+                    self.contract_digest_blake3
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// Sets the crypto contract configuration.
     pub fn with_crypto(mut self, crypto: CryptoContract) -> Self {
         self.crypto = crypto;
         self.contract_digest_blake3 = self
             .unsealed()
             .compute_digest()
+            .expect("contract contains only JSON-serializable values");
+        self.sealed_contract_hash = self
+            .unsealed()
+            .compute_sha256_digest()
             .expect("contract contains only JSON-serializable values");
         self
     }
@@ -132,7 +191,29 @@ impl SecurityContract {
             .unsealed()
             .compute_digest()
             .expect("contract contains only JSON-serializable values");
+        self.sealed_contract_hash = self
+            .unsealed()
+            .compute_sha256_digest()
+            .expect("contract contains only JSON-serializable values");
         self
+    }
+
+    /// Exports lowered Landlock and Seccomp enforcement metadata (Phase 4).
+    pub fn lower_enforcement_metadata(
+        &self,
+        abi: u32,
+    ) -> crate::policy_ir::compiler::LoweredEnforcementMetadata {
+        crate::policy_ir::compiler::LoweredEnforcementMetadata {
+            landlock_abi: abi,
+            read_paths: self.filesystem.allow_read.clone(),
+            write_paths: self.filesystem.allow_write.clone(),
+            mask_paths: self.filesystem.mask_paths.clone(),
+            network_connect_ports: self.network.allowed_ports.clone(),
+            seccomp_profile: self.production.as_ref().map_or("default".into(), |p| {
+                format!("{:?}", p.installation_policy.seccomp_profile)
+            }),
+            observe_seccomp: self.production.as_ref().is_some_and(|p| p.observe_seccomp),
+        }
     }
 }
 

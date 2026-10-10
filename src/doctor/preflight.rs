@@ -1116,16 +1116,47 @@ fn execute_linux_preflight() -> PreflightReport {
 #[cfg(target_os = "macos")]
 fn execute_macos_preflight() -> PreflightReport {
     let runtime_paths = probe_runtime_paths();
+    let seatbelt_ok = crate::sandbox::macos::MacosSandbox::seatbelt_available();
+    let sbpl_status = crate::sandbox::macos::seatbelt::probe_sbpl_read_fragment();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let tcc_protected = crate::doctor::fix::is_macos_tcc_protected_path(&cwd);
+
+    let is_degraded = !seatbelt_ok
+        || sbpl_status != crate::sandbox::macos::seatbelt::SbplFragmentStatus::Ok
+        || tcc_protected;
+
+    let verdict = if !seatbelt_ok {
+        PreflightVerdict::Fail
+    } else if is_degraded {
+        PreflightVerdict::Degraded
+    } else {
+        PreflightVerdict::Pass
+    };
+
+    let exit_code = if verdict == PreflightVerdict::Fail {
+        125
+    } else {
+        0
+    };
+
     PreflightReport {
-        verdict: PreflightVerdict::Pass,
-        exit_code: 0,
+        verdict,
+        exit_code,
         landlock: LandlockDiagnostic {
             supported: false,
             abi_version: None,
             max_supported_abi: 0,
-            status: "unsupported".to_string(),
+            status: if seatbelt_ok {
+                "seatbelt_active".to_string()
+            } else {
+                "seatbelt_missing".to_string()
+            },
             raw_errno: None,
-            message: "Seatbelt SBPL used on macOS instead of Landlock LSM".to_string(),
+            message: if seatbelt_ok {
+                "Seatbelt SBPL used on macOS (Tier 2)".to_string()
+            } else {
+                "Seatbelt framework / sandbox-exec unavailable on macOS".to_string()
+            },
             feature_hints: Vec::new(),
         },
         namespaces: NamespacesDiagnostic {

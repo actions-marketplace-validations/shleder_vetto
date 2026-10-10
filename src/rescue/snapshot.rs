@@ -24,14 +24,9 @@ pub struct SnapshotMetadata {
     pub total_size_bytes: u64,
 }
 
-/// Result of a rollback operation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct RollbackResult {
-    pub session_id: String,
-    pub target_dir: PathBuf,
-    pub files_restored: usize,
-    pub bytes_restored: u64,
-}
+pub use super::rollback::{
+    rollback_session, rollback_session as rollback_snapshot, RollbackResult,
+};
 
 /// Resolves the snapshots root directory (`~/.vetto/snapshots`).
 pub fn snapshots_root_dir() -> Result<PathBuf> {
@@ -195,8 +190,9 @@ pub fn create_snapshot(
         .with_context(|| format!("create snapshot dir {}", snapshots_dir.display()))?;
 
     let archive_path = snapshots_dir.join("snapshot.tar");
-    let mut file = File::create(&archive_path)
+    let file = File::create(&archive_path)
         .with_context(|| format!("create archive {}", archive_path.display()))?;
+    let mut file = std::io::BufWriter::new(file);
 
     let mut file_count = 0;
     let mut total_size = 0u64;
@@ -211,11 +207,16 @@ pub fn create_snapshot(
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if path.is_dir() {
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
                 if !crate::fs::is_ignored_directory(&name) {
                     queue.push(path);
                 }
-            } else if path.is_file() {
+            } else if file_type.is_file() {
                 let Ok(meta) = entry.metadata() else {
                     continue;
                 };
@@ -224,6 +225,10 @@ pub fn create_snapshot(
                     // Clean up and fail closed
                     drop(file);
                     let _ = std::fs::remove_file(&archive_path);
+                    eprintln!(
+                        "vetto: warning: project size exceeds snapshot limit ({} MB); snapshot aborted (undo/rollback disabled).",
+                        max_bytes / (1024 * 1024)
+                    );
                     bail!(
                         "project size (exceeds {} MB) exceeds maximum snapshot limit; snapshot aborted",
                         max_bytes / (1024 * 1024)
@@ -237,11 +242,20 @@ pub fn create_snapshot(
                         continue;
                     };
                     if f.read_to_end(&mut data).is_ok() {
-                        write_tar_entry(
+                        #[cfg(unix)]
+                        let mode = {
+                            use std::os::unix::fs::PermissionsExt;
+                            meta.permissions().mode() & 0o777
+                        };
+                        #[cfg(not(unix))]
+                        let mode = 0o644;
+
+                        write_tar_entry_with_mode(
                             &mut file,
                             &rel_str,
                             &data,
                             meta.modified().unwrap_or(SystemTime::now()),
+                            mode,
                         )?;
                         file_count += 1;
                         total_size += file_len;
@@ -275,105 +289,50 @@ pub fn create_snapshot(
     Ok(metadata)
 }
 
-/// Rollback / restore a project snapshot.
-pub fn rollback_snapshot(
-    session: &str,
-    target_dir_override: Option<&Path>,
-) -> Result<RollbackResult> {
-    let session_path = Path::new(session);
-    let (archive_path, project_dir) = if session_path.is_file() {
-        // Direct path to tar archive
-        let parent = session_path.parent().unwrap_or(Path::new("."));
-        let meta_file = parent.join("metadata.json");
-        let proj = if meta_file.exists() {
-            let text = std::fs::read_to_string(&meta_file).unwrap_or_default();
-            let meta: Option<SnapshotMetadata> = serde_json::from_str(&text).ok();
-            meta.map(|m| m.project_dir)
-                .unwrap_or_else(|| PathBuf::from("."))
-        } else {
-            PathBuf::from(".")
-        };
-        (session_path.to_path_buf(), proj)
-    } else {
-        let root = snapshots_root_dir()?;
-        let dir = root.join(session);
-        if !dir.exists() {
-            bail!(
-                "snapshot for session '{session}' was not found in {}",
-                root.display()
-            );
+/// Attempts a Copy-on-Write reflink clone of `src` to `dst`, falling back to standard copy if unsupported.
+pub fn try_reflink_clone(src: &Path, dst: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        let src_file = File::open(src)?;
+        let dst_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(dst)?;
+        let ret = unsafe { libc::ioctl(dst_file.as_raw_fd(), 0x40049409, src_file.as_raw_fd()) };
+        if ret == 0 {
+            return Ok(());
         }
-        let archive = dir.join("snapshot.tar");
-        if !archive.exists() {
-            bail!("snapshot archive '{}' not found", archive.display());
-        }
-        let meta_file = dir.join("metadata.json");
-        let proj = if meta_file.exists() {
-            let text = std::fs::read_to_string(&meta_file).unwrap_or_default();
-            let meta: Option<SnapshotMetadata> = serde_json::from_str(&text).ok();
-            meta.map(|m| m.project_dir)
-                .unwrap_or_else(|| PathBuf::from("."))
-        } else {
-            PathBuf::from(".")
-        };
-        (archive, proj)
-    };
-
-    let dest = target_dir_override.unwrap_or(&project_dir);
-    std::fs::create_dir_all(dest)
-        .with_context(|| format!("failed to create restore directory {}", dest.display()))?;
-
-    let mut archive_file = File::open(&archive_path)
-        .with_context(|| format!("failed to open snapshot archive {}", archive_path.display()))?;
-
-    let mut files_restored = 0;
-    let mut bytes_restored = 0u64;
-
-    loop {
-        let mut header = [0u8; 512];
-        let n = archive_file.read(&mut header)?;
-        if n < 512 || header.iter().all(|&b| b == 0) {
-            break;
-        }
-
-        let (name, size) = parse_tar_header(&header)?;
-        if name.is_empty() {
-            break;
-        }
-
-        // Read file data
-        let mut data = vec![0u8; size as usize];
-        archive_file.read_exact(&mut data)?;
-
-        // Skip padding
-        let padding = (512 - (size % 512)) % 512;
-        if padding > 0 {
-            let mut pad_buf = vec![0u8; padding as usize];
-            archive_file.read_exact(&mut pad_buf)?;
-        }
-
-        // Prevent path traversal
-        let clean_path = Path::new(&name);
-        if clean_path.is_absolute()
-            || clean_path
-                .components()
-                .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
-            continue;
-        }
-
-        let out_path = dest.join(clean_path);
-        super::rollback::atomic_commit_bytes(&out_path, &data)?;
-        files_restored += 1;
-        bytes_restored += size;
+        drop(dst_file);
+        drop(src_file);
+        std::fs::copy(src, dst).map(|_| ())
     }
-
-    Ok(RollbackResult {
-        session_id: session.to_string(),
-        target_dir: dest.to_path_buf(),
-        files_restored,
-        bytes_restored,
-    })
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let src_c = CString::new(src.as_os_str().as_bytes())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let dst_c = CString::new(dst.as_os_str().as_bytes())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        extern "C" {
+            fn clonefile(
+                src: *const libc::c_char,
+                dst: *const libc::c_char,
+                flags: libc::c_int,
+            ) -> libc::c_int;
+        }
+        let ret = unsafe { clonefile(src_c.as_ptr(), dst_c.as_ptr(), 0) };
+        if ret == 0 {
+            return Ok(());
+        }
+        std::fs::copy(src, dst).map(|_| ())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        std::fs::copy(src, dst).map(|_| ())
+    }
 }
 
 pub fn write_tar_entry<W: Write>(
@@ -382,6 +341,16 @@ pub fn write_tar_entry<W: Write>(
     data: &[u8],
     mtime: SystemTime,
 ) -> Result<()> {
+    write_tar_entry_with_mode(writer, path, data, mtime, 0o644)
+}
+
+pub fn write_tar_entry_with_mode<W: Write>(
+    writer: &mut W,
+    path: &str,
+    data: &[u8],
+    mtime: SystemTime,
+    mode: u32,
+) -> Result<()> {
     let mut header = [0u8; 512];
 
     // Name (100 bytes)
@@ -389,8 +358,9 @@ pub fn write_tar_entry<W: Write>(
     let name_len = path_bytes.len().min(100);
     header[..name_len].copy_from_slice(&path_bytes[..name_len]);
 
-    // Mode (8 bytes): 0000644\0
-    header[100..108].copy_from_slice(b"0000644\0");
+    // Mode (8 bytes): octal mode
+    let mode_oct = format!("{:07o}\0", mode & 0o777);
+    header[100..108].copy_from_slice(mode_oct.as_bytes());
     // UID / GID: 0000000\0
     header[108..116].copy_from_slice(b"0000000\0");
     header[116..124].copy_from_slice(b"0000000\0");
@@ -432,6 +402,11 @@ pub fn write_tar_entry<W: Write>(
 }
 
 pub fn parse_tar_header(header: &[u8; 512]) -> Result<(String, u64)> {
+    let (name, size, _) = parse_tar_header_with_mode(header)?;
+    Ok((name, size))
+}
+
+pub fn parse_tar_header_with_mode(header: &[u8; 512]) -> Result<(String, u64, u32)> {
     let name_bytes: Vec<u8> = header[..100]
         .iter()
         .take_while(|&&b| b != 0)
@@ -439,24 +414,32 @@ pub fn parse_tar_header(header: &[u8; 512]) -> Result<(String, u64)> {
         .collect();
     let name = String::from_utf8_lossy(&name_bytes).to_string();
 
+    let mode_str = String::from_utf8_lossy(&header[100..108])
+        .trim()
+        .trim_matches('\0')
+        .to_string();
+    let mode = u32::from_str_radix(&mode_str, 8).unwrap_or(0o644);
+
     let size_str = String::from_utf8_lossy(&header[124..136])
         .trim()
         .trim_matches('\0')
         .to_string();
     let size = u64::from_str_radix(&size_str, 8).unwrap_or(0);
 
-    Ok((name, size))
+    Ok((name, size, mode))
 }
 
-/// Read entries and contents from a snapshot tar archive.
-pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+/// Read entries, contents, and POSIX modes from a snapshot tar archive.
+pub fn read_tar_archive_with_modes(path: &Path) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
     let file = File::open(path)
         .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
-    read_tar_entries(file)
+    read_tar_entries_with_modes(file)
 }
 
-/// Read tar entries from an arbitrary byte reader.
-pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
+/// Read tar entries and POSIX modes from an arbitrary byte reader.
+pub fn read_tar_entries_with_modes<R: Read>(
+    mut reader: R,
+) -> Result<BTreeMap<String, (Vec<u8>, u32)>> {
     let mut entries = BTreeMap::new();
     loop {
         let mut header = [0u8; 512];
@@ -465,7 +448,7 @@ pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u
             break;
         }
 
-        let (name, size) = parse_tar_header(&header)?;
+        let (name, size, mode) = parse_tar_header_with_mode(&header)?;
         if name.is_empty() {
             break;
         }
@@ -486,10 +469,23 @@ pub fn read_tar_entries<R: Read>(mut reader: R) -> Result<BTreeMap<String, Vec<u
                 .any(|c| matches!(c, std::path::Component::ParentDir))
         {
             let normalized = name.replace('\\', "/");
-            entries.insert(normalized, data);
+            entries.insert(normalized, (data, mode));
         }
     }
     Ok(entries)
+}
+
+/// Read entries and contents from a snapshot tar archive.
+pub fn read_tar_archive(path: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
+    let file = File::open(path)
+        .with_context(|| format!("failed to open snapshot archive {}", path.display()))?;
+    read_tar_entries(file)
+}
+
+/// Read tar entries from an arbitrary byte reader.
+pub fn read_tar_entries<R: Read>(reader: R) -> Result<BTreeMap<String, Vec<u8>>> {
+    let entries = read_tar_entries_with_modes(reader)?;
+    Ok(entries.into_iter().map(|(k, (v, _))| (k, v)).collect())
 }
 
 /// Scan current project directory, ignoring transient / toolchain folders.
@@ -506,11 +502,16 @@ pub fn scan_disk_files(root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
 
-            if path.is_dir() {
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
                 if !crate::fs::is_ignored_directory(&name) {
                     queue.push(path);
                 }
-            } else if path.is_file() {
+            } else if file_type.is_file() {
                 if let Ok(rel) = path.strip_prefix(root) {
                     let rel_str = rel.to_string_lossy().replace('\\', "/");
                     if let Ok(bytes) = std::fs::read(&path) {
@@ -597,5 +598,90 @@ mod tests {
 
         let _ = fs::remove_dir_all(&src_dir);
         let _ = fs::remove_dir_all(&restore_dir);
+    }
+
+    #[test]
+    fn rollback_deletes_untracked_files() {
+        let src_dir = temp_test_dir("untracked");
+        fs::write(src_dir.join("original.txt"), "original\n").unwrap();
+
+        let session_id = format!("test-session-untracked-{}", std::process::id());
+        create_snapshot(&src_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        // Simulate agent adding a new rogue file
+        fs::write(src_dir.join("rogue.txt"), "rogue script\n").unwrap();
+        assert!(src_dir.join("rogue.txt").exists());
+
+        let res = rollback_snapshot(&session_id, Some(&src_dir)).unwrap();
+        assert_eq!(res.files_restored, 1);
+        assert_eq!(res.files_deleted, 1);
+        assert!(!src_dir.join("rogue.txt").exists());
+        assert!(src_dir.join("original.txt").exists());
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn ignored_directories_are_excluded_from_snapshot() {
+        let src_dir = temp_test_dir("ignored");
+
+        // Ignored build/toolchain directories
+        let ignored_dirs = [".git", "node_modules", "target", ".venv", "dist", "build"];
+        for d in &ignored_dirs {
+            let dir_path = src_dir.join(d);
+            fs::create_dir_all(&dir_path).unwrap();
+            fs::write(dir_path.join("file.txt"), "ignored content").unwrap();
+        }
+
+        // Legitimate source directory
+        let legit_dir = src_dir.join("src");
+        fs::create_dir_all(&legit_dir).unwrap();
+        fs::write(legit_dir.join("main.rs"), "fn main() {}\n").unwrap();
+
+        let session_id = format!("test-session-ignored-{}", std::process::id());
+        let meta = create_snapshot(&src_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        assert_eq!(
+            meta.file_count, 1,
+            "only legit src/main.rs should be included"
+        );
+        let entries = inspect_snapshot_archive(&session_id).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, "src/main.rs");
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn snapshot_aborts_on_exceeded_size_limit() {
+        let src_dir = temp_test_dir("size-limit");
+        fs::write(src_dir.join("large.bin"), vec![0u8; 1000]).unwrap();
+
+        let session_id = format!("test-session-size-{}", std::process::id());
+        // Quota is 500 bytes, file is 1000 bytes
+        let res = create_snapshot(&src_dir, &session_id, 500);
+
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("exceeds maximum snapshot limit"));
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn test_try_reflink_clone() {
+        let dir = temp_test_dir("reflink");
+        let src = dir.join("src.txt");
+        let dst = dir.join("dst.txt");
+        let payload = "reflink test payload";
+        fs::write(&src, payload).unwrap();
+
+        let res = try_reflink_clone(&src, &dst);
+        assert!(res.is_ok(), "try_reflink_clone should succeed: {:?}", res);
+        assert!(dst.exists(), "destination file must exist");
+        let content = fs::read_to_string(&dst).unwrap();
+        assert_eq!(content, payload, "destination must match test payload");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
