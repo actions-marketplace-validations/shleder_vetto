@@ -10,8 +10,8 @@
 //! 6. Bare launch zero-arg verification (`vetto` with 0 args returns summary and exit code 0).
 //! 7. Bare launch in empty directory vs directory with agent preset.
 
-use std::process::Command;
 use crate::common::*;
+use std::process::Command;
 use vetto::exit_codes::{
     map_session_exit_code, EXIT_COMMAND_NOT_FOUND, EXIT_FAIL_CLOSED, EXIT_SIGNAL_BASE,
     EXIT_SUCCESS, EXIT_TIMEOUT,
@@ -113,10 +113,22 @@ fn test_top_level_help_and_hidden_commands_contract() {
 
     // Verify key public subcommands are visible in top-level help
     assert!(help_text.contains("Commands:"), "missing Commands section");
-    assert!(help_text.contains("enable"), "enable must be listed in help");
-    assert!(help_text.contains("disable"), "disable must be listed in help");
-    assert!(help_text.contains("doctor"), "doctor must be listed in help");
-    assert!(help_text.contains("status"), "status must be listed in help");
+    assert!(
+        help_text.contains("enable"),
+        "enable must be listed in help"
+    );
+    assert!(
+        help_text.contains("disable"),
+        "disable must be listed in help"
+    );
+    assert!(
+        help_text.contains("doctor"),
+        "doctor must be listed in help"
+    );
+    assert!(
+        help_text.contains("status"),
+        "status must be listed in help"
+    );
     assert!(help_text.contains("allow"), "allow must be listed in help");
     assert!(help_text.contains("deny"), "deny must be listed in help");
     assert!(help_text.contains("run"), "run must be listed in help");
@@ -222,13 +234,34 @@ fn test_bare_launch_zero_arg_in_empty_directory() {
     );
 
     let stdout_str = stdout(&out);
-    assert!(stdout_str.contains("vetto v"), "missing version: {stdout_str}");
-    assert!(stdout_str.contains("environment:"), "missing environment: {stdout_str}");
-    assert!(stdout_str.contains("active sessions:"), "missing active sessions: {stdout_str}");
-    assert!(stdout_str.contains("Get started:"), "missing Get started guidance: {stdout_str}");
-    assert!(stdout_str.contains("vetto enable <agent>"), "missing enable hint: {stdout_str}");
-    assert!(stdout_str.contains("vetto run <command>"), "missing run hint: {stdout_str}");
-    assert!(stdout_str.contains("vetto doctor"), "missing doctor hint: {stdout_str}");
+    assert!(
+        stdout_str.contains("vetto v"),
+        "missing version: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("environment:"),
+        "missing environment: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("active sessions:"),
+        "missing active sessions: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("Get started:"),
+        "missing Get started guidance: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("vetto enable <agent>"),
+        "missing enable hint: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("vetto run <command>"),
+        "missing run hint: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("vetto doctor"),
+        "missing doctor hint: {stdout_str}"
+    );
 }
 
 #[test]

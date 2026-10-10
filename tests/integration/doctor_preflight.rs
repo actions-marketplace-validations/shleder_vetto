@@ -346,7 +346,9 @@ fn test_doctor_fix_and_agent_check_remediation() {
     );
     let fix_stdout = String::from_utf8_lossy(&fix_out.stdout);
     assert!(
-        fix_stdout.contains("vetto v") || fix_stdout.contains("doctor") || fix_stdout.contains("kernel"),
+        fix_stdout.contains("vetto v")
+            || fix_stdout.contains("doctor")
+            || fix_stdout.contains("kernel"),
         "doctor --fix output missing status info: {fix_stdout}"
     );
 
@@ -376,4 +378,3 @@ fn test_doctor_landlock_abi_probes_and_features() {
         }
     }
 }
-

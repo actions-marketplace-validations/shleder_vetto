@@ -12,9 +12,9 @@ mod adv_isolation;
 mod adversarial_suite;
 #[cfg(target_os = "linux")]
 mod anti_ssrf;
+mod cli_30_subcommands;
 mod cli_auto_enable;
 mod cli_reporting;
-mod cli_30_subcommands;
 #[cfg(target_os = "linux")]
 mod computer_use_plugins;
 mod doctor_parity;

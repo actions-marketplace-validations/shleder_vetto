@@ -443,7 +443,15 @@ fn test_preset_swebench_cli_run() {
 #[test]
 fn test_interactive_process_tui_mode_fallback() {
     // 1. Full-screen interactive agents default to no TUI
-    let interactive_agents = ["claude", "aider", "codex", "cursor", "cline", "openhands", "devin"];
+    let interactive_agents = [
+        "claude",
+        "aider",
+        "codex",
+        "cursor",
+        "cline",
+        "openhands",
+        "devin",
+    ];
     for agent in interactive_agents {
         assert!(
             vetto::config::should_default_to_no_tui(Some(agent), &[]),
@@ -508,7 +516,8 @@ fn test_tui_10_fps_and_decstbm_scroll_isolation() {
     assert!(restore_seq.contains("\x1b[2K\x1b[0m"));
 
     // 4. AppState 3-second security block alert timer
-    let mut app = vetto::tui::app::AppState::new("default", Some("claude".to_string()));
+    let mut app = vetto::tui::app::AppState::new("full", "off", "default");
+    app.agent = Some("claude".to_string());
 
     // Inactive alert returns standard protected text
     let normal_text = app.status_text(80);
@@ -529,7 +538,9 @@ fn test_tui_10_fps_and_decstbm_scroll_isolation() {
     // Expired alert clears the blocked prefix
     app.active_alert = Some((
         "[BLOCKED: ~/.ssh/id_rsa]".to_string(),
-        Instant::now().checked_sub(Duration::from_millis(50)).unwrap(),
+        Instant::now()
+            .checked_sub(Duration::from_millis(50))
+            .unwrap(),
     ));
     let expired_text = app.status_text(80);
     assert!(
@@ -537,4 +548,3 @@ fn test_tui_10_fps_and_decstbm_scroll_isolation() {
         "expired alert must not appear in status_text: {expired_text}"
     );
 }
-

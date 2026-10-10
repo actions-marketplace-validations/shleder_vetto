@@ -319,7 +319,14 @@ fn test_bench_fast_path_json_execution() {
     let proj_dir = project.path();
 
     let out = std::process::Command::new(crate::common::vetto_bin())
-        .args(["bench", "--json", "--workspace", &proj_dir.to_string_lossy(), "--", "true"])
+        .args([
+            "bench",
+            "--json",
+            "--workspace",
+            &proj_dir.to_string_lossy(),
+            "--",
+            "true",
+        ])
         .current_dir(proj_dir)
         .env("HOME", crate::common::test_home())
         .output()
@@ -345,4 +352,3 @@ fn test_bench_fast_path_json_execution() {
     assert!(val["duration_ms"].is_number());
     assert!(val["peak_memory_bytes"].is_number());
 }
-

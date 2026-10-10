@@ -451,4 +451,3 @@ fn test_disable_arg_validation() {
         "disable with both agent and --all must fail"
     );
 }
-

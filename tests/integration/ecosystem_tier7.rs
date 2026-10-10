@@ -65,8 +65,11 @@ fn test_mcp_server_stdio_protocol() {
     stdin.flush().expect("flush");
 
     line.clear();
-    reader.read_line(&mut line).expect("read tools/call err resp");
-    let resp_err: serde_json::Value = serde_json::from_str(&line).expect("parse tools/call err resp");
+    reader
+        .read_line(&mut line)
+        .expect("read tools/call err resp");
+    let resp_err: serde_json::Value =
+        serde_json::from_str(&line).expect("parse tools/call err resp");
     assert_eq!(resp_err["id"], 3);
     assert!(
         resp_err.get("error").is_some() || resp_err["result"]["isError"] == true,
@@ -85,7 +88,10 @@ fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
         .output()
         .expect("exec vetto mcp wrap --help");
 
-    assert!(help_out.status.success(), "vetto mcp wrap --help must succeed");
+    assert!(
+        help_out.status.success(),
+        "vetto mcp wrap --help must succeed"
+    );
     let help_text = String::from_utf8_lossy(&help_out.stdout);
     assert!(help_text.contains("vetto mcp wrap"));
 
@@ -93,7 +99,13 @@ fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
     #[cfg(unix)]
     {
         let wrap_out = Command::new(vetto_bin())
-            .args(["mcp", "wrap", "--", "echo", "{\"jsonrpc\":\"2.0\",\"id\":1}"])
+            .args([
+                "mcp",
+                "wrap",
+                "--",
+                "echo",
+                "{\"jsonrpc\":\"2.0\",\"id\":1}",
+            ])
             .output()
             .expect("exec vetto mcp wrap echo");
 
@@ -118,4 +130,3 @@ fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
         );
     }
 }
-

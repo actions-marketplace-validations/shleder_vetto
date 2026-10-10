@@ -161,7 +161,8 @@ fn test_bash_hook_handles_multiple_dirty_shims_occurrences() {
 #[test]
 fn test_shell_env_prompt_integration_all_shells() {
     // 1. POSIX / Bash / Zsh prompt integration
-    let posix_env = vetto::cli::shell_env::emit_shell_env(Some("sess-123"), Some("full"), Some("strict"));
+    let posix_env =
+        vetto::cli::shell_env::emit_shell_env(Some("sess-123"), Some("full"), Some("strict"));
     assert!(posix_env.contains("export VETTO_ACTIVE=1"));
     assert!(posix_env.contains("export VETTO_PROMPT=\"[vetto:locked]\""));
     assert!(posix_env.contains("export VETTO_SANDBOX=1"));
@@ -172,7 +173,8 @@ fn test_shell_env_prompt_integration_all_shells() {
     // 2. Fish shell prompt integration
     let orig_shell = std::env::var("SHELL").ok();
     std::env::set_var("SHELL", "/usr/bin/fish");
-    let fish_env = vetto::cli::shell_env::emit_shell_env(Some("sess-456"), Some("fs-only"), Some("default"));
+    let fish_env =
+        vetto::cli::shell_env::emit_shell_env(Some("sess-456"), Some("fs-only"), Some("default"));
     assert!(fish_env.contains("set -gx VETTO_ACTIVE 1;"));
     assert!(fish_env.contains("set -gx VETTO_PROMPT \"[vetto:locked]\";"));
     assert!(fish_env.contains("set -gx VETTO_SANDBOX 1;"));
@@ -195,4 +197,3 @@ fn test_shell_env_prompt_integration_all_shells() {
     assert!(out_str.contains("[vetto:locked]"));
     assert!(out_str.contains("VETTO_SANDBOX"));
 }
-

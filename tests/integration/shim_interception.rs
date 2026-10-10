@@ -104,7 +104,10 @@ fn test_shell_script_shim_hermeticity_and_passthrough() {
     let host_bin = proj_dir.join("host_bin");
     std::fs::create_dir_all(&host_bin).unwrap();
     let real_tool = host_bin.join("mocktool");
-    write_file(&real_tool, "#!/bin/sh\necho \"real_host_binary_executed $@\"\n");
+    write_file(
+        &real_tool,
+        "#!/bin/sh\necho \"real_host_binary_executed $@\"\n",
+    );
     use std::os::unix::fs::PermissionsExt;
     let mut perms = std::fs::metadata(&real_tool).unwrap().permissions();
     perms.set_mode(0o755);
@@ -124,7 +127,11 @@ fn test_shell_script_shim_hermeticity_and_passthrough() {
     std::fs::set_permissions(&shim_file, shim_perms).unwrap();
 
     // 3. Construct PATH with shims_dir ahead of host_bin
-    let custom_path = format!("{}:{}:/bin:/usr/bin", shims_dir.display(), host_bin.display());
+    let custom_path = format!(
+        "{}:{}:/bin:/usr/bin",
+        shims_dir.display(),
+        host_bin.display()
+    );
 
     // 4. Invoke the shim script directly with _VETTO_INTERCEPTED=1
     let out = Command::new(&shim_file)
@@ -154,7 +161,12 @@ fn test_git_guard_blocks_destructive_commands() {
     let proj_dir = project.path();
 
     // Ensure git is installed on host before running
-    if !Command::new("git").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+    if !Command::new("git")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         return;
     }
 
@@ -198,7 +210,12 @@ fn test_git_guard_allows_destructive_with_override() {
     let project = TempProject::new("git-guard-override");
     let proj_dir = project.path();
 
-    if !Command::new("git").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+    if !Command::new("git")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         return;
     }
 
@@ -217,4 +234,3 @@ fn test_git_guard_allows_destructive_with_override() {
         "git guard should not block when --allow-destructive-git is present: {err_text}"
     );
 }
-
