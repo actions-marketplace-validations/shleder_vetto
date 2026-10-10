@@ -2592,7 +2592,12 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
     let mut leak_contract = contract.clone();
     leak_contract.filesystem.allow_read.push(ws.join(".env"));
     leak_contract.filesystem.mask_paths.push(ws.join(".env"));
-    let leak_report = battery_simulated(&leak_contract, &leak_policy, &net, std::time::Instant::now());
+    let leak_report = battery_simulated(
+        &leak_contract,
+        &leak_policy,
+        &net,
+        std::time::Instant::now(),
+    );
     let leak_json = leak_report.to_json();
     let secret_check = leak_json["checks"]
         .as_array()
@@ -2796,9 +2801,15 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
     // Artificially inject secrets into allow lists
     contract.filesystem.allow_write.push(ws.join(".env"));
     contract.filesystem.allow_read.push(ws.join(".env"));
-    contract.filesystem.allow_read.push(home.join(".ssh/id_rsa"));
+    contract
+        .filesystem
+        .allow_read
+        .push(home.join(".ssh/id_rsa"));
     contract.filesystem.mask_paths.push(ws.join(".env"));
-    contract.filesystem.mask_paths.push(home.join(".ssh/id_rsa"));
+    contract
+        .filesystem
+        .mask_paths
+        .push(home.join(".ssh/id_rsa"));
 
     let read_env = authorize_action(&contract, &Action::FsRead(ws.join(".env")));
     assert!(
@@ -2853,7 +2864,10 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
         },
     );
     assert!(exec_secret.is_denied());
-    assert!(exec_secret.denial_rule().unwrap().starts_with("secret_mask:"));
+    assert!(exec_secret
+        .denial_rule()
+        .unwrap()
+        .starts_with("secret_mask:"));
 
     // 3. NetConnect edge cases:
     // a. NetworkMode::Ask requires interactive approval for unapproved connections
@@ -2992,13 +3006,8 @@ fn test_policy_compiler_complex_traversal_and_extended_masks() {
     ];
     for traversal in multi_hop_traversals {
         let bad_path = ws.join(traversal);
-        let res = PolicyCompiler::compile(
-            "aider",
-            &ws,
-            None,
-            std::slice::from_ref(&ws),
-            &[bad_path],
-        );
+        let res =
+            PolicyCompiler::compile("aider", &ws, None, std::slice::from_ref(&ws), &[bad_path]);
         assert!(
             matches!(res, Err(CompilerError::ConflictingPermissions(_))),
             "Multi-hop traversal sequence must be rejected: {traversal}"
@@ -3085,7 +3094,10 @@ fn test_policy_compiler_complex_traversal_and_extended_masks() {
 #[test]
 fn test_sealed_contract_single_byte_fuzzing_and_order_invariance() {
     let contract = create_test_verdict_contract();
-    assert!(contract.verify_sha256(), "Clean contract must verify SHA-256");
+    assert!(
+        contract.verify_sha256(),
+        "Clean contract must verify SHA-256"
+    );
     assert!(
         contract.verify_sealed().is_ok(),
         "Clean contract must pass verify_sealed"
@@ -3155,7 +3167,10 @@ fn test_sealed_contract_single_byte_fuzzing_and_order_invariance() {
     );
 
     // 2. JSON serialization key-order independence
-    let digest_original = contract.unsealed().compute_sha256_digest().expect("original digest");
+    let digest_original = contract
+        .unsealed()
+        .compute_sha256_digest()
+        .expect("original digest");
     let contract_val = serde_json::to_value(&contract).expect("serialize value");
     let serialized_str = serde_json::to_string(&contract_val).expect("to string");
     let deserialized_contract: SecurityContract =
@@ -3228,7 +3243,10 @@ fn test_fsm_convenience_methods_and_completed_invariants() {
     let mut fsm_done = ExecutionStateMachine::from_state(ExecutionState::Completed);
     assert!(fsm_done.transition(ExecutionState::Failed).is_err());
     let late_err = fsm_done.fail_closed("Late error after completed");
-    assert!(matches!(late_err, StateTransitionError::InvalidTransition { .. }));
+    assert!(matches!(
+        late_err,
+        StateTransitionError::InvalidTransition { .. }
+    ));
 }
 
 // ----------------------------------------------------------------------------
@@ -3240,7 +3258,13 @@ fn test_verdict_engine_partial_strength_and_signal_decoupling() {
 
     // 1. EvidenceStrength::Partial generates PARTIAL badge and CoW warning
     let v_partial = VerdictEngine::evaluate_with_strength(
-        &contract, 0, 0, 0, true, 0, EvidenceStrength::Partial,
+        &contract,
+        0,
+        0,
+        0,
+        true,
+        0,
+        EvidenceStrength::Partial,
     );
     assert_eq!(v_partial.status, VerdictStatus::Pass);
     assert_eq!(v_partial.strength, EvidenceStrength::Partial);
@@ -3283,7 +3307,11 @@ fn test_strict_loader_extended_typo_matrix_and_security_invariants() {
             "allowed_commands = []",
             "unknown field `allowed_commands`",
         ),
-        ("net_ports", "allow_ports = []", "unknown field `allow_ports`"),
+        (
+            "net_ports",
+            "allow_ports = []",
+            "unknown field `allow_ports`",
+        ),
         (
             "limits",
             "[limits.io_rate]\nmax_bandwidth_mb = 10",

@@ -378,10 +378,10 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
     }
 
     let is_system_usr = lower == "/usr"
-        || lower.starts_with("/usr/")
+        || lower == "/usr/"
         || lower == "/usr/*"
         || lower_raw == "/usr"
-        || lower_raw.starts_with("/usr/")
+        || lower_raw == "/usr/"
         || lower_raw == "/usr/*";
     if is_system_usr {
         bail!("system directory '/usr' is strictly prohibited in allow rules");
@@ -1434,6 +1434,7 @@ mod tests {
         assert!(validate_dangerous_path("target").is_ok());
         assert!(validate_dangerous_path("tests/fixtures").is_ok());
         assert!(validate_dangerous_path("/tmp/scratch").is_ok());
+        assert!(validate_dangerous_path("/usr/local/share/data").is_ok());
     }
 
     #[test]
