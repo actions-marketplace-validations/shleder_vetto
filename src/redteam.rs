@@ -417,3 +417,17 @@ fn test_restricted_dev() -> RedteamResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redteam_battery_runs_and_produces_8_vectors() {
+        let report = run_redteam_battery();
+        assert_eq!(report.results.len(), 8);
+        assert_eq!(report.passed + report.failed + report.skipped, 8);
+        let summary = report.summary();
+        assert!(summary.contains("Redteam Battery:"));
+    }
+}

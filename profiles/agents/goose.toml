@@ -55,3 +55,10 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.openai.com",
+    "api.anthropic.com",
+    "openrouter.ai",
+]

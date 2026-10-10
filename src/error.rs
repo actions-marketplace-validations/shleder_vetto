@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::exit_codes::{EXIT_AGENT_ERROR, EXIT_FAIL_CLOSED, EXIT_POLICY_BLOCKED};
+use crate::policy::types::PolicyError;
 
 /// Public error taxonomy. Some variants are reserved for macOS/Windows
 /// code paths and platform-gated constructors; they exist so the error
@@ -20,8 +21,10 @@ pub enum VettoError {
     Sandbox(String),
     #[error("pty error: {0}")]
     Pty(String),
+    #[error("cli error: {0}")]
+    Cli(String),
     #[error("policy error: {0}")]
-    Policy(String),
+    Policy(PolicyError),
     #[error("policy lockdown violation: {0}")]
     PolicyLockdownViolation(String),
     #[error("{0} is not supported by this vetto 0.x build (see SECURITY.md roadmap)")]
@@ -43,8 +46,8 @@ impl VettoError {
             | VettoError::Seccomp(_)
             | VettoError::Sandbox(_)
             | VettoError::UnsupportedPlatform(_) => EXIT_FAIL_CLOSED,
-            VettoError::Pty(_) => EXIT_AGENT_ERROR,
-            VettoError::Policy(_) => EXIT_AGENT_ERROR,
+            VettoError::Pty(_) | VettoError::Cli(_) => EXIT_AGENT_ERROR,
+            VettoError::Policy(ref err) => err.exit_code(),
             VettoError::PolicyLockdownViolation(_) => EXIT_POLICY_BLOCKED,
         }
     }
@@ -54,5 +57,16 @@ impl VettoError {
         // Surfaced through the legacy substring path as COMMAND_NOT_FOUND
         // until all call sites construct typed errors directly.
         anyhow::anyhow!("agent command not found in PATH: {}", detail.into())
+    }
+
+    /// Helper: construct a fail-closed policy compilation error.
+    pub fn policy(detail: impl Into<String>) -> Self {
+        VettoError::Policy(PolicyError::CompilationFailed(detail.into()))
+    }
+}
+
+impl From<PolicyError> for VettoError {
+    fn from(err: PolicyError) -> Self {
+        VettoError::Policy(err)
     }
 }

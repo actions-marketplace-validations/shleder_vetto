@@ -59,3 +59,21 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "accounts.google.com",
+    "oauth2.googleapis.com",
+    "antigravity.google",
+    "www.googleapis.com",
+    "cloudcode-pa.googleapis.com",
+    "daily-cloudcode-pa.googleapis.com",
+    "antigravity-unleash.goog",
+    "alkalimodelplatform-pa.googleapis.com",
+    "generativelanguage.googleapis.com",
+    "aicode.googleapis.com",
+    "businessaicode.googleapis.com",
+    "aiplatform.googleapis.com",
+    "play.googleapis.com",
+    "googleusercontent.com",
+]

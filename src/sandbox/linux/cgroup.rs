@@ -60,9 +60,8 @@ impl CgroupHandle {
             }
             for pid in self.processes()? {
                 if pid > 1 {
-                    unsafe {
-                        libc::kill(pid as i32, libc::SIGKILL);
-                    }
+                    let pinned = crate::sandbox::linux::proctrack::PinnedProcess::open(pid as i32);
+                    let _ = pinned.send_signal(libc::SIGKILL);
                 }
             }
         }
@@ -484,5 +483,23 @@ mod tests {
         // Second cleanup is an idempotent no-op without errors
         handle.cleanup();
         assert!(!temp_dir.exists());
+    }
+
+    #[test]
+    fn test_cgroup_kill_all_writes_one() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto-cgkill-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let kill_file = temp_dir.join("cgroup.kill");
+        fs::write(&kill_file, "0").unwrap();
+
+        let handle = CgroupHandle {
+            path: temp_dir.clone(),
+            cleaned: Arc::new(AtomicBool::new(false)),
+        };
+
+        handle.kill_all().unwrap();
+        assert_eq!(fs::read_to_string(&kill_file).unwrap(), "1");
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

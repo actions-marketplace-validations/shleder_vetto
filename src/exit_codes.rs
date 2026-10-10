@@ -103,12 +103,24 @@ pub fn map_error_to_exit_code(err: &anyhow::Error) -> i32 {
     if let Some(typed) = err.downcast_ref::<crate::error::VettoError>() {
         return typed.exit_code();
     }
+    if let Some(sup) = err.downcast_ref::<crate::supervise::error::SuperviseError>() {
+        return sup.exit_code();
+    }
+    if let Some(policy_err) = err.downcast_ref::<crate::policy::types::PolicyError>() {
+        return policy_err.exit_code();
+    }
     let msg = err.to_string().to_lowercase();
     if msg.contains("not found in path") || msg.contains("no such file or directory") {
         EXIT_COMMAND_NOT_FOUND
     } else if msg.contains("lockdown violation") || msg.contains("fail-on-block") {
         EXIT_POLICY_BLOCKED
     } else if msg.contains("fail-closed")
+        || msg.contains("policy compilation failed")
+        || msg.contains("failed to parse policy")
+        || msg.contains("unknown field")
+        || msg.contains("unknown profile")
+        || msg.contains("unknown preset")
+        || msg.contains("unknown agent")
         || msg.contains("git_guard")
         || msg.contains("destructive")
         || msg.contains("boundary verification failed")

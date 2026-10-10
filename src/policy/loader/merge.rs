@@ -14,6 +14,8 @@ use crate::policy::types::{
     Tier,
 };
 
+pub type PolicyLoader = LayeredPolicyLoader;
+
 #[derive(Debug, Default, Clone)]
 pub struct MergedPolicy {
     pub metadata: PolicyMetadata,
@@ -449,13 +451,18 @@ impl Default for LayeredPolicyLoader {
 
 pub fn read_layer_file(path: &Path, _require_signed: bool) -> Result<String> {
     if !is_usable_file(path) {
-        bail!(
-            "fail-closed: policy file '{}' must be a regular file and not a symlink",
-            path.display()
-        );
+        return Err(anyhow::Error::new(
+            crate::policy::types::PolicyError::CompilationFailed(format!(
+                "fail-closed: policy file '{}' must be a regular file and not a symlink",
+                path.display()
+            )),
+        ));
     }
-    std::fs::read_to_string(path)
-        .with_context(|| format!("failed to read policy file {}", path.display()))
+    std::fs::read_to_string(path).map_err(|err| {
+        anyhow::Error::new(crate::policy::types::PolicyError::CompilationFailed(
+            format!("failed to read policy file {}: {err}", path.display()),
+        ))
+    })
 }
 
 impl LayeredPolicyLoader {
@@ -469,6 +476,27 @@ impl LayeredPolicyLoader {
             load_local_override: true,
             require_signed: false,
         }
+    }
+
+    /// Merge a single layer into an existing `MergedPolicy`, validating schema,
+    /// detecting inheritance cycles, and enforcing lockdown invariants fail-closed.
+    pub fn merge(
+        &self,
+        merged: &mut MergedPolicy,
+        layer: &RawLayer,
+        source_kind: PolicySourceKind,
+    ) -> Result<()> {
+        let mut stack = Vec::new();
+        merge_layer(layer, "merge", &mut stack, merged, source_kind)
+    }
+
+    /// Deterministically merge multiple layers in order, failing closed with PolicyError.
+    pub fn merge_all(&self, layers: &[(&RawLayer, PolicySourceKind)]) -> Result<MergedPolicy> {
+        let mut merged = MergedPolicy::default();
+        for (layer, kind) in layers {
+            self.merge(&mut merged, layer, *kind)?;
+        }
+        Ok(merged)
     }
 
     pub fn load(
@@ -521,17 +549,16 @@ impl LayeredPolicyLoader {
                         }
                     }
                     let req_signed = options.require_signed || self.require_signed;
-                    if let Ok(text) = read_layer_file(&path, req_signed) {
-                        let label = format!("system:{}", path.display());
-                        let layer = parse_layer(&text, &label)?;
-                        merge_layer(
-                            &layer,
-                            &label,
-                            &mut stack,
-                            &mut merged,
-                            PolicySourceKind::SystemGlobal,
-                        )?;
-                    }
+                    let text = read_layer_file(&path, req_signed)?;
+                    let label = format!("system:{}", path.display());
+                    let layer = parse_layer(&text, &label)?;
+                    merge_layer(
+                        &layer,
+                        &label,
+                        &mut stack,
+                        &mut merged,
+                        PolicySourceKind::SystemGlobal,
+                    )?;
                 }
             }
         }
@@ -549,17 +576,16 @@ impl LayeredPolicyLoader {
                 if path.is_file() {
                     let req_signed =
                         merged.require_signed || options.require_signed || self.require_signed;
-                    if let Ok(text) = read_layer_file(&path, req_signed) {
-                        let label = format!("user:{}", path.display());
-                        let layer = parse_layer(&text, &label)?;
-                        merge_layer(
-                            &layer,
-                            &label,
-                            &mut stack,
-                            &mut merged,
-                            PolicySourceKind::UserGlobal,
-                        )?;
-                    }
+                    let text = read_layer_file(&path, req_signed)?;
+                    let label = format!("user:{}", path.display());
+                    let layer = parse_layer(&text, &label)?;
+                    merge_layer(
+                        &layer,
+                        &label,
+                        &mut stack,
+                        &mut merged,
+                        PolicySourceKind::UserGlobal,
+                    )?;
                 }
             }
         }
@@ -569,11 +595,12 @@ impl LayeredPolicyLoader {
         // -------------------------------------------------------------------
         let base_profile = defaults::builtin(profile).map(|_| profile);
         if base_profile.is_none() && custom_path.is_none() {
-            bail!(
-                "unknown profile '{}'; known profiles: {}",
-                profile,
-                defaults::PROFILE_NAMES.join(", ")
-            );
+            return Err(anyhow::Error::new(
+                crate::policy::types::PolicyError::CompilationFailed(format!(
+                    "unknown profile '{profile}'; known profiles: {}",
+                    defaults::PROFILE_NAMES.join(", ")
+                )),
+            ));
         }
 
         if let Some(base_profile) = base_profile {
@@ -618,7 +645,11 @@ impl LayeredPolicyLoader {
 
         let agent_path = match options.agent.as_deref() {
             Some(agent) => {
-                let p = resolve::agent_root(home, agent)?;
+                let p = resolve::agent_root(home, agent).map_err(|err| {
+                    anyhow::Error::new(crate::policy::types::PolicyError::CompilationFailed(
+                        err.to_string(),
+                    ))
+                })?;
                 let _ = std::fs::create_dir_all(&p);
                 match defaults::canonical_agent_name(agent) {
                     Some("codex") => {
@@ -713,6 +744,65 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".aider"));
                         let _ = std::fs::create_dir_all(home.join(".config/aider"));
                     }
+                    Some("cursor") => {
+                        let _ = std::fs::create_dir_all(home.join(".config/Cursor"));
+                        let _ = std::fs::create_dir_all(home.join(".cursor/plugins"));
+                        let _ = std::fs::create_dir_all(home.join(".cursor/skills"));
+                    }
+                    Some("cline") => {
+                        let _ = std::fs::create_dir_all(home.join(".cline"));
+                        let _ = std::fs::create_dir_all(home.join(".config/cline"));
+                    }
+                    Some("windsurf") => {
+                        let _ = std::fs::create_dir_all(home.join(".codeium"));
+                        let _ = std::fs::create_dir_all(home.join(".windsurf"));
+                        let _ = std::fs::create_dir_all(home.join(".config/windsurf"));
+                    }
+                    Some("goose") => {
+                        let _ = std::fs::create_dir_all(home.join(".config/goose"));
+                        let _ = std::fs::create_dir_all(home.join(".goose/plugins"));
+                        let _ = std::fs::create_dir_all(home.join(".goose/skills"));
+                    }
+                    Some("openhands") => {
+                        let _ = std::fs::create_dir_all(home.join(".openhands"));
+                        let _ = std::fs::create_dir_all(home.join(".config/openhands"));
+                        let _ = std::fs::create_dir_all(home.join(".openhands/plugins"));
+                        let _ = std::fs::create_dir_all(home.join(".openhands/skills"));
+                    }
+                    Some("devin") => {
+                        let _ = std::fs::create_dir_all(home.join(".devin"));
+                        let _ = std::fs::create_dir_all(home.join(".config/devin"));
+                        let _ = std::fs::create_dir_all(home.join(".devin/plugins"));
+                        let _ = std::fs::create_dir_all(home.join(".devin/skills"));
+                    }
+                    Some("copilot") => {
+                        let _ = std::fs::create_dir_all(home.join(".config/github-copilot"));
+                        let _ = std::fs::create_dir_all(home.join(".copilot/plugins"));
+                        let _ = std::fs::create_dir_all(home.join(".copilot/skills"));
+                    }
+                    Some("custom") => {
+                        let _ = std::fs::create_dir_all(
+                            home.join(".config/vetto/agents/custom/plugins"),
+                        );
+                        let _ = std::fs::create_dir_all(
+                            home.join(".config/vetto/agents/custom/skills"),
+                        );
+                    }
+                    Some("swebench") => {
+                        let _ = std::fs::create_dir_all(home.join(".swebench"));
+                    }
+                    Some("qwen_code") => {
+                        let _ = std::fs::create_dir_all(home.join(".qwen"));
+                        let _ = std::fs::create_dir_all(home.join(".config/qwen"));
+                    }
+                    Some("roo_code") => {
+                        let _ = std::fs::create_dir_all(home.join(".roo"));
+                        let _ = std::fs::create_dir_all(home.join(".config/roo"));
+                    }
+                    Some("browser_use") => {
+                        let _ = std::fs::create_dir_all(home.join(".browser-use"));
+                        let _ = std::fs::create_dir_all(home.join(".config/browser-use"));
+                    }
                     _ => {}
                 }
                 let _ = std::fs::create_dir_all(home.join(".npm/_npx"));
@@ -727,12 +817,14 @@ impl LayeredPolicyLoader {
         };
         if let Some(agent) = options.agent.as_deref() {
             let text = defaults::agent_builtin(agent).ok_or_else(|| {
-                anyhow!(
-                    "unknown agent '{}'; known agents: {}",
-                    agent,
-                    defaults::AGENT_PROFILE_NAMES.join(", ")
-                )
+                anyhow::Error::new(crate::policy::types::PolicyError::CompilationFailed(
+                    format!(
+                        "unknown agent '{agent}'; known agents: {}",
+                        defaults::AGENT_PROFILE_NAMES.join(", ")
+                    ),
+                ))
             })?;
+
             let layer = parse_layer(text, &format!("agent:{agent}"))?;
             merge_layer(
                 &layer,
@@ -771,10 +863,12 @@ impl LayeredPolicyLoader {
                         .map(|metadata| metadata.file_type().is_symlink())
                         .unwrap_or(false)
                 {
-                    bail!(
-                        "project policy file '{}' must not be a symlink",
-                        path.display()
-                    );
+                    return Err(anyhow::Error::new(
+                        crate::policy::types::PolicyError::CompilationFailed(format!(
+                            "project policy file '{}' must not be a symlink",
+                            path.display()
+                        )),
+                    ));
                 }
                 let req_signed =
                     merged.require_signed || options.require_signed || self.require_signed;
@@ -794,7 +888,12 @@ impl LayeredPolicyLoader {
                     .project_policy
                     .as_deref()
                     .map_or_else(|| Path::new("vetto.toml"), |path| path);
-                bail!("project policy file '{}' was not found", path.display());
+                return Err(anyhow::Error::new(
+                    crate::policy::types::PolicyError::CompilationFailed(format!(
+                        "project policy file '{}' was not found",
+                        path.display()
+                    )),
+                ));
             }
 
             // Fragment Directory (.vetto/policy.d/*.toml)
@@ -816,17 +915,16 @@ impl LayeredPolicyLoader {
                     for frag_path in fragment_files {
                         let req_signed =
                             merged.require_signed || options.require_signed || self.require_signed;
-                        if let Ok(text) = read_layer_file(&frag_path, req_signed) {
-                            let label = frag_path.display().to_string();
-                            let layer = parse_layer(&text, &label)?;
-                            merge_layer(
-                                &layer,
-                                &label,
-                                &mut stack,
-                                &mut merged,
-                                PolicySourceKind::RepositoryFragment,
-                            )?;
-                        }
+                        let text = read_layer_file(&frag_path, req_signed)?;
+                        let label = frag_path.display().to_string();
+                        let layer = parse_layer(&text, &label)?;
+                        merge_layer(
+                            &layer,
+                            &label,
+                            &mut stack,
+                            &mut merged,
+                            PolicySourceKind::RepositoryFragment,
+                        )?;
                     }
                 }
             }
@@ -848,17 +946,16 @@ impl LayeredPolicyLoader {
             if let Some(path) = local_path {
                 let req_signed =
                     merged.require_signed || options.require_signed || self.require_signed;
-                if let Ok(text) = read_layer_file(&path, req_signed) {
-                    let label = format!("override:{}", path.display());
-                    let layer = parse_layer(&text, &label)?;
-                    merge_layer(
-                        &layer,
-                        &label,
-                        &mut stack,
-                        &mut merged,
-                        PolicySourceKind::LocalOverride,
-                    )?;
-                }
+                let text = read_layer_file(&path, req_signed)?;
+                let label = format!("override:{}", path.display());
+                let layer = parse_layer(&text, &label)?;
+                merge_layer(
+                    &layer,
+                    &label,
+                    &mut stack,
+                    &mut merged,
+                    PolicySourceKind::LocalOverride,
+                )?;
             }
         }
 
@@ -890,7 +987,11 @@ impl LayeredPolicyLoader {
         merged.deduplicate();
 
         if merged.allow_write.is_empty() {
-            bail!("effective policy has no filesystem.allow_write roots");
+            return Err(anyhow::Error::new(
+                crate::policy::types::PolicyError::CompilationFailed(
+                    "effective policy has no filesystem.allow_write roots".into(),
+                ),
+            ));
         }
 
         resolve::build_policy(

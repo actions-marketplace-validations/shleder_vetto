@@ -70,6 +70,9 @@ else
 fi
 "#;
 
+    let isolated_home = proj.path().join("home");
+    let _ = std::fs::create_dir_all(&isolated_home);
+
     let out = Command::new(vetto_bin())
         .args([
             "--tui=none",
@@ -82,7 +85,7 @@ fi
             test_script,
         ])
         .current_dir(proj.path())
-        .env("HOME", test_home())
+        .env("HOME", &isolated_home)
         .env("XDG_RUNTIME_DIR", &runtime_dir)
         .output()
         .expect("exec vetto for computer use display sockets");
@@ -116,7 +119,8 @@ fn test_agent_plugins_discovery() {
     }
 
     let proj = TempProject::new("agent-plugins");
-    let home = test_home();
+    let home = proj.path().join("home");
+    std::fs::create_dir_all(&home).expect("create isolated test home");
 
     let claude_plugin = home.join(".claude/plugins/mock_plugin.sh");
     write_file(&claude_plugin, "#!/bin/sh\necho \"CLAUDE_PLUGIN_ACTIVE\"\n");
@@ -145,7 +149,7 @@ fn test_agent_plugins_discovery() {
             claude_plugin.to_str().unwrap(),
         ])
         .current_dir(proj.path())
-        .env("HOME", home)
+        .env("HOME", &home)
         .output()
         .expect("exec claude plugin under vetto");
 
@@ -173,7 +177,7 @@ fn test_agent_plugins_discovery() {
             codex_tool.to_str().unwrap(),
         ])
         .current_dir(proj.path())
-        .env("HOME", home)
+        .env("HOME", &home)
         .output()
         .expect("exec codex tool under vetto");
 
@@ -201,7 +205,7 @@ fn test_agent_plugins_discovery() {
             agent_cli.to_str().unwrap(),
         ])
         .current_dir(proj.path())
-        .env("HOME", home)
+        .env("HOME", &home)
         .output()
         .expect("exec agent-cli under vetto claude");
 
@@ -229,7 +233,7 @@ fn test_agent_plugins_discovery() {
             agent_cli.to_str().unwrap(),
         ])
         .current_dir(proj.path())
-        .env("HOME", home)
+        .env("HOME", &home)
         .output()
         .expect("exec agent-cli under vetto codex");
 

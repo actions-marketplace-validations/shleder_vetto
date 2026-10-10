@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use crate::audit::record::{TierClassification, VettoAuditRecord};
-use crate::audit::verdict::{EvidenceStrength, FinalVerdict, VerdictStatus};
+use crate::audit::verdict::{EvidenceStrength, FinalVerdict, SecurityVerdict, VerdictStatus};
 use crate::audit::AuditLedger;
 use crate::config::NetMode;
 use crate::policy::{Policy, Tier};
@@ -1005,9 +1005,18 @@ impl SpawnedProductionExecution {
                     }
                     _ => (VerdictStatus::Pass, EvidenceStrength::Strong, 0),
                 };
+            let v_sec_verdict = if extinction_res.is_err() {
+                SecurityVerdict::Violated
+            } else if !evidence_intact {
+                SecurityVerdict::Inconclusive
+            } else {
+                SecurityVerdict::Satisfied
+            };
+
             let verdict_obj = FinalVerdict {
                 status: v_status,
                 strength: v_strength,
+                security_verdict: v_sec_verdict,
                 exit_code: v_code,
                 reason: if !evidence_intact {
                     "Evidence capture channel dropped events: audit ledger inconclusive (INV-37)"
@@ -1064,6 +1073,14 @@ impl SpawnedProductionExecution {
             }
         }
 
+        let final_sec_verdict = if extinction_res.is_err() || !ledger_verified {
+            SecurityVerdict::Violated
+        } else if !evidence_intact {
+            SecurityVerdict::Inconclusive
+        } else {
+            SecurityVerdict::Satisfied
+        };
+
         let final_verdict_obj = FinalVerdict {
             status: if extinction_res.is_err() || !ledger_verified {
                 VerdictStatus::Fail
@@ -1075,6 +1092,7 @@ impl SpawnedProductionExecution {
                 VerdictStatus::Pass
             },
             strength: EvidenceStrength::Strong,
+            security_verdict: final_sec_verdict,
             exit_code: final_exit_code.unwrap_or(0),
             reason: if !evidence_intact {
                 "Evidence capture channel dropped events: audit ledger inconclusive (INV-37)"

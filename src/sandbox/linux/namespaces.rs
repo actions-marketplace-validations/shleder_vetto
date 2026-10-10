@@ -192,14 +192,29 @@ fn parent_probe_side(
 }
 
 /// Write setgroups-deny + uid_map + gid_map for `pid` mapping the caller's
-/// own ids 1:1. Must be called by the REAL parent right after the child
-/// enters its new user namespace.
+/// own ids into unprivileged 1000:1000. Must be called by the REAL parent
+/// right after the child enters its new user namespace.
 pub fn write_id_maps(pid: libc::pid_t) -> VettoResult<()> {
+    write_id_maps_with_target(pid, 1000, 1000)
+}
+
+/// Write setgroups-deny + uid_map + gid_map for `pid` mapping the caller's
+/// own ids into specific `(target_uid, target_gid)` inside the new user namespace.
+pub fn write_id_maps_with_target(
+    pid: libc::pid_t,
+    target_uid: u32,
+    target_gid: u32,
+) -> VettoResult<()> {
     let base = Path::new("/proc").join(pid.to_string());
     let uid = unsafe { libc::getuid() }; // SAFETY: no pointers
     let gid = unsafe { libc::getgid() };
 
-    let _ = fs::write(base.join("setgroups"), "deny");
+    let setgroups_path = base.join("setgroups");
+    if setgroups_path.exists() {
+        fs::write(&setgroups_path, "deny").map_err(|e| {
+            VettoError::Namespace(format!("write {}: {e}", setgroups_path.display()))
+        })?;
+    }
 
     let w = |name: &str, content: String| -> VettoResult<()> {
         let path = base.join(name);
@@ -212,7 +227,29 @@ pub fn write_id_maps(pid: libc::pid_t) -> VettoResult<()> {
         Ok(())
     };
 
-    w("uid_map", format!("0 {uid} 1\n"))?;
-    w("gid_map", format!("0 {gid} 1\n"))?;
+    w("uid_map", format!("{target_uid} {uid} 1\n"))?;
+    w("gid_map", format!("{target_gid} {gid} 1\n"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_id_maps_target_format() {
+        let uid = unsafe { libc::getuid() };
+        let gid = unsafe { libc::getgid() };
+        let target_uid = 1000;
+        let target_gid = 1000;
+        let uid_str = format!("{target_uid} {uid} 1\n");
+        let gid_str = format!("{target_gid} {gid} 1\n");
+        assert!(uid_str.starts_with("1000 "));
+        assert!(gid_str.starts_with("1000 "));
+        assert!(uid_str.ends_with(" 1\n"));
+        assert!(gid_str.ends_with(" 1\n"));
+
+        let res = write_id_maps_with_target(-1, 1000, 1000);
+        assert!(res.is_err());
+    }
 }
