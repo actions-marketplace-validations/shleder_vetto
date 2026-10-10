@@ -3348,9 +3348,9 @@ fn test_strict_loader_extended_typo_matrix_and_security_invariants() {
     std::fs::write(&target_file, "[filesystem]\nallow_write = [\"$PROJECT\"]\n")
         .expect("write target policy");
 
-    let symlink_file = test_dir.join("symlink_policy.toml");
     #[cfg(unix)]
     {
+        let symlink_file = test_dir.join("symlink_policy.toml");
         std::os::unix::fs::symlink(&target_file, &symlink_file).expect("create symlink");
         let read_err =
             vetto::policy::loader::merge::read_layer_file(&symlink_file, false).unwrap_err();
