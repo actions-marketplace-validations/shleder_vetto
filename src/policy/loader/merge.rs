@@ -747,6 +747,10 @@ impl LayeredPolicyLoader {
                     Some("aider") => {
                         let _ = std::fs::create_dir_all(home.join(".aider"));
                         let _ = std::fs::create_dir_all(home.join(".config/aider"));
+                        let aider_conf = home.join(".aider.conf.yml");
+                        if !aider_conf.exists() {
+                            let _ = std::fs::write(&aider_conf, "");
+                        }
                     }
                     Some("cursor") => {
                         let _ = std::fs::create_dir_all(home.join(".config/Cursor"));

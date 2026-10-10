@@ -30,6 +30,7 @@ allow_read = [
     "$HOME/.bun/install/cache",
 ]
 allow_write = [
+    "$HOME/.aider.conf.yml",
     "$AGENT",
     "$HOME/.aider/plugins",
     "$HOME/.aider/skills",
