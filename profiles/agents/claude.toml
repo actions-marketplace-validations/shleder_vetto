@@ -59,3 +59,12 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.anthropic.com",
+    "auth.anthropic.com",
+    "claude.ai",
+    "statsig.anthropic.com",
+    "platform.anthropic.com",
+]

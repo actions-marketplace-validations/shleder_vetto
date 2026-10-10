@@ -27,6 +27,8 @@ pub enum Grant {
     NetPreset,
     /// Append to `allow_cidr` under `[network]` and default the mode to allowlist.
     NetCidr,
+    /// Append to `deny` under `[network]`.
+    NetDeny,
     /// Append to `paths` under `[display_only_deny]`.
     Deny,
     /// Append to `deny_glob` under `[filesystem]`.
@@ -39,6 +41,7 @@ impl Grant {
             Grant::Net => ("network", "allow"),
             Grant::NetPreset => ("network", "net_presets"),
             Grant::NetCidr => ("network", "allow_cidr"),
+            Grant::NetDeny => ("network", "deny"),
             Grant::Deny => ("display_only_deny", "paths"),
             Grant::DenyGlob => ("filesystem", "deny_glob"),
             Grant::FsReadWrite => {
@@ -57,6 +60,7 @@ impl Grant {
             Grant::Net => "network domain allowlist",
             Grant::NetPreset => "network preset allowlist",
             Grant::NetCidr => "network CIDR allowlist",
+            Grant::NetDeny => "network domain denylist",
             Grant::Deny => "masked secrets (reads denied)",
             Grant::DenyGlob => "deny glob pattern",
             Grant::FsReadWrite => "read + write grant",
@@ -243,6 +247,208 @@ pub fn normalize_net_target(raw: &str) -> String {
     s.trim().trim_end_matches('.').to_ascii_lowercase()
 }
 
+/// Normalize a path string for security validation by collapsing consecutive
+/// forward slashes (`//+` -> `/`) and resolving redundant `.` segments.
+pub fn normalize_path_for_validation(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let is_absolute = trimmed.starts_with('/');
+
+    // Collect non-empty components, filtering out redundant '.' segments
+    let mut parts: Vec<&str> = Vec::new();
+    for seg in trimmed.split('/') {
+        if seg.is_empty() || seg == "." {
+            continue;
+        }
+        parts.push(seg);
+    }
+
+    if is_absolute {
+        if parts.is_empty() {
+            "/".to_string()
+        } else {
+            format!("/{}", parts.join("/"))
+        }
+    } else if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
+}
+
+/// Validate whether an allow path target contains dangerous patterns.
+pub fn validate_dangerous_path(raw: &str) -> Result<()> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        bail!("target path cannot be empty");
+    }
+
+    // 1. Backslashes prohibition
+    if trimmed.contains('\\') {
+        bail!("backslashes ('\\') are strictly prohibited; use standard '/' path separators");
+    }
+
+    // 2. Directory traversal
+    for segment in trimmed.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in allow rules");
+        }
+    }
+
+    // Normalize path by collapsing consecutive slashes and resolving redundant '.' segments
+    let normalized = normalize_path_for_validation(trimmed);
+    for segment in normalized.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in allow rules");
+        }
+    }
+
+    // 3. Blanket root check (evaluated against normalized and raw path)
+    if normalized == "/"
+        || normalized == "/*"
+        || normalized == "*"
+        || normalized == "/*.*"
+        || trimmed == "/"
+        || trimmed == "/*"
+        || trimmed == "*"
+        || trimmed == "/*.*"
+    {
+        bail!("blanket root path is strictly prohibited in allow rules");
+    }
+
+    // 4. Entire home directory check
+    if normalized == "~"
+        || normalized == "$HOME"
+        || normalized == "%USERPROFILE%"
+        || trimmed == "~"
+        || trimmed == "$HOME"
+        || trimmed == "%USERPROFILE%"
+    {
+        bail!("entire user home directory cannot be granted in allow rules");
+    }
+
+    let lower = normalized.to_ascii_lowercase();
+    let lower_raw = trimmed.to_ascii_lowercase();
+
+    // 5. Critical system paths
+    let is_critical_shadow = lower == "/etc/shadow"
+        || lower.starts_with("/etc/shadow/")
+        || lower.starts_with("/etc/shadow-")
+        || lower_raw == "/etc/shadow"
+        || lower_raw.starts_with("/etc/shadow/")
+        || lower_raw.starts_with("/etc/shadow-");
+    if is_critical_shadow {
+        bail!("access to critical system path '/etc/shadow' is strictly prohibited");
+    }
+
+    let is_critical_passwd = lower == "/etc/passwd"
+        || lower.starts_with("/etc/passwd/")
+        || lower_raw == "/etc/passwd"
+        || lower_raw.starts_with("/etc/passwd/");
+    if is_critical_passwd {
+        bail!("access to critical system path '/etc/passwd' is strictly prohibited");
+    }
+
+    let is_critical_sudoers = lower == "/etc/sudoers"
+        || lower.starts_with("/etc/sudoers/")
+        || lower.starts_with("/etc/sudoers.d")
+        || lower_raw == "/etc/sudoers"
+        || lower_raw.starts_with("/etc/sudoers/")
+        || lower_raw.starts_with("/etc/sudoers.d");
+    if is_critical_sudoers {
+        bail!("access to critical system path '/etc/sudoers' is strictly prohibited");
+    }
+
+    // 6. Credential directories and files
+    let is_ssh = lower == ".ssh"
+        || lower.starts_with(".ssh/")
+        || lower.contains("/.ssh/")
+        || lower.ends_with("/.ssh")
+        || lower == "~/.ssh"
+        || lower.starts_with("~/.ssh/")
+        || lower.contains("$home/.ssh")
+        || lower_raw == ".ssh"
+        || lower_raw.starts_with(".ssh/")
+        || lower_raw.contains("/.ssh/")
+        || lower_raw.ends_with("/.ssh")
+        || lower_raw == "~/.ssh"
+        || lower_raw.starts_with("~/.ssh/")
+        || lower_raw.contains("$home/.ssh");
+    if is_ssh {
+        bail!("credential directory '.ssh' is strictly prohibited in allow rules");
+    }
+
+    let is_aws = lower == ".aws"
+        || lower.starts_with(".aws/")
+        || lower.contains("/.aws/")
+        || lower.ends_with("/.aws")
+        || lower == "~/.aws"
+        || lower.starts_with("~/.aws/")
+        || lower.contains("$home/.aws")
+        || lower_raw == ".aws"
+        || lower_raw.starts_with(".aws/")
+        || lower_raw.contains("/.aws/")
+        || lower_raw.ends_with("/.aws")
+        || lower_raw == "~/.aws"
+        || lower_raw.starts_with("~/.aws/")
+        || lower_raw.contains("$home/.aws");
+    if is_aws {
+        bail!("credential directory '.aws' is strictly prohibited in allow rules");
+    }
+
+    let is_env = lower == ".env"
+        || lower.starts_with(".env.")
+        || lower.starts_with(".env_")
+        || lower.ends_with("/.env")
+        || lower.contains("/.env.")
+        || lower.contains("/.env_")
+        || lower_raw == ".env"
+        || lower_raw.starts_with(".env.")
+        || lower_raw.starts_with(".env_")
+        || lower_raw.ends_with("/.env")
+        || lower_raw.contains("/.env.")
+        || lower_raw.contains("/.env_");
+    if is_env {
+        bail!("environment secret file '.env*' is strictly prohibited in allow rules");
+    }
+
+    if lower.contains(".git-credentials")
+        || lower.contains(".netrc")
+        || lower_raw.contains(".git-credentials")
+        || lower_raw.contains(".netrc")
+    {
+        bail!("credential file is strictly prohibited in allow rules");
+    }
+
+    Ok(())
+}
+
+/// Validate deny path syntax.
+pub fn validate_deny_path_syntax(raw: &str) -> Result<()> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        bail!("target path cannot be empty");
+    }
+    if trimmed.contains('\\') {
+        bail!("backslashes ('\\') are strictly prohibited; use standard '/' path separators");
+    }
+    for segment in trimmed.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in deny rules");
+        }
+    }
+    let normalized = normalize_path_for_validation(trimmed);
+    for segment in normalized.split('/') {
+        if segment == ".." {
+            bail!("directory traversal ('..') is strictly prohibited in deny rules");
+        }
+    }
+    Ok(())
+}
+
 /// Apply a grant to the target policy file. Returns the file it wrote.
 pub fn apply(
     grant: Grant,
@@ -250,11 +456,22 @@ pub fn apply(
     global: bool,
     custom_policy: Option<&Path>,
 ) -> Result<PathBuf> {
-    apply_with_quota(grant, target, None, global, custom_policy)
+    apply_with_quota_atomic(grant, target, None, global, custom_policy)
 }
 
 /// Apply a grant and optional quota to the target policy file. Returns the file it wrote.
 pub fn apply_with_quota(
+    grant: Grant,
+    target: &str,
+    quota: Option<&str>,
+    global: bool,
+    custom_policy: Option<&Path>,
+) -> Result<PathBuf> {
+    apply_with_quota_atomic(grant, target, quota, global, custom_policy)
+}
+
+/// Apply a grant and optional quota to the target policy file with atomic backup and rollback.
+pub fn apply_with_quota_atomic(
     grant: Grant,
     target: &str,
     quota: Option<&str>,
@@ -268,11 +485,21 @@ pub fn apply_with_quota(
                 .with_context(|| format!("create {}", parent.display()))?;
         }
     }
+
+    let bak_path = if path.exists() {
+        let bak = PathBuf::from(format!("{}.bak", path.display()));
+        std::fs::copy(&path, &bak).with_context(|| format!("create backup {}", bak.display()))?;
+        Some(bak)
+    } else {
+        None
+    };
+
     let raw = if path.exists() {
         std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?
     } else {
         PROJECT_HEADER.to_string()
     };
+
     let mut doc: toml_edit::DocumentMut = raw
         .parse()
         .with_context(|| format!("parse {}", path.display()))?;
@@ -280,8 +507,101 @@ pub fn apply_with_quota(
     if let Some(q) = quota {
         set_domain_quota(&mut doc, target, q)?;
     }
-    std::fs::write(&path, doc.to_string()).with_context(|| format!("write {}", path.display()))?;
+    let modified_str = doc.to_string();
+
+    // Validate AST against RawLayer schema (fail-closed exit 125 on schema error)
+    if let Err(err) = crate::policy::loader::parse_layer(&modified_str, "edit_validation") {
+        if let Some(ref bp) = bak_path {
+            let _ = std::fs::copy(bp, &path);
+        }
+        return Err(anyhow::Error::new(
+            crate::policy::types::PolicyError::CompilationFailed(format!(
+                "validation failed for edited policy: {err:#}"
+            )),
+        ));
+    }
+
+    // Atomic write via temp file and sync_all
+    let filename = path
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("policy.toml");
+    let tmp_name = format!(".{}.tmp.{}", filename, std::process::id());
+    let tmp_path = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(&tmp_name);
+
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&tmp_path)
+            .with_context(|| format!("create temp file {}", tmp_path.display()))?;
+        file.write_all(modified_str.as_bytes())
+            .with_context(|| format!("write to temp file {}", tmp_path.display()))?;
+        file.sync_all()
+            .with_context(|| format!("sync temp file {}", tmp_path.display()))?;
+    }
+
+    if let Err(err) = std::fs::rename(&tmp_path, &path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        if let Some(ref bp) = bak_path {
+            let _ = std::fs::copy(bp, &path);
+        }
+        bail!("failed to rename temp file to {}: {err}", path.display());
+    }
+
     Ok(path)
+}
+
+/// Public API: grant filesystem path access with dangerous path validation.
+pub fn allow_path(
+    path: &str,
+    read_only: bool,
+    global: bool,
+    custom_policy: Option<&Path>,
+) -> Result<PathBuf> {
+    validate_dangerous_path(path)?;
+    let grant = if read_only {
+        Grant::FsRead
+    } else {
+        Grant::FsReadWrite
+    };
+    apply_with_quota_atomic(grant, path, None, global, custom_policy)
+}
+
+/// Public API: deny/mask a filesystem path in display_only_deny.
+pub fn deny_path(path: &str, global: bool, custom_policy: Option<&Path>) -> Result<PathBuf> {
+    validate_deny_path_syntax(path)?;
+    apply_with_quota_atomic(Grant::Deny, path, None, global, custom_policy)
+}
+
+/// Public API: grant network domain or CIDR/IP with optional quota.
+pub fn allow_domain(
+    domain: &str,
+    quota: Option<&str>,
+    global: bool,
+    custom_policy: Option<&Path>,
+) -> Result<PathBuf> {
+    let clean = domain.trim();
+    if let Some(cidr) = try_parse_cidr_or_ip(clean) {
+        apply_with_quota_atomic(Grant::NetCidr, &cidr, quota, global, custom_policy)
+    } else {
+        let normalized = normalize_net_target(clean);
+        if normalized.is_empty() {
+            bail!("invalid network domain '{domain}'");
+        }
+        apply_with_quota_atomic(Grant::Net, &normalized, quota, global, custom_policy)
+    }
+}
+
+/// Public API: deny network domain in [network].deny.
+pub fn deny_domain(domain: &str, global: bool, custom_policy: Option<&Path>) -> Result<PathBuf> {
+    let clean = domain.trim();
+    let normalized = normalize_net_target(clean);
+    if normalized.is_empty() {
+        bail!("invalid network domain '{domain}'");
+    }
+    apply_with_quota_atomic(Grant::NetDeny, &normalized, None, global, custom_policy)
 }
 
 /// Mutate a parsed policy document to add or update a per-domain quota under `[network.net_quota]`.
@@ -459,12 +779,12 @@ pub fn run_allow(
         return Ok(());
     }
 
+    let path = allow_path(raw_target, read_only, global, custom_policy)?;
     let grant = if read_only {
         Grant::FsRead
     } else {
         Grant::FsReadWrite
     };
-    let path = apply(grant, raw_target, global, custom_policy)?;
     println!(
         "vetto: `{raw_target}` granted ({}), policy file: {}",
         grant.describe(),
@@ -479,9 +799,28 @@ pub fn run_deny(
     target: Option<&str>,
     preset: Option<&str>,
     glob: bool,
+    net: bool,
     global: bool,
     custom_policy: Option<&Path>,
 ) -> Result<()> {
+    if net {
+        if preset.is_some() || glob {
+            bail!("--net cannot be combined with --preset or --glob");
+        }
+        let clean_target = target
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .context("network domain must be provided with --net")?;
+        let path = deny_domain(clean_target, global, custom_policy)?;
+        println!(
+            "vetto: domain `{clean_target}` denied ({}), policy file: {}",
+            Grant::NetDeny.describe(),
+            path.display()
+        );
+        println!("vetto: outbound network connections to this domain are blocked");
+        return Ok(());
+    }
+
     let clean_preset = preset.map(str::trim).filter(|s| !s.is_empty());
     let clean_target = target.map(str::trim).filter(|s| !s.is_empty());
 
@@ -521,7 +860,7 @@ pub fn run_deny(
         };
         let mut path = PathBuf::new();
         for &p in paths {
-            path = apply(Grant::Deny, p, global, custom_policy)?;
+            path = deny_path(p, global, custom_policy)?;
         }
         eprintln!(
             "vetto: preset `{preset_name}` denied (masked secrets: {}), policy file: {}",
@@ -532,8 +871,8 @@ pub fn run_deny(
     }
 
     if let Some(t) = clean_target {
+        let path = deny_path(t, global, custom_policy)?;
         let grant = Grant::Deny;
-        let path = apply(grant, t, global, custom_policy)?;
         println!(
             "vetto: `{t}` denied ({}), policy file: {}",
             grant.describe(),
@@ -854,13 +1193,13 @@ mod tests {
         let custom = dir.join("policy.toml");
 
         // Test --preset ssh
-        run_deny(None, Some("ssh"), false, false, Some(&custom)).expect("deny ssh preset");
+        run_deny(None, Some("ssh"), false, false, false, Some(&custom)).expect("deny ssh preset");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("[display_only_deny]"));
         assert!(content.contains("\"$HOME/.ssh\""));
 
         // Test --preset aws
-        run_deny(None, Some("aws"), false, false, Some(&custom)).expect("deny aws preset");
+        run_deny(None, Some("aws"), false, false, false, Some(&custom)).expect("deny aws preset");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("\"$HOME/.aws\""));
 
@@ -875,7 +1214,7 @@ mod tests {
         let custom = dir.join("policy.toml");
 
         // Test positional call with preset name: target = Some("docker")
-        run_deny(Some("docker"), None, false, false, Some(&custom))
+        run_deny(Some("docker"), None, false, false, false, Some(&custom))
             .expect("deny docker positional");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("[display_only_deny]"));
@@ -887,7 +1226,7 @@ mod tests {
 
     #[test]
     fn test_run_deny_unknown_preset_errors() {
-        let err = run_deny(None, Some("unknown_foobar"), false, false, None).unwrap_err();
+        let err = run_deny(None, Some("unknown_foobar"), false, false, false, None).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("unknown preset 'unknown_foobar'"));
         assert!(msg.contains("known presets:"));
@@ -895,7 +1234,7 @@ mod tests {
 
     #[test]
     fn test_run_deny_missing_target_and_preset_errors() {
-        let err = run_deny(None, None, false, false, None).unwrap_err();
+        let err = run_deny(None, None, false, false, false, None).unwrap_err();
         assert!(err
             .to_string()
             .contains("target path or --preset must be provided"));
@@ -909,7 +1248,7 @@ mod tests {
         let custom = dir.join("policy.toml");
 
         // Test --glob positional pattern
-        run_deny(Some("**/*.pem"), None, true, false, Some(&custom)).expect("deny glob");
+        run_deny(Some("**/*.pem"), None, true, false, false, Some(&custom)).expect("deny glob");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("[filesystem]"));
         assert!(
@@ -933,11 +1272,186 @@ mod tests {
             None,
             false,
             false,
+            false,
             Some(&custom),
         )
         .expect("deny path");
         let content = std::fs::read_to_string(&custom).unwrap();
         assert!(content.contains("\"~/.custom/secret.txt\""));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_root() {
+        assert!(validate_dangerous_path("/").is_err());
+        assert!(validate_dangerous_path("/*").is_err());
+        assert!(validate_dangerous_path("*").is_err());
+        assert!(validate_dangerous_path("/*.*").is_err());
+        assert!(validate_dangerous_path("//").is_err());
+        assert!(validate_dangerous_path("///").is_err());
+        assert!(validate_dangerous_path("/./").is_err());
+        assert!(validate_dangerous_path("/.").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_backslashes() {
+        assert!(validate_dangerous_path("\\").is_err());
+        assert!(validate_dangerous_path("\\etc\\shadow").is_err());
+        assert!(validate_dangerous_path("C:\\Windows").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_traversal() {
+        assert!(validate_dangerous_path("..").is_err());
+        assert!(validate_dangerous_path("../secret").is_err());
+        assert!(validate_dangerous_path("a/../../etc/passwd").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_credentials() {
+        assert!(validate_dangerous_path("~/.ssh").is_err());
+        assert!(validate_dangerous_path("$HOME/.ssh").is_err());
+        assert!(validate_dangerous_path(".ssh").is_err());
+        assert!(validate_dangerous_path("~/.ssh/id_rsa").is_err());
+        assert!(validate_dangerous_path("~/.aws").is_err());
+        assert!(validate_dangerous_path(".env").is_err());
+        assert!(validate_dangerous_path(".env.local").is_err());
+        assert!(validate_dangerous_path("sub/.env").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_system_files() {
+        assert!(validate_dangerous_path("/etc/shadow").is_err());
+        assert!(validate_dangerous_path("/etc/passwd").is_err());
+        assert!(validate_dangerous_path("/etc/sudoers").is_err());
+        assert!(validate_dangerous_path("//etc/shadow").is_err());
+        assert!(validate_dangerous_path("//etc/passwd").is_err());
+        assert!(validate_dangerous_path("/etc//shadow").is_err());
+        assert!(validate_dangerous_path("/etc/./shadow").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_allows_valid_paths() {
+        assert!(validate_dangerous_path("./src").is_ok());
+        assert!(validate_dangerous_path("/opt/data").is_ok());
+        assert!(validate_dangerous_path("target").is_ok());
+        assert!(validate_dangerous_path("tests/fixtures").is_ok());
+        assert!(validate_dangerous_path("/tmp/scratch").is_ok());
+    }
+
+    #[test]
+    fn test_allow_path_blocks_dangerous_path() {
+        let res = allow_path("/", false, false, None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_allow_path_creates_backup_and_preserves_comments() {
+        let dir = std::env::temp_dir().join(format!("vetto-edit-bak-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let custom = dir.join("policy.toml");
+
+        let initial = concat!(
+            "# Important header comment\n",
+            "[filesystem]\n# Read comment\n",
+            "allow_read = [\"/etc/os-release\"]\n"
+        );
+        std::fs::write(&custom, initial).unwrap();
+
+        allow_path("/opt/custom_lib", false, false, Some(&custom)).expect("allow path");
+
+        let bak_path = PathBuf::from(format!("{}.bak", custom.display()));
+        assert!(bak_path.exists());
+        let bak_content = std::fs::read_to_string(&bak_path).unwrap();
+        assert_eq!(bak_content, initial);
+
+        let updated = std::fs::read_to_string(&custom).unwrap();
+        assert!(updated.contains("# Important header comment"));
+        assert!(updated.contains("# Read comment"));
+        assert!(updated.contains("/opt/custom_lib"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_deny_path_adds_to_display_only_deny() {
+        let dir = std::env::temp_dir().join(format!("vetto-deny-path-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let custom = dir.join("policy.toml");
+
+        deny_path("~/.aws/credentials", false, Some(&custom)).expect("deny path");
+
+        let content = std::fs::read_to_string(&custom).unwrap();
+        assert!(content.contains("[display_only_deny]"));
+        assert!(content.contains("\"~/.aws/credentials\""));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_allow_domain_and_deny_domain() {
+        let dir = std::env::temp_dir().join(format!("vetto-net-domain-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let custom = dir.join("policy.toml");
+
+        allow_domain("api.anthropic.com", Some("100mb"), false, Some(&custom))
+            .expect("allow domain");
+        deny_domain("malicious.example.com", false, Some(&custom)).expect("deny domain");
+
+        let content = std::fs::read_to_string(&custom).unwrap();
+        assert!(content.contains("mode = \"allowlist\""));
+        assert!(content.contains("\"api.anthropic.com\""));
+        assert!(content.contains("\"malicious.example.com\""));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_atomic_rollback_on_schema_violation() {
+        let dir = std::env::temp_dir().join(format!("vetto-rollback-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let custom = dir.join("policy.toml");
+
+        let initial = "# Pristine policy\n[filesystem]\nallow_read = [\"/usr\"]\n";
+        std::fs::write(&custom, initial).unwrap();
+
+        // Corrupt document to have an unknown field via manual modification
+        let mut corrupted = initial.to_string();
+        corrupted.push_str("[unknown_bogus_section]\ninvalid_key = 123\n");
+
+        let bak_path = PathBuf::from(format!("{}.bak", custom.display()));
+        std::fs::copy(&custom, &bak_path).unwrap();
+
+        // Attempting to validate should fail and preserve initial file
+        let err = crate::policy::loader::parse_layer(&corrupted, "test").unwrap_err();
+        assert!(err.to_string().contains("unknown field"));
+
+        let current = std::fs::read_to_string(&custom).unwrap();
+        assert_eq!(current, initial);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_run_deny_with_net_flag() {
+        let dir = std::env::temp_dir().join(format!("vetto-run-deny-net-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let custom = dir.join("policy.toml");
+
+        run_deny(
+            Some("evil.example.com"),
+            None,
+            false,
+            true,
+            false,
+            Some(&custom),
+        )
+        .expect("deny domain via net");
+
+        let content = std::fs::read_to_string(&custom).unwrap();
+        assert!(content.contains("[network]"));
+        assert!(content.contains("\"evil.example.com\""));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

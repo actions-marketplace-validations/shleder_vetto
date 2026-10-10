@@ -53,3 +53,10 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.all-hands.dev",
+    "api.openai.com",
+    "api.anthropic.com",
+]

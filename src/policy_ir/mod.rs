@@ -11,10 +11,14 @@ pub mod contract;
 pub mod fsm;
 pub mod sync;
 
-pub use compiler::{CompilerError, PolicyCompiler};
+pub use compiler::{
+    authorize_action, CompilerError, EffectivePolicyInput, LoweredEnforcementMetadata,
+    PolicyCompiler,
+};
 pub use contract::{
-    AgentIdentity, AttestationContract, EnvironmentContract, FilesystemContract, NetworkContract,
-    NetworkMode, ResourceContract, SecurityContract, UnsealedSecurityContract,
+    Action, ActionVerdict, AgentIdentity, AttestationContract, EnvironmentContract,
+    FilesystemContract, NetworkContract, NetworkMode, PolicyError, ResourceContract,
+    SecurityContract, UnsealedSecurityContract,
 };
 pub use fsm::{ExecutionState, ExecutionStateMachine, StateTransitionError};
 pub use sync::{

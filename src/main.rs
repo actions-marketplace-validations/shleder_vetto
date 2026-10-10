@@ -431,11 +431,13 @@ fn run() -> Result<()> {
             target,
             preset,
             glob,
+            net,
             global,
         }) => vetto::policy::edit::run_deny(
             target.as_deref(),
             preset.as_deref(),
             *glob,
+            *net,
             *global,
             args.policy.as_deref().map(Path::new),
         ),
@@ -496,13 +498,23 @@ fn run() -> Result<()> {
             speed,
             json,
         }) => events::run_replay(session, *speed, *json),
-        Some(cli::Command::Verify { json }) => {
+        Some(cli::Command::Verify {
+            json,
+            profile,
+            policy,
+            simulate,
+        }) => {
+            let effective_profile = profile.as_deref().unwrap_or(&args.profile);
+            let effective_policy = policy
+                .as_deref()
+                .or(args.policy.as_deref().map(std::path::Path::new));
             let net = vetto::config::parse_net_mode(args.net.as_deref().unwrap_or("off"))?;
-            vetto::verify::run_cli(
+            vetto::verify::run_cli_with_options(
                 *json,
-                &args.profile,
-                args.policy.as_deref().map(PathBuf::from).as_deref(),
+                effective_profile,
+                effective_policy,
                 &net,
+                *simulate,
             )
         }
 
@@ -566,12 +578,13 @@ fn run() -> Result<()> {
                     backend,
                 )
             }
-            cli::PolicyCommand::Lint { strict } => {
+            cli::PolicyCommand::Lint { strict, json } => {
                 let tier = sandbox::Backend::detect(NetMode::Off, false)
                     .ok()
                     .and_then(|b| b.tier());
                 vetto::policy::lint::run_cli(
                     *strict,
+                    *json,
                     &args.profile,
                     args.policy.as_deref().map(PathBuf::from).as_deref(),
                     tier,

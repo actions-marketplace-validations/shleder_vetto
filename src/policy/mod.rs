@@ -13,11 +13,11 @@ pub mod types;
 
 pub use loader::{
     load, load_with_context, load_with_options, LayeredPolicyLoader, PolicyLoadOptions,
-    PolicyOverrides,
+    PolicyLoader, PolicyOverrides,
 };
 pub use types::{
     analyze_deny_overlap, format_bytes as format_bytes_typed, parse_bytes, parse_cgroup_memory,
     CgroupConfig, DenyEntry, DenyOverlapReport, EnvironmentPolicy, NetMode, NetRule,
-    ParseBytesError, Policy, PolicyMetadata, PolicySourceKind, ResourceLimits, SeccompNotifyConfig,
-    SeccompProfile, SubtractiveRules, Tier, UnitStandard,
+    ParseBytesError, Policy, PolicyError, PolicyMetadata, PolicySourceKind, ResourceLimits,
+    SeccompNotifyConfig, SeccompProfile, SubtractiveRules, Tier, UnitStandard,
 };
