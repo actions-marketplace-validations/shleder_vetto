@@ -330,3 +330,52 @@ fn test_doctor_legacy_parity_retained() {
         );
     }
 }
+
+#[test]
+fn test_doctor_fix_and_agent_check_remediation() {
+    // 1. `vetto doctor --fix` must output remediation guidance and exit cleanly
+    let fix_out = Command::new(vetto_bin())
+        .args(["doctor", "--fix"])
+        .output()
+        .expect("exec vetto doctor --fix");
+
+    assert!(
+        fix_out.status.success(),
+        "doctor --fix failed: {}",
+        String::from_utf8_lossy(&fix_out.stderr)
+    );
+    let fix_stdout = String::from_utf8_lossy(&fix_out.stdout);
+    assert!(
+        fix_stdout.contains("vetto v")
+            || fix_stdout.contains("doctor")
+            || fix_stdout.contains("kernel"),
+        "doctor --fix output missing status info: {fix_stdout}"
+    );
+
+    // 2. `vetto doctor --check-agent claude`
+    let agent_out = Command::new(vetto_bin())
+        .args(["doctor", "--check-agent", "claude"])
+        .output()
+        .expect("exec vetto doctor --check-agent claude");
+
+    assert!(
+        agent_out.status.success(),
+        "doctor --check-agent failed: {}",
+        String::from_utf8_lossy(&agent_out.stderr)
+    );
+}
+
+#[test]
+fn test_doctor_landlock_abi_probes_and_features() {
+    #[cfg(target_os = "linux")]
+    {
+        assert!(vetto::sandbox::linux::landlock::abi_feature_hints(1).is_empty());
+        for abi in 2..=6 {
+            let hints = vetto::sandbox::linux::landlock::abi_feature_hints(abi);
+            assert!(
+                !hints.is_empty(),
+                "ABI {abi} must have documented capability hints"
+            );
+        }
+    }
+}

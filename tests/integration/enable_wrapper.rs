@@ -313,3 +313,141 @@ fn test_enable_all_multi_binary_aliases() {
         "roo-code shim must exist"
     );
 }
+
+#[test]
+fn test_enable_all_and_disable_all_lifecycle() {
+    let project = TempProject::new("enable-disable-all");
+    let proj_dir = project.path();
+
+    // 1. Create mock agents in host_bin
+    let bin_dir = proj_dir.join("host_bin");
+    std::fs::create_dir_all(&bin_dir).expect("create bin dir");
+    let mock_claude = bin_dir.join("claude");
+    write_file(&mock_claude, "#!/bin/sh\necho \"claude mock\"\n");
+    let mock_codex = bin_dir.join("codex");
+    write_file(&mock_codex, "#!/bin/sh\necho \"codex mock\"\n");
+    let mock_aider = bin_dir.join("aider");
+    write_file(&mock_aider, "#!/bin/sh\necho \"aider mock\"\n");
+
+    #[cfg(windows)]
+    {
+        write_file(&bin_dir.join("claude.cmd"), "@echo off\r\necho claude\r\n");
+        write_file(&bin_dir.join("codex.cmd"), "@echo off\r\necho codex\r\n");
+        write_file(&bin_dir.join("aider.cmd"), "@echo off\r\necho aider\r\n");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for p in [&mock_claude, &mock_codex, &mock_aider] {
+            let mut perms = std::fs::metadata(p).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(p, perms).unwrap();
+        }
+    }
+
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = std::env::split_paths(&original_path).collect::<Vec<_>>();
+    paths.insert(0, bin_dir.clone());
+    let custom_path = std::env::join_paths(paths).unwrap();
+
+    // 2. Enable all agents
+    let out_enable = Command::new(vetto_bin())
+        .args(["enable", "--all", "--scope", "local"])
+        .current_dir(proj_dir)
+        .env("PATH", &custom_path)
+        .env("HOME", test_home())
+        .output()
+        .expect("exec enable --all");
+
+    assert!(
+        out_enable.status.success(),
+        "enable --all failed: {}",
+        stderr(&out_enable)
+    );
+
+    let shims_dir = proj_dir.join(".vetto").join("shims");
+    assert!(shims_dir.join("claude").exists(), "claude shim must exist");
+    assert!(shims_dir.join("codex").exists(), "codex shim must exist");
+    assert!(shims_dir.join("aider").exists(), "aider shim must exist");
+
+    // 3. Disable all agents
+    let out_disable = Command::new(vetto_bin())
+        .args(["disable", "--all", "--scope", "local"])
+        .current_dir(proj_dir)
+        .env("PATH", &custom_path)
+        .env("HOME", test_home())
+        .output()
+        .expect("exec disable --all");
+
+    assert!(
+        out_disable.status.success(),
+        "disable --all failed: {}",
+        stderr(&out_disable)
+    );
+    let disable_stdout = stdout(&out_disable);
+    assert!(
+        disable_stdout.contains("disabled all sandbox wrappers"),
+        "expected success summary in stdout: {disable_stdout}"
+    );
+
+    // 4. Verify all shims removed cleanly
+    assert!(
+        !shims_dir.join("claude").exists(),
+        "claude shim must be removed"
+    );
+    assert!(
+        !shims_dir.join("codex").exists(),
+        "codex shim must be removed"
+    );
+    assert!(
+        !shims_dir.join("aider").exists(),
+        "aider shim must be removed"
+    );
+
+    // 5. Verify host binaries are untouched
+    assert!(mock_claude.exists(), "host claude must remain untouched");
+    assert!(mock_codex.exists(), "host codex must remain untouched");
+    assert!(mock_aider.exists(), "host aider must remain untouched");
+
+    // 6. Idempotent disable --all when no shims exist
+    let out_idempotent = Command::new(vetto_bin())
+        .args(["disable", "--all", "--scope", "local"])
+        .current_dir(proj_dir)
+        .env("PATH", &custom_path)
+        .env("HOME", test_home())
+        .output()
+        .expect("exec idempotent disable --all");
+
+    assert!(out_idempotent.status.success());
+    assert!(stdout(&out_idempotent).contains("no active shims found"));
+}
+
+#[test]
+fn test_disable_arg_validation() {
+    let project = TempProject::new("disable-validation");
+    let proj_dir = project.path();
+
+    // 1. disable without agent or --all must fail
+    let out_no_args = Command::new(vetto_bin())
+        .args(["disable"])
+        .current_dir(proj_dir)
+        .output()
+        .expect("exec disable with no args");
+
+    assert!(
+        !out_no_args.status.success(),
+        "disable without args must fail"
+    );
+
+    // 2. disable with both agent and --all must fail
+    let out_conflict = Command::new(vetto_bin())
+        .args(["disable", "claude", "--all"])
+        .current_dir(proj_dir)
+        .output()
+        .expect("exec disable with conflicting args");
+
+    assert!(
+        !out_conflict.status.success(),
+        "disable with both agent and --all must fail"
+    );
+}
