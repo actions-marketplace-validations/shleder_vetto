@@ -956,6 +956,32 @@ fn test_all_32_agent_profiles_auth_and_config_coverage_tier_full() {
     assert_eq!(all_agents.len(), 32, "Must cover all 32 agent profiles");
 
     for agent in all_agents {
+        // Materialize preset paths so checker.rs does not drop non-existent paths from allow_write
+        if let Some(preset_paths) = vetto::policy::presets::resolve_preset(agent) {
+            for raw_path in preset_paths {
+                let resolved = if raw_path.starts_with("$HOME/") {
+                    home.join(raw_path.trim_start_matches("$HOME/"))
+                } else if *raw_path == "$HOME" {
+                    home.clone()
+                } else {
+                    std::path::PathBuf::from(raw_path)
+                };
+                if raw_path.ends_with(".json")
+                    || raw_path.ends_with(".yml")
+                    || raw_path.ends_with(".toml")
+                {
+                    if let Some(parent) = resolved.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if !resolved.exists() {
+                        let _ = std::fs::write(&resolved, "{}");
+                    }
+                } else {
+                    let _ = std::fs::create_dir_all(&resolved);
+                }
+            }
+        }
+
         let opts = PolicyLoadOptions {
             agent: Some(agent.to_string()),
             include_project_policy: false,

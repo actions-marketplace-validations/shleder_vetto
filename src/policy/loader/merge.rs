@@ -664,6 +664,10 @@ impl LayeredPolicyLoader {
                         let _ = std::fs::create_dir_all(home.join(".config/claude"));
                         let _ = std::fs::create_dir_all(home.join(".config/claude-code"));
                         let _ = std::fs::create_dir_all(home.join(".local/share/claude"));
+                        let claude_json = home.join(".claude.json");
+                        if !claude_json.exists() {
+                            let _ = std::fs::write(&claude_json, "{}");
+                        }
                     }
                     Some("antigravity") => {
                         let _ = std::fs::create_dir_all(home.join(".gemini/antigravity/plugins"));

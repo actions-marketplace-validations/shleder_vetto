@@ -26,14 +26,26 @@ const TOP_AGENTS: &[&str] = &[
     "windsurf",
 ];
 
-#[cfg(target_os = "windows")]
-const WINDOWS_SKIP: &str =
-    "SKIP: Windows AppContainer/experimental sandbox backend is unavailable on this host";
+const SHIM_EXEC_SKIP: &str =
+    "SKIP: agent shim execution requires full tier or functional Windows sandbox backend";
 
-#[cfg(target_os = "windows")]
-fn windows_backend_available() -> bool {
-    let doctor = doctor_output();
-    doctor.contains("appcontainer-api=yes") && doctor.contains("experimental-process-sandbox=yes")
+fn agent_shim_execution_supported() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let doctor = doctor_output();
+        if !doctor.contains("appcontainer-api=yes")
+            || !doctor.contains("experimental-process-sandbox=yes")
+        {
+            return false;
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if detected_tier().as_deref() != Some("full") {
+            return false;
+        }
+    }
+    true
 }
 
 fn create_single_mock_agent(bin_dir: &Path, agent_name: &str) {
@@ -175,9 +187,8 @@ fn path_with_bin_dir(bin_dir: &Path) -> std::ffi::OsString {
 /// Scenario 1: Launching top agents via shim without arguments/keys handles absence gracefully without crashing Vetto.
 #[test]
 fn test_e2e_top_agents_zero_args_graceful_handling() {
-    #[cfg(target_os = "windows")]
-    if !windows_backend_available() {
-        eprintln!("{WINDOWS_SKIP}");
+    if !agent_shim_execution_supported() {
+        eprintln!("{SHIM_EXEC_SKIP}");
         return;
     }
 
@@ -220,6 +231,10 @@ fn test_e2e_top_agents_zero_args_graceful_handling() {
 #[test]
 #[cfg(unix)]
 fn test_e2e_top_agents_sigint_translation_and_terminal_reset() {
+    if !agent_shim_execution_supported() {
+        eprintln!("{SHIM_EXEC_SKIP}");
+        return;
+    }
     let project = TempProject::new("e2e-sigint");
     let bin_dir = project.path().join("host_bin");
     create_mock_agents(&bin_dir);
@@ -279,9 +294,8 @@ fn test_e2e_top_agents_sigint_translation_and_terminal_reset() {
 /// Scenario 3: Reading and writing within $PROJECT succeeds without EACCES.
 #[test]
 fn test_e2e_top_agents_project_read_write_unblocked() {
-    #[cfg(target_os = "windows")]
-    if !windows_backend_available() {
-        eprintln!("{WINDOWS_SKIP}");
+    if !agent_shim_execution_supported() {
+        eprintln!("{SHIM_EXEC_SKIP}");
         return;
     }
 
@@ -340,9 +354,8 @@ fn test_e2e_top_agents_project_read_write_unblocked() {
 /// Scenario 4: Attempted read of ~/.ssh/id_rsa strictly fails with Permission denied and is BLOCKED.
 #[test]
 fn test_e2e_top_agents_ssh_key_strictly_blocked() {
-    #[cfg(target_os = "windows")]
-    if !windows_backend_available() {
-        eprintln!("{WINDOWS_SKIP}");
+    if !agent_shim_execution_supported() {
+        eprintln!("{SHIM_EXEC_SKIP}");
         return;
     }
 
@@ -546,9 +559,8 @@ fn test_e2e_shim_resolution_missing_path_diagnostics() {
 /// Adversarial verification: argument passing with special characters and quotes across shims.
 #[test]
 fn test_e2e_top_agents_adversarial_arguments_integrity() {
-    #[cfg(target_os = "windows")]
-    if !windows_backend_available() {
-        eprintln!("{WINDOWS_SKIP}");
+    if !agent_shim_execution_supported() {
+        eprintln!("{SHIM_EXEC_SKIP}");
         return;
     }
 
