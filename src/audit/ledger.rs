@@ -40,6 +40,15 @@ impl LedgerVerificationResult {
     }
 }
 
+/// Typed error variants for audit ledger operations.
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum LedgerError {
+    #[error("LedgerClosed: Cannot append to finalized and signed audit ledger")]
+    LedgerClosed,
+    #[error("LedgerCorrupted: {0}")]
+    Corrupted(String),
+}
+
 /// An append-only audit ledger implementing tamper-evident hash chaining (INV-34, INV-35).
 #[derive(Debug)]
 pub struct AuditLedger {
@@ -88,8 +97,8 @@ impl AuditLedger {
 
         if path_ref.exists() && path_ref.metadata().map(|m| m.len() > 0).unwrap_or(false) {
             let result = Self::verify_file_detailed(path_ref)?;
-            if result.has_signature {
-                anyhow::bail!("Cannot append to finalized and signed audit ledger");
+            if result.has_signature || result.has_terminal_record {
+                return Err(LedgerError::LedgerClosed.into());
             }
             if !result.is_valid {
                 if let Some(ref c) = result.corruption {
@@ -804,5 +813,196 @@ mod tests {
         let _ = std::fs::remove_dir_all(
             std::env::temp_dir().join(format!("vetto-test-ledger-parent-{}", std::process::id())),
         );
+    }
+
+    #[test]
+    fn test_audit_ledger_typed_ledger_closed_error() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-typed-err-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            let p = TestPayload {
+                message: "finalized".into(),
+                code: 0,
+                record_type: None,
+            };
+            ledger.record_event(&p).expect("record");
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        let reopen_res = AuditLedger::new(&ledger_path);
+        assert!(reopen_res.is_err());
+        let err = reopen_res.unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<LedgerError>(),
+            Some(&LedgerError::LedgerClosed)
+        );
+        assert!(err
+            .to_string()
+            .contains("LedgerClosed: Cannot append to finalized and signed audit ledger"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_tamper_payload_modification_at_n() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-payload-tamper-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            for i in 0..3 {
+                let p = TestPayload {
+                    message: format!("event_{i}"),
+                    code: i,
+                    record_type: if i == 2 {
+                        Some("SESSION_VERDICT".into())
+                    } else {
+                        None
+                    },
+                };
+                ledger.record_event(&p).expect("record");
+            }
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        // Mutate payload on line 2 (1-based line number 2, seq 1)
+        let content = std::fs::read_to_string(&ledger_path).expect("read");
+        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        assert!(lines.len() >= 4); // 3 events + 1 signature
+        lines[1] = lines[1].replace("\"event_1\"", "\"event_tampered\"");
+        std::fs::write(&ledger_path, lines.join("\n") + "\n").expect("write");
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(!verify_res.is_valid);
+        let corr = verify_res.corruption.expect("corruption details");
+        assert_eq!(corr.line_number, 2);
+        assert_eq!(corr.seq, Some(1));
+        assert!(corr.reason.contains("Cryptographic hash mismatch"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_tamper_line_deletion() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vetto-test-ledger-line-del-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            for i in 0..3 {
+                let p = TestPayload {
+                    message: format!("event_{i}"),
+                    code: i,
+                    record_type: if i == 2 {
+                        Some("SESSION_VERDICT".into())
+                    } else {
+                        None
+                    },
+                };
+                ledger.record_event(&p).expect("record");
+            }
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        // Delete line 2 (seq 1) from the middle of the ledger
+        let content = std::fs::read_to_string(&ledger_path).expect("read");
+        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        assert!(lines.len() >= 4);
+        lines.remove(1); // removes index 1 (line 2)
+        std::fs::write(&ledger_path, lines.join("\n") + "\n").expect("write");
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(!verify_res.is_valid);
+        let corr = verify_res.corruption.expect("corruption details");
+        assert_eq!(corr.line_number, 2);
+        assert!(corr.reason.contains("Sequence break") || corr.reason.contains("Hash chain break"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_tamper_forged_record_seq_spoofing() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-seq-spoof-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        let hash_0 = {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            let p = TestPayload {
+                message: "genesis_event".into(),
+                code: 0,
+                record_type: None,
+            };
+            ledger.record_event(&p).expect("record")
+        };
+
+        // Inject forged record with invalid seq 99
+        let forged_line = format!(
+            r#"{{"seq":99,"prev_hash":"{hash_0}","hash":"0000000000000000000000000000000000000000000000000000000000000000","message":"forged","code":99}}"#
+        );
+        let mut content = std::fs::read_to_string(&ledger_path).expect("read");
+        content.push_str(&forged_line);
+        content.push('\n');
+        std::fs::write(&ledger_path, content).expect("write");
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(!verify_res.is_valid);
+        let corr = verify_res.corruption.expect("corruption details");
+        assert_eq!(corr.line_number, 2);
+        assert!(corr.reason.contains("Sequence break"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_audit_ledger_tamper_records_after_signature_envelope() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "vetto-test-ledger-after-sig-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let ledger_path = temp_dir.join("ledger.jsonl");
+
+        {
+            let mut ledger = AuditLedger::new(&ledger_path).expect("create ledger");
+            let p = TestPayload {
+                message: "final".into(),
+                code: 0,
+                record_type: Some("SESSION_VERDICT".into()),
+            };
+            ledger.record_event(&p).expect("record");
+            ledger.sign_and_close().expect("sign and close");
+        }
+
+        // Append extraneous record after signature envelope
+        let extraneous_line = r#"{"seq":2,"prev_hash":"0000","hash":"0000","message":"illegal"}"#;
+        let mut content = std::fs::read_to_string(&ledger_path).expect("read");
+        content.push_str(extraneous_line);
+        content.push('\n');
+        std::fs::write(&ledger_path, content).expect("write");
+
+        let verify_res = AuditLedger::verify_file_detailed(&ledger_path).expect("verify");
+        assert!(!verify_res.is_valid);
+        let corr = verify_res.corruption.expect("corruption details");
+        assert!(corr
+            .reason
+            .contains("Extraneous record found after signature envelope"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

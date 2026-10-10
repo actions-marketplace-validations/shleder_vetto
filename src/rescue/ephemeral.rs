@@ -347,4 +347,47 @@ mod tests {
             let _ = fs::remove_dir_all(root.join(&session_id));
         }
     }
+
+    #[test]
+    fn test_ephemeral_guard_panic_unwind() {
+        let project_dir = temp_test_dir("guard-panic");
+        let file_path = project_dir.join("code.rs");
+        fs::write(&file_path, "fn main() { /* clean */ }\n").unwrap();
+
+        let session_id = format!(
+            "test-guard-panic-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        create_snapshot(&project_dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE).unwrap();
+
+        let proj_clone = project_dir.clone();
+        let file_clone = file_path.clone();
+        let sess_clone = session_id.clone();
+
+        let panic_result = std::panic::catch_unwind(move || {
+            let _guard = EphemeralGuard::new(sess_clone, proj_clone);
+            fs::write(&file_clone, "fn main() { /* tainted before panic */ }\n").unwrap();
+            panic!("simulated worker abort");
+        });
+
+        assert!(panic_result.is_err(), "must catch panic");
+
+        // The guard must have triggered rollback in Drop during unwind!
+        assert_eq!(
+            fs::read_to_string(&file_path).unwrap(),
+            "fn main() { /* clean */ }\n"
+        );
+
+        if let Ok(root) = crate::rescue::snapshot::snapshots_root_dir() {
+            assert!(
+                !root.join(&session_id).exists(),
+                "snapshot archive must be cleaned up on drop"
+            );
+        }
+
+        let _ = fs::remove_dir_all(&project_dir);
+    }
 }
