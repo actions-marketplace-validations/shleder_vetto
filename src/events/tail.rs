@@ -197,6 +197,19 @@ pub fn format_event_row(event: &Event) -> String {
     }
 }
 
+fn resolve_home_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(PathBuf::from)
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("HOME").map(PathBuf::from)
+    }
+}
+
 /// Resolves session JSONL path from file path or session ID.
 pub fn resolve_session_path(session_arg: &Path) -> Result<PathBuf> {
     if session_arg.is_file() {
@@ -213,10 +226,7 @@ pub fn resolve_session_path(session_arg: &Path) -> Result<PathBuf> {
     let stripped = raw.strip_prefix("session-").unwrap_or(raw);
 
     // Check in ~/.vetto/logs/ and ~/.vetto/
-    if let Some(home) = std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-    {
+    if let Some(home) = resolve_home_dir() {
         let logs_dir = home.join(".vetto").join("logs");
 
         // 1. ~/.vetto/logs/<session>.jsonl
@@ -414,52 +424,92 @@ mod tests {
 
     #[test]
     fn test_resolve_session_path_in_logs_dir() {
-        if let Some(home) = std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from)
-        {
-            let logs_dir = home.join(".vetto").join("logs");
-            if std::fs::create_dir_all(&logs_dir).is_err() {
-                return;
-            }
+        let _lock = crate::cli::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
-            // Test <session>.jsonl
-            let s1 = format!("test-tail-unit-{}", std::process::id());
-            let log1 = logs_dir.join(format!("{s1}.jsonl"));
-            if std::fs::write(&log1, b"{}\n").is_err() {
-                return;
-            }
-
-            let res1 = resolve_session_path(Path::new(&s1)).expect("resolve s1");
-            assert!(
-                res1 == log1 || res1.file_name() == log1.file_name(),
-                "res1 {res1:?} does not match log1 {log1:?}"
-            );
-
-            // Test session-<session>.jsonl
-            let s2 = format!("test-tail-sup-{}", std::process::id());
-            let log2 = logs_dir.join(format!("session-{s2}.jsonl"));
-            if std::fs::write(&log2, b"{}\n").is_err() {
-                let _ = std::fs::remove_file(&log1);
-                return;
-            }
-
-            let res2 = resolve_session_path(Path::new(&s2)).expect("resolve s2");
-            assert!(
-                res2 == log2 || res2.file_name() == log2.file_name(),
-                "res2 {res2:?} does not match log2 {log2:?}"
-            );
-
-            let res2_prefixed = resolve_session_path(Path::new(&format!("session-{s2}")))
-                .expect("resolve prefixed");
-            assert!(
-                res2_prefixed == log2 || res2_prefixed.file_name() == log2.file_name(),
-                "res2_prefixed {res2_prefixed:?} does not match log2 {log2:?}"
-            );
-
-            let _ = std::fs::remove_file(log1);
-            let _ = std::fs::remove_file(log2);
+        let temp_home = std::env::temp_dir().join(format!(
+            "vetto-tail-home-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&temp_home);
+        if std::fs::create_dir_all(&temp_home).is_err() {
+            return;
         }
+
+        struct TestHomeGuard {
+            dir: PathBuf,
+            old_home: Option<std::ffi::OsString>,
+            old_userprofile: Option<std::ffi::OsString>,
+        }
+
+        impl Drop for TestHomeGuard {
+            fn drop(&mut self) {
+                if let Some(ref h) = self.old_home {
+                    std::env::set_var("HOME", h);
+                } else {
+                    std::env::remove_var("HOME");
+                }
+                if let Some(ref u) = self.old_userprofile {
+                    std::env::set_var("USERPROFILE", u);
+                } else {
+                    std::env::remove_var("USERPROFILE");
+                }
+                let _ = std::fs::remove_dir_all(&self.dir);
+            }
+        }
+
+        let _guard = TestHomeGuard {
+            dir: temp_home.clone(),
+            old_home: std::env::var_os("HOME"),
+            old_userprofile: std::env::var_os("USERPROFILE"),
+        };
+
+        std::env::set_var("HOME", &temp_home);
+        std::env::set_var("USERPROFILE", &temp_home);
+
+        let logs_dir = temp_home.join(".vetto").join("logs");
+        if std::fs::create_dir_all(&logs_dir).is_err() {
+            return;
+        }
+
+        // Test <session>.jsonl
+        let s1 = format!("test-tail-unit-{}", std::process::id());
+        let log1 = logs_dir.join(format!("{s1}.jsonl"));
+        if std::fs::write(&log1, b"{}\n").is_err() {
+            return;
+        }
+
+        let res1 = resolve_session_path(Path::new(&s1)).expect("resolve s1");
+        assert!(
+            res1 == log1 || res1.file_name() == log1.file_name(),
+            "res1 {res1:?} does not match log1 {log1:?}"
+        );
+
+        // Test session-<session>.jsonl
+        let s2 = format!("test-tail-sup-{}", std::process::id());
+        let log2 = logs_dir.join(format!("session-{s2}.jsonl"));
+        if std::fs::write(&log2, b"{}\n").is_err() {
+            let _ = std::fs::remove_file(&log1);
+            return;
+        }
+
+        let res2 = resolve_session_path(Path::new(&s2)).expect("resolve s2");
+        assert!(
+            res2 == log2 || res2.file_name() == log2.file_name(),
+            "res2 {res2:?} does not match log2 {log2:?}"
+        );
+
+        let res2_prefixed = resolve_session_path(Path::new(&format!("session-{s2}")))
+            .expect("resolve prefixed");
+        assert!(
+            res2_prefixed == log2 || res2_prefixed.file_name() == log2.file_name(),
+            "res2_prefixed {res2_prefixed:?} does not match log2 {log2:?}"
+        );
+
+        let _ = std::fs::remove_file(log1);
+        let _ = std::fs::remove_file(log2);
     }
 
     #[test]
