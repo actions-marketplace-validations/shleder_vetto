@@ -2031,24 +2031,11 @@ fn test_m3_permissive_profile_explicit_vs_default_fail_closed() {
 }
 
 // ----------------------------------------------------------------------------
-// Test 12: Deserialization of All 10 Profiles With [network] Sections
+// Test 12: Deserialization of All 32 Agent Profiles With [network] Sections
 // ----------------------------------------------------------------------------
 #[test]
-fn test_m3_all_10_profiles_network_sections_deserialize() {
-    let target_10 = [
-        "antigravity",
-        "claude",
-        "codex",
-        "copilot",
-        "cursor",
-        "custom",
-        "devin",
-        "goose",
-        "openhands",
-        "windsurf",
-    ];
-
-    for agent in target_10 {
+fn test_m3_all_32_profiles_network_sections_deserialize() {
+    for agent in vetto::policy::defaults::AGENT_PROFILE_NAMES {
         let toml_content = vetto::policy::defaults::agent_builtin(agent)
             .unwrap_or_else(|| panic!("Built-in TOML profile for '{agent}' must exist"));
 
@@ -2074,6 +2061,11 @@ fn test_m3_all_10_profiles_network_sections_deserialize() {
              allow_domains, or net_presets"
         );
     }
+}
+
+#[test]
+fn test_m3_all_10_profiles_network_sections_deserialize() {
+    test_m3_all_32_profiles_network_sections_deserialize();
 }
 
 // ----------------------------------------------------------------------------
@@ -2213,6 +2205,12 @@ fn test_m4_policy_linter_root_wildcard_detection() {
     // 15.4: Normal scoped path must not trigger
     policy.allow_read = vec![PathBuf::from("/home/user/project")];
     assert!(rule_root_wildcard(&policy).is_empty());
+
+    // 15.5: Bare wildcard '*' in filesystem paths is strictly rejected by AST path validator
+    assert!(
+        vetto::policy::edit::validate_dangerous_path("*").is_err(),
+        "Bare wildcard '*' in filesystem paths must be rejected by validate_dangerous_path"
+    );
 }
 
 // ----------------------------------------------------------------------------
@@ -2389,6 +2387,29 @@ allow_write = ["src"]
     assert!(net_content.contains("api.anthropic.com"));
     assert!(net_content.contains("evil.com"));
 
+    // 18.7: Atomic rollback from .bak when edited policy violates RawLayer schema
+    let rollback_test_path = test_dir.join("rollback_test.toml");
+    let original_rollback_toml = r#"# Original schema-invalid toml
+[metadata]
+name = "rollback-profile"
+unknown_field_triggers_failure = true
+
+[filesystem]
+allow_write = ["src"]
+"#;
+    std::fs::write(&rollback_test_path, original_rollback_toml).expect("write rollback toml");
+    let rollback_res = allow_path("new_target", false, false, Some(&rollback_test_path));
+    assert!(
+        rollback_res.is_err(),
+        "Schema validation error must trigger failure"
+    );
+    let restored_content =
+        std::fs::read_to_string(&rollback_test_path).expect("read restored policy");
+    assert_eq!(
+        restored_content, original_rollback_toml,
+        "Policy file must be restored from .bak backup on failure"
+    );
+
     let _ = std::fs::remove_dir_all(&test_dir);
 }
 
@@ -2399,12 +2420,87 @@ allow_write = ["src"]
 fn test_m4_policy_edit_dangerous_paths_rejected() {
     use vetto::policy::edit::validate_dangerous_path;
 
+    // All 10 dangerous paths required by AGENT_2_TASK §3.8:
+    // 1. /
+    assert!(validate_dangerous_path("/").is_err());
     assert!(validate_dangerous_path("//").is_err());
     assert!(validate_dangerous_path("///").is_err());
+
+    // 2. /*
+    assert!(validate_dangerous_path("/*").is_err());
+    assert!(validate_dangerous_path("/*.*").is_err());
+    assert!(validate_dangerous_path("*").is_err());
+
+    // 3. /etc
+    assert!(validate_dangerous_path("/etc").is_err());
+    assert!(validate_dangerous_path("/etc/").is_err());
+    assert!(validate_dangerous_path("//etc").is_err());
+    assert!(validate_dangerous_path("//etc/").is_err());
+    assert!(validate_dangerous_path("/etc/*").is_err());
+    assert!(validate_dangerous_path("/etc/shadow").is_err());
     assert!(validate_dangerous_path("//etc/shadow").is_err());
     assert!(validate_dangerous_path("//etc/passwd").is_err());
     assert!(validate_dangerous_path("/etc//shadow").is_err());
     assert!(validate_dangerous_path("/etc/./shadow").is_err());
+    assert!(validate_dangerous_path("/etc/sudoers").is_err());
+
+    // 4. /usr
+    assert!(validate_dangerous_path("/usr").is_err());
+    assert!(validate_dangerous_path("/usr/").is_err());
+    assert!(validate_dangerous_path("//usr").is_err());
+    assert!(validate_dangerous_path("//usr/").is_err());
+    assert!(validate_dangerous_path("/usr/*").is_err());
+
+    // 5. /bin
+    assert!(validate_dangerous_path("/bin").is_err());
+    assert!(validate_dangerous_path("/bin/").is_err());
+    assert!(validate_dangerous_path("//bin").is_err());
+    assert!(validate_dangerous_path("//bin/").is_err());
+    assert!(validate_dangerous_path("/bin/*").is_err());
+
+    // 6. /sbin
+    assert!(validate_dangerous_path("/sbin").is_err());
+    assert!(validate_dangerous_path("/sbin/").is_err());
+    assert!(validate_dangerous_path("//sbin").is_err());
+    assert!(validate_dangerous_path("//sbin/").is_err());
+    assert!(validate_dangerous_path("/sbin/*").is_err());
+
+    // 7. ~/.ssh
+    assert!(validate_dangerous_path("~/.ssh").is_err());
+    assert!(validate_dangerous_path("~/.ssh/").is_err());
+    assert!(validate_dangerous_path(".ssh").is_err());
+    assert!(validate_dangerous_path(".ssh/").is_err());
+    assert!(validate_dangerous_path("~/.ssh/id_rsa").is_err());
+
+    // 8. ~/.aws
+    assert!(validate_dangerous_path("~/.aws").is_err());
+    assert!(validate_dangerous_path("~/.aws/").is_err());
+    assert!(validate_dangerous_path(".aws").is_err());
+    assert!(validate_dangerous_path(".aws/").is_err());
+    assert!(validate_dangerous_path("~/.aws/credentials").is_err());
+
+    // 9. .env
+    assert!(validate_dangerous_path(".env").is_err());
+    assert!(validate_dangerous_path(".env.local").is_err());
+    assert!(validate_dangerous_path(".env_prod").is_err());
+    assert!(validate_dangerous_path(".env-production").is_err());
+    assert!(validate_dangerous_path(".env-local").is_err());
+    assert!(validate_dangerous_path(".env/secret").is_err());
+    assert!(validate_dangerous_path(".env/*").is_err());
+    assert!(validate_dangerous_path("sub/.env").is_err());
+    assert!(validate_dangerous_path("sub/.env/token").is_err());
+    assert!(validate_dangerous_path("sub/.env-staging").is_err());
+
+    // 10. .git
+    assert!(validate_dangerous_path(".git").is_err());
+    assert!(validate_dangerous_path(".git/").is_err());
+    assert!(validate_dangerous_path("~/.git").is_err());
+    assert!(validate_dangerous_path("./.git").is_err());
+    assert!(validate_dangerous_path("sub/.git").is_err());
+    assert!(validate_dangerous_path(".git/config").is_err());
+
+    // 11. Null bytes
+    assert!(validate_dangerous_path("/etc/shadow\0.txt").is_err());
 }
 
 // ----------------------------------------------------------------------------
@@ -2478,6 +2574,49 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
         "Tampered contract must fail SHA-256 seal verification (INV-36)"
     );
 
+    // 19.4: Preflight battery failure when contract is tampered (R9 requirement)
+    let tampered_report = battery_simulated(&tampered, &policy, &net, std::time::Instant::now());
+    assert_eq!(tampered_report.status(), "failed");
+    assert!(tampered_report.leaks() > 0);
+    let tampered_json = tampered_report.to_json();
+    let tampered_checks = tampered_json["checks"].as_array().expect("tampered checks");
+    let integrity_check = tampered_checks
+        .iter()
+        .find(|c| c["name"] == "contract-integrity")
+        .expect("contract-integrity check must exist");
+    assert_eq!(integrity_check["status"], "leak");
+
+    // 19.5: Negative check for secret leak in preflight probe
+    let mut leak_policy = policy.clone();
+    leak_policy.allow_read.push(ws.join(".env"));
+    let mut leak_contract = contract.clone();
+    leak_contract.filesystem.allow_read.push(ws.join(".env"));
+    leak_contract.filesystem.mask_paths.push(ws.join(".env"));
+    let leak_report = battery_simulated(&leak_contract, &leak_policy, &net, std::time::Instant::now());
+    let leak_json = leak_report.to_json();
+    let secret_check = leak_json["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "secret-mask-deny")
+        .unwrap();
+    assert_eq!(secret_check["status"], "leak");
+
+    // 19.6: Negative check for open network in preflight probe
+    let mut open_net_contract = contract.clone();
+    open_net_contract.network.mode = vetto::policy_ir::contract::NetworkMode::Allowlist;
+    open_net_contract.network.allowed_domains = vec![];
+    let open_net_report =
+        battery_simulated(&open_net_contract, &policy, &net, std::time::Instant::now());
+    let open_json = open_net_report.to_json();
+    let net_check = open_json["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "network-block")
+        .unwrap();
+    assert_eq!(net_check["status"], "leak");
+
     let _ = std::fs::remove_dir_all(&ws);
 }
 
@@ -2497,15 +2636,22 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     let ws = temp_dir.join(format!("vetto_m4_explain_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let policy = Policy {
+    let mut policy = Policy {
         name: "explain-m4".to_string(),
         allow_write: vec![ws.clone()],
         allow_read: vec![PathBuf::from("/usr")],
         deny_write: vec![ws.join("locked.txt")],
-        deny_resolved: vec![DenyEntry {
-            path: ws.join(".env"),
-            is_dir: false,
-        }],
+        deny_read: vec![ws.join("confidential")],
+        deny_resolved: vec![
+            DenyEntry {
+                path: ws.join(".env"),
+                is_dir: false,
+            },
+            DenyEntry {
+                path: ws.join("secret_vault"),
+                is_dir: true,
+            },
+        ],
         network_allow: vec!["api.anthropic.com".to_string()],
         net_connect_ports: vec![443],
         limits: vetto::policy::ResourceLimits {
@@ -2535,6 +2681,11 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     let exp_ws = explain_why(&policy, &ws.join("file.rs"), &ws);
     assert_eq!(exp_ws.access, "WRITABLE");
 
+    // Relative path resolution in explain_why
+    let exp_rel = explain_why(&policy, std::path::Path::new("file.rs"), &ws);
+    assert_eq!(exp_rel.access, "WRITABLE");
+    assert_eq!(exp_rel.path, ws.join("file.rs").display().to_string());
+
     let exp_lock = explain_why(&policy, &ws.join("locked.txt"), &ws);
     assert_eq!(exp_lock.access, "READ_ONLY");
     assert_eq!(exp_lock.rule_type, "deny_write");
@@ -2542,6 +2693,16 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     let exp_sec = explain_why(&policy, &ws.join(".env"), &ws);
     assert_eq!(exp_sec.access, "DENIED");
     assert_eq!(exp_sec.rule_type, "display_only_deny");
+
+    // Directory mask (is_dir: true) in explain_why
+    let exp_dir_mask = explain_why(&policy, &ws.join("secret_vault/token.txt"), &ws);
+    assert_eq!(exp_dir_mask.access, "DENIED");
+    assert_eq!(exp_dir_mask.rule_type, "display_only_deny");
+
+    // Subtractive deny_read in explain_why
+    let exp_deny_read = explain_why(&policy, &ws.join("confidential/report.pdf"), &ws);
+    assert_eq!(exp_deny_read.access, "DENIED");
+    assert_eq!(exp_deny_read.rule_type, "deny_read");
 
     let exp_out = explain_why(&policy, &PathBuf::from("/var/log/secret.log"), &ws);
     assert_eq!(exp_out.access, "BLOCKED");
@@ -2603,4 +2764,588 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     assert_eq!(explain_json["quotas"]["cpu"]["rlimit_seconds"], 60);
 
     let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Test R1-Extended: Capability Gate Edge Cases, Precedence & Full Action Coverage
+// ----------------------------------------------------------------------------
+#[test]
+fn test_capability_gate_extended_edge_cases_and_precedence() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_r1_ext_{}", std::process::id()));
+    std::fs::create_dir_all(ws.join("src")).expect("create test workspace");
+
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/root"));
+
+    // 1. Explicit allow vs Secret Mask Precedence:
+    // Construct a contract where secret paths (.env and ~/.ssh/id_rsa) are explicitly in allow_write and allow_read.
+    // Presence in mask_paths must unconditionally yield ActionVerdict::Denied.
+    let mut contract = PolicyCompiler::compile(
+        "claude",
+        &ws,
+        Some(NetworkMode::Allowlist),
+        &[ws.clone(), home.clone()],
+        &[ws.clone()],
+    )
+    .expect("compile contract");
+
+    // Artificially inject secrets into allow lists
+    contract.filesystem.allow_write.push(ws.join(".env"));
+    contract.filesystem.allow_read.push(ws.join(".env"));
+    contract.filesystem.allow_read.push(home.join(".ssh/id_rsa"));
+    contract.filesystem.mask_paths.push(ws.join(".env"));
+    contract.filesystem.mask_paths.push(home.join(".ssh/id_rsa"));
+
+    let read_env = authorize_action(&contract, &Action::FsRead(ws.join(".env")));
+    assert!(
+        read_env.is_denied(),
+        "Explicitly allowed .env read must be denied by secret mask priority"
+    );
+    assert!(read_env.denial_rule().unwrap().starts_with("secret_mask:"));
+
+    let write_env = authorize_action(&contract, &Action::FsWrite(ws.join(".env")));
+    assert!(
+        write_env.is_denied(),
+        "Explicitly allowed .env write must be denied by secret mask priority"
+    );
+    assert!(write_env.denial_rule().unwrap().starts_with("secret_mask:"));
+
+    let read_ssh = authorize_action(&contract, &Action::FsRead(home.join(".ssh/id_rsa")));
+    assert!(
+        read_ssh.is_denied(),
+        "Explicitly allowed ~/.ssh/id_rsa read must be denied by secret mask priority"
+    );
+    assert!(read_ssh.denial_rule().unwrap().starts_with("secret_mask:"));
+
+    // 2. ProcessExec edge cases:
+    // a. Empty binary path
+    let exec_empty = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::new(),
+            args: vec![],
+        },
+    );
+    assert!(exec_empty.is_denied());
+    assert_eq!(exec_empty.denial_rule().unwrap(), "exec_empty_path");
+
+    // b. Path traversal in binary
+    let exec_traversal = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: PathBuf::from("../escape/bin"),
+            args: vec![],
+        },
+    );
+    assert!(exec_traversal.is_denied());
+    assert_eq!(exec_traversal.denial_rule().unwrap(), "path_traversal");
+
+    // c. ProcessExec colliding with secret mask
+    let exec_secret = authorize_action(
+        &contract,
+        &Action::ProcessExec {
+            binary: ws.join(".env"),
+            args: vec![],
+        },
+    );
+    assert!(exec_secret.is_denied());
+    assert!(exec_secret.denial_rule().unwrap().starts_with("secret_mask:"));
+
+    // 3. NetConnect edge cases:
+    // a. NetworkMode::Ask requires interactive approval for unapproved connections
+    let mut contract_ask = contract.clone();
+    contract_ask.network.mode = NetworkMode::Ask;
+    let net_ask = authorize_action(
+        &contract_ask,
+        &Action::NetConnect {
+            domain: "api.unknown.com".to_string(),
+            port: 443,
+        },
+    );
+    assert!(net_ask.is_denied());
+    assert_eq!(net_ask.denial_rule().unwrap(), "net_mode:ask_unapproved");
+
+    // b. NetworkMode::Direct permits direct network access
+    let mut contract_direct = contract.clone();
+    contract_direct.network.mode = NetworkMode::Direct;
+    let net_direct = authorize_action(
+        &contract_direct,
+        &Action::NetConnect {
+            domain: "api.example.com".to_string(),
+            port: 443,
+        },
+    );
+    assert!(
+        net_direct.is_allowed(),
+        "Direct network mode must authorize connection"
+    );
+
+    // c. Empty domain is rejected
+    let net_empty = authorize_action(
+        &contract,
+        &Action::NetConnect {
+            domain: "   ".to_string(),
+            port: 443,
+        },
+    );
+    assert!(net_empty.is_denied());
+    assert_eq!(net_empty.denial_rule().unwrap(), "net_empty_domain");
+
+    // d. Port mismatch rejection
+    let mut contract_ports = contract.clone();
+    contract_ports.network.mode = NetworkMode::Allowlist;
+    contract_ports.network.allowed_domains = vec!["api.github.com".to_string()];
+    contract_ports.network.allowed_ports = vec![443];
+
+    let net_port_ok = authorize_action(
+        &contract_ports,
+        &Action::NetConnect {
+            domain: "api.github.com".to_string(),
+            port: 443,
+        },
+    );
+    assert!(net_port_ok.is_allowed());
+
+    let net_port_bad = authorize_action(
+        &contract_ports,
+        &Action::NetConnect {
+            domain: "api.github.com".to_string(),
+            port: 8080,
+        },
+    );
+    assert!(net_port_bad.is_denied());
+    assert_eq!(net_port_bad.denial_rule().unwrap(), "net_port_allowlist");
+
+    // e. Anti-SSRF cloud metadata blocking
+    let metadata_targets = [
+        "169.254.169.254",
+        "169.254.169.253",
+        "100.100.100.200",
+        "metadata.google.internal",
+        "metadata.azure.com",
+        "instance-data",
+    ];
+    for meta in metadata_targets {
+        let meta_v = authorize_action(
+            &contract_ports,
+            &Action::NetConnect {
+                domain: meta.to_string(),
+                port: 80,
+            },
+        );
+        assert!(
+            meta_v.is_denied(),
+            "Cloud metadata target {meta} must be denied"
+        );
+        assert_eq!(meta_v.denial_rule().unwrap(), "cloud_metadata");
+    }
+
+    // f. Loopback blocking
+    let loopback_targets = ["localhost", "127.0.0.1", "::1", "sub.localhost"];
+    for loopback in loopback_targets {
+        let loop_v = authorize_action(
+            &contract_ports,
+            &Action::NetConnect {
+                domain: loopback.to_string(),
+                port: 8080,
+            },
+        );
+        assert!(
+            loop_v.is_denied(),
+            "Loopback target {loopback} must be denied"
+        );
+        assert_eq!(loop_v.denial_rule().unwrap(), "loopback");
+    }
+
+    // 4. FsRead / FsWrite empty path rejection
+    let fs_read_empty = authorize_action(&contract, &Action::FsRead(PathBuf::new()));
+    assert!(fs_read_empty.is_denied());
+    assert_eq!(fs_read_empty.denial_rule().unwrap(), "fs_empty_path");
+
+    let fs_write_empty = authorize_action(&contract, &Action::FsWrite(PathBuf::new()));
+    assert!(fs_write_empty.is_denied());
+    assert_eq!(fs_write_empty.denial_rule().unwrap(), "fs_empty_path");
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Test R2-Extended: Complex Traversal, System Root Containment & Extended Masks
+// ----------------------------------------------------------------------------
+#[test]
+fn test_policy_compiler_complex_traversal_and_extended_masks() {
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let ws = temp_dir.join(format!("vetto_r2_ext_{}", std::process::id()));
+    std::fs::create_dir_all(ws.join("sub/dir")).expect("create test workspace");
+
+    // 1. Complex multi-hop directory traversal with redundant slashes and ..
+    let multi_hop_traversals = [
+        "sub/dir/../../../escaped.txt",
+        "sub//dir//..//..//..//escaped.txt",
+        "sub/./dir/../../../../escaped.txt",
+    ];
+    for traversal in multi_hop_traversals {
+        let bad_path = ws.join(traversal);
+        let res = PolicyCompiler::compile(
+            "aider",
+            &ws,
+            None,
+            std::slice::from_ref(&ws),
+            &[bad_path],
+        );
+        assert!(
+            matches!(res, Err(CompilerError::ConflictingPermissions(_))),
+            "Multi-hop traversal sequence must be rejected: {traversal}"
+        );
+    }
+
+    // 2. Deep ancestor walk on non-existent path reaching system roots
+    let deep_forbidden_roots = [
+        "/etc/deep/nonexistent/nested/path/to/secret.conf",
+        "/usr/local/secret/nonexistent/tool",
+        "/bin/nonexistent_sub/trojan",
+    ];
+    for forbidden in deep_forbidden_roots {
+        let policy = Policy {
+            name: "forbidden-root-test".to_string(),
+            allow_write: vec![PathBuf::from(forbidden)],
+            allow_read: vec![ws.clone()],
+            ..Default::default()
+        };
+        let input = EffectivePolicyInput {
+            policy: &policy,
+            argv: &["agent".to_string()],
+            cwd: &ws,
+            env: &std::collections::BTreeMap::new(),
+            net: &NetMode::Off,
+            nonce: "nonce-r2-test",
+            timeout: None,
+            tier: None,
+            backend: "none".to_string(),
+            observe_seccomp: false,
+            debug_ports: None,
+        };
+        let res = PolicyCompiler::compile_effective(input);
+        assert!(
+            res.is_err(),
+            "Deep ancestor walk into forbidden system root must fail: {forbidden}"
+        );
+    }
+
+    // 3. Extended secret mask collision with deny_resolved (~/.docker/config.json, ~/.npmrc)
+    let extended_secrets = [
+        ws.join(".docker/config.json"),
+        ws.join(".npmrc"),
+        ws.join(".config/gh/hosts.yml"),
+    ];
+    for ext_secret in extended_secrets {
+        let policy = Policy {
+            name: "extended-secret-test".to_string(),
+            allow_write: vec![ext_secret.clone()],
+            allow_read: vec![ws.clone()],
+            deny_resolved: vec![DenyEntry {
+                path: ext_secret.clone(),
+                is_dir: false,
+            }],
+            ..Default::default()
+        };
+        let input = EffectivePolicyInput {
+            policy: &policy,
+            argv: &["agent".to_string()],
+            cwd: &ws,
+            env: &std::collections::BTreeMap::new(),
+            net: &NetMode::Off,
+            nonce: "nonce-r2-masks",
+            timeout: None,
+            tier: None,
+            backend: "none".to_string(),
+            observe_seccomp: false,
+            debug_ports: None,
+        };
+        let res = PolicyCompiler::compile_effective(input);
+        assert!(
+            matches!(res, Err(CompilerError::ConflictingPermissions(_))),
+            "Write target colliding with extended secret mask must be rejected: {:?}",
+            ext_secret
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&ws);
+}
+
+// ----------------------------------------------------------------------------
+// Test R3-Extended: Single-Byte Flag Fuzzing, JSON Order Invariance & Empty Hash
+// ----------------------------------------------------------------------------
+#[test]
+fn test_sealed_contract_single_byte_fuzzing_and_order_invariance() {
+    let contract = create_test_verdict_contract();
+    assert!(contract.verify_sha256(), "Clean contract must verify SHA-256");
+    assert!(
+        contract.verify_sealed().is_ok(),
+        "Clean contract must pass verify_sealed"
+    );
+
+    // 1. Single-byte boolean flag mutations on verify_sha256()
+    // a. cow_overlay mutation
+    let mut mut_cow = contract.clone();
+    mut_cow.filesystem.cow_overlay = !mut_cow.filesystem.cow_overlay;
+    assert!(
+        !mut_cow.verify_sha256(),
+        "Mutating cow_overlay must invalidate SHA-256"
+    );
+
+    // b. execution_root_ro mutation
+    let mut mut_ro = contract.clone();
+    mut_ro.filesystem.execution_root_ro = !mut_ro.filesystem.execution_root_ro;
+    assert!(
+        !mut_ro.verify_sha256(),
+        "Mutating execution_root_ro must invalidate SHA-256"
+    );
+
+    // c. block_cloud_metadata mutation
+    let mut mut_meta = contract.clone();
+    mut_meta.network.block_cloud_metadata = !mut_meta.network.block_cloud_metadata;
+    assert!(
+        !mut_meta.verify_sha256(),
+        "Mutating block_cloud_metadata must invalidate SHA-256"
+    );
+
+    // d. block_loopback_daemons mutation
+    let mut mut_loop = contract.clone();
+    mut_loop.network.block_loopback_daemons = !mut_loop.network.block_loopback_daemons;
+    assert!(
+        !mut_loop.verify_sha256(),
+        "Mutating block_loopback_daemons must invalidate SHA-256"
+    );
+
+    // e. agent_identity mutation
+    let mut mut_agent = contract.clone();
+    mut_agent.agent_identity.agent_name = "mutated_agent".to_string();
+    assert!(
+        !mut_agent.verify_sha256(),
+        "Mutating agent_name must invalidate SHA-256"
+    );
+
+    // f. resources quota mutations
+    let mut mut_time = contract.clone();
+    mut_time.resources.max_wall_time_ms = Some(999_999);
+    assert!(
+        !mut_time.verify_sha256(),
+        "Mutating max_wall_time_ms must invalidate SHA-256"
+    );
+
+    let mut mut_mem = contract.clone();
+    mut_mem.resources.max_memory_bytes = Some(1024 * 1024);
+    assert!(
+        !mut_mem.verify_sha256(),
+        "Mutating max_memory_bytes must invalidate SHA-256"
+    );
+
+    let mut mut_cpu = contract.clone();
+    mut_cpu.resources.max_cpu_percent = Some(25);
+    assert!(
+        !mut_cpu.verify_sha256(),
+        "Mutating max_cpu_percent must invalidate SHA-256"
+    );
+
+    // 2. JSON serialization key-order independence
+    let digest_original = contract.compute_sha256_digest().expect("original digest");
+    let contract_val = serde_json::to_value(&contract).expect("serialize value");
+    let serialized_str = serde_json::to_string(&contract_val).expect("to string");
+    let deserialized_contract: SecurityContract =
+        serde_json::from_str(&serialized_str).expect("deserialize");
+    let digest_roundtrip = deserialized_contract
+        .compute_sha256_digest()
+        .expect("roundtrip digest");
+    assert_eq!(
+        digest_original, digest_roundtrip,
+        "SHA-256 digest computation must be invariant to JSON representation and key order"
+    );
+
+    // 3. Empty sealed contract hash triggers fail-closed Exit 125
+    let mut empty_hash_contract = contract.clone();
+    empty_hash_contract.sealed_contract_hash = String::new();
+    assert!(
+        !empty_hash_contract.verify_sha256(),
+        "Empty sealed_contract_hash must fail verify_sha256"
+    );
+    let verify_err = empty_hash_contract.verify_sealed().unwrap_err();
+    assert_eq!(
+        verify_err.exit_code(),
+        125,
+        "Empty contract hash must yield fail-closed exit code 125"
+    );
+}
+
+// ----------------------------------------------------------------------------
+// Test R4: FSM Convenience Methods, Exit Code & Completed Guard
+// ----------------------------------------------------------------------------
+#[test]
+fn test_fsm_convenience_methods_and_completed_invariants() {
+    // 1. fail_closed_canonical transitions FSM to Failed with exit code 125
+    let mut fsm = ExecutionStateMachine::new_canonical();
+    fsm.transition(ExecutionState::PolicyCompiled).unwrap();
+    let err = fsm.fail_closed_canonical("LSM compilation failed");
+    assert_eq!(err.exit_code(), 125);
+    assert_eq!(fsm.current_state(), ExecutionState::Failed);
+    assert!(fsm.is_terminal());
+
+    // 2. fail_closed_emergency transitions FSM directly to EmergencyCleanup with exit code 125
+    let mut fsm_em = ExecutionStateMachine::new_canonical();
+    fsm_em.transition(ExecutionState::PolicyCompiled).unwrap();
+    fsm_em.transition(ExecutionState::PreflightPassed).unwrap();
+    let err_em = fsm_em.fail_closed_emergency("Preflight tripwire breached");
+    assert_eq!(err_em.exit_code(), 125);
+    assert_eq!(fsm_em.current_state(), ExecutionState::EmergencyCleanup);
+    assert!(fsm_em.is_fail_closed());
+
+    // 3. Direct transition from all 9 active states to Failed
+    let active_states = [
+        ExecutionState::Uninitialized,
+        ExecutionState::PolicyCompiled,
+        ExecutionState::PreflightPassed,
+        ExecutionState::IsolationConfigured,
+        ExecutionState::ChildSpawned,
+        ExecutionState::Running,
+        ExecutionState::SignalReceived,
+        ExecutionState::Terminating,
+        ExecutionState::CleanedUp,
+    ];
+    for st in active_states {
+        let mut test_fsm = ExecutionStateMachine::from_state(st);
+        assert!(test_fsm.transition(ExecutionState::Failed).is_ok());
+        assert!(test_fsm.is_terminal());
+    }
+
+    // 4. Guard against transitions and fail_closed from Completed
+    let mut fsm_done = ExecutionStateMachine::from_state(ExecutionState::Completed);
+    assert!(fsm_done.transition(ExecutionState::Failed).is_err());
+    let late_err = fsm_done.fail_closed("Late error after completed");
+    assert!(matches!(late_err, StateTransitionError::InvalidTransition { .. }));
+}
+
+// ----------------------------------------------------------------------------
+// Test R5: Partial Evidence Strength & Signal Exit Codes Decoupling
+// ----------------------------------------------------------------------------
+#[test]
+fn test_verdict_engine_partial_strength_and_signal_decoupling() {
+    let contract = create_test_verdict_contract();
+
+    // 1. EvidenceStrength::Partial generates PARTIAL badge and CoW warning
+    let v_partial = VerdictEngine::evaluate_with_strength(
+        &contract, 0, 0, 0, true, 0, EvidenceStrength::Partial,
+    );
+    assert_eq!(v_partial.status, VerdictStatus::Pass);
+    assert_eq!(v_partial.strength, EvidenceStrength::Partial);
+    assert_eq!(v_partial.security_verdict, SecurityVerdict::Satisfied);
+    assert_eq!(v_partial.display_badge(), "PASS [PARTIAL]");
+    assert_eq!(v_partial.security_badge(), "SATISFIED [PARTIAL]");
+    assert_eq!(
+        v_partial.recommended_action(),
+        "Commit CoW changes to host workspace with partial warning."
+    );
+    assert!(v_partial.is_contract_satisfied());
+    assert!(v_partial.is_success());
+
+    // 2. Decoupling process termination signals SIGKILL (137) and SIGSEGV (139)
+    for signal_code in [137, 139] {
+        let v_sig = VerdictEngine::evaluate(&contract, 0, 0, 0, true, signal_code);
+        assert_eq!(v_sig.security_verdict, SecurityVerdict::Satisfied);
+        assert_eq!(v_sig.exit_code, signal_code);
+        assert!(v_sig.is_contract_satisfied());
+        assert!(!v_sig.is_success());
+    }
+
+    // 3. Multi-fault priority: kernel_denials takes precedence over severed evidence channel
+    let v_multi = VerdictEngine::evaluate(&contract, 1, 0, 0, false, 0);
+    assert_eq!(v_multi.security_verdict, SecurityVerdict::Violated);
+    assert_eq!(v_multi.status, VerdictStatus::Fail);
+    assert_eq!(v_multi.exit_code, 125);
+}
+
+// ----------------------------------------------------------------------------
+// Test R7: Strict Loader Extended Typo Matrix, Symlinks & Error Invariants
+// ----------------------------------------------------------------------------
+#[test]
+fn test_strict_loader_extended_typo_matrix_and_security_invariants() {
+    // 1. Extended typo matrix for the remaining 5 RawLayer structures
+    let extended_typos = [
+        ("metadata", "title = \"bad\"", "unknown field `title`"),
+        (
+            "process",
+            "allowed_commands = []",
+            "unknown field `allowed_commands`",
+        ),
+        ("net_ports", "allow_ports = []", "unknown field `allow_ports`"),
+        (
+            "limits",
+            "[limits.io_rate]\nmax_bandwidth_mb = 10",
+            "unknown field `max_bandwidth_mb`",
+        ),
+        (
+            "security",
+            "[security.seccomp_notify]\naction = \"kill\"",
+            "unknown field `action`",
+        ),
+    ];
+    for (sec, snippet, expected) in extended_typos {
+        let toml_data = format!("[{sec}]\n{snippet}\n");
+        let err = vetto::policy::loader::schema::parse_layer(&toml_data, sec).unwrap_err();
+        assert!(err.to_string().contains(expected));
+        assert_eq!(vetto::exit_codes::map_error_to_exit_code(&err), 125);
+    }
+
+    // 2. Error classification: VettoError::Cli -> 1 vs VettoError::Policy -> 125
+    let cli_err = vetto::error::VettoError::Cli("unrecognized option --foo".into());
+    assert_eq!(cli_err.exit_code(), 1);
+    let pol_err = vetto::error::VettoError::Policy(
+        vetto::policy::types::PolicyError::CompilationFailed("bad schema".into()),
+    );
+    assert_eq!(pol_err.exit_code(), 125);
+
+    // 3. Symlink rejection on policy file with fail-closed Exit 125 (INV-01)
+    let temp_dir = std::env::temp_dir()
+        .canonicalize()
+        .expect("canonicalize temp dir");
+    let test_dir = temp_dir.join(format!("vetto_symlink_test_{}", std::process::id()));
+    std::fs::create_dir_all(&test_dir).expect("create test dir");
+
+    let target_file = test_dir.join("real_policy.toml");
+    std::fs::write(&target_file, "[filesystem]\nallow_write = [\"$PROJECT\"]\n")
+        .expect("write target policy");
+
+    let symlink_file = test_dir.join("symlink_policy.toml");
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&target_file, &symlink_file).expect("create symlink");
+        let read_err =
+            vetto::policy::loader::merge::read_layer_file(&symlink_file, false).unwrap_err();
+        assert!(read_err.to_string().contains("symlink"));
+        assert_eq!(vetto::exit_codes::map_error_to_exit_code(&read_err), 125);
+    }
+
+    // 4. Policy rejection when allow_write roots are empty
+    let empty_write_toml = test_dir.join("empty_write_policy.toml");
+    std::fs::write(&empty_write_toml, "[filesystem]\nallow_read = [\"/usr\"]\n")
+        .expect("write empty write policy");
+    let opts = vetto::policy::loader::PolicyLoadOptions::default();
+    let empty_err = vetto::policy::loader::load_with_options(
+        "none",
+        Some(&empty_write_toml),
+        &test_dir,
+        &temp_dir,
+        vetto::policy::Tier::Full,
+        &opts,
+    )
+    .unwrap_err();
+    assert!(empty_err.to_string().contains("allow_write roots"));
+    assert_eq!(vetto::exit_codes::map_error_to_exit_code(&empty_err), 125);
+
+    let _ = std::fs::remove_dir_all(&test_dir);
 }

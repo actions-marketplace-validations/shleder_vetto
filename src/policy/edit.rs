@@ -286,6 +286,10 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         bail!("target path cannot be empty");
     }
 
+    if trimmed.contains('\0') {
+        bail!("null bytes ('\\0') are strictly prohibited in paths");
+    }
+
     // 1. Backslashes prohibition
     if trimmed.contains('\\') {
         bail!("backslashes ('\\') are strictly prohibited; use standard '/' path separators");
@@ -362,6 +366,47 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         bail!("access to critical system path '/etc/sudoers' is strictly prohibited");
     }
 
+    // System directories (/etc, /usr, /bin, /sbin)
+    let is_system_etc = lower == "/etc"
+        || lower.starts_with("/etc/")
+        || lower == "/etc/*"
+        || lower_raw == "/etc"
+        || lower_raw.starts_with("/etc/")
+        || lower_raw == "/etc/*";
+    if is_system_etc {
+        bail!("system directory '/etc' is strictly prohibited in allow rules");
+    }
+
+    let is_system_usr = lower == "/usr"
+        || lower.starts_with("/usr/")
+        || lower == "/usr/*"
+        || lower_raw == "/usr"
+        || lower_raw.starts_with("/usr/")
+        || lower_raw == "/usr/*";
+    if is_system_usr {
+        bail!("system directory '/usr' is strictly prohibited in allow rules");
+    }
+
+    let is_system_bin = lower == "/bin"
+        || lower.starts_with("/bin/")
+        || lower == "/bin/*"
+        || lower_raw == "/bin"
+        || lower_raw.starts_with("/bin/")
+        || lower_raw == "/bin/*";
+    if is_system_bin {
+        bail!("system directory '/bin' is strictly prohibited in allow rules");
+    }
+
+    let is_system_sbin = lower == "/sbin"
+        || lower.starts_with("/sbin/")
+        || lower == "/sbin/*"
+        || lower_raw == "/sbin"
+        || lower_raw.starts_with("/sbin/")
+        || lower_raw == "/sbin/*";
+    if is_system_sbin {
+        bail!("system directory '/sbin' is strictly prohibited in allow rules");
+    }
+
     // 6. Credential directories and files
     let is_ssh = lower == ".ssh"
         || lower.starts_with(".ssh/")
@@ -402,15 +447,23 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
     let is_env = lower == ".env"
         || lower.starts_with(".env.")
         || lower.starts_with(".env_")
+        || lower.starts_with(".env-")
+        || lower.starts_with(".env/")
         || lower.ends_with("/.env")
         || lower.contains("/.env.")
         || lower.contains("/.env_")
+        || lower.contains("/.env-")
+        || lower.contains("/.env/")
         || lower_raw == ".env"
         || lower_raw.starts_with(".env.")
         || lower_raw.starts_with(".env_")
+        || lower_raw.starts_with(".env-")
+        || lower_raw.starts_with(".env/")
         || lower_raw.ends_with("/.env")
         || lower_raw.contains("/.env.")
-        || lower_raw.contains("/.env_");
+        || lower_raw.contains("/.env_")
+        || lower_raw.contains("/.env-")
+        || lower_raw.contains("/.env/");
     if is_env {
         bail!("environment secret file '.env*' is strictly prohibited in allow rules");
     }
@@ -421,6 +474,24 @@ pub fn validate_dangerous_path(raw: &str) -> Result<()> {
         || lower_raw.contains(".netrc")
     {
         bail!("credential file is strictly prohibited in allow rules");
+    }
+
+    let is_git = lower == ".git"
+        || lower.starts_with(".git/")
+        || lower.contains("/.git/")
+        || lower.ends_with("/.git")
+        || lower == "~/.git"
+        || lower.starts_with("~/.git/")
+        || lower.contains("$home/.git")
+        || lower_raw == ".git"
+        || lower_raw.starts_with(".git/")
+        || lower_raw.contains("/.git/")
+        || lower_raw.ends_with("/.git")
+        || lower_raw == "~/.git"
+        || lower_raw.starts_with("~/.git/")
+        || lower_raw.contains("$home/.git");
+    if is_git {
+        bail!("git metadata directory '.git' is strictly prohibited in allow rules");
     }
 
     Ok(())
@@ -1317,7 +1388,12 @@ mod tests {
         assert!(validate_dangerous_path("~/.aws").is_err());
         assert!(validate_dangerous_path(".env").is_err());
         assert!(validate_dangerous_path(".env.local").is_err());
+        assert!(validate_dangerous_path(".env-production").is_err());
+        assert!(validate_dangerous_path(".env/secret").is_err());
         assert!(validate_dangerous_path("sub/.env").is_err());
+        assert!(validate_dangerous_path("sub/.env-staging").is_err());
+        assert!(validate_dangerous_path("sub/.env/token").is_err());
+        assert!(validate_dangerous_path("path\0with_null").is_err());
     }
 
     #[test]
@@ -1329,6 +1405,26 @@ mod tests {
         assert!(validate_dangerous_path("//etc/passwd").is_err());
         assert!(validate_dangerous_path("/etc//shadow").is_err());
         assert!(validate_dangerous_path("/etc/./shadow").is_err());
+    }
+
+    #[test]
+    fn test_validate_dangerous_path_rejects_system_roots_and_git() {
+        assert!(validate_dangerous_path("/etc").is_err());
+        assert!(validate_dangerous_path("/etc/").is_err());
+        assert!(validate_dangerous_path("//etc").is_err());
+        assert!(validate_dangerous_path("/usr").is_err());
+        assert!(validate_dangerous_path("/usr/").is_err());
+        assert!(validate_dangerous_path("//usr").is_err());
+        assert!(validate_dangerous_path("/bin").is_err());
+        assert!(validate_dangerous_path("/bin/").is_err());
+        assert!(validate_dangerous_path("//bin").is_err());
+        assert!(validate_dangerous_path("/sbin").is_err());
+        assert!(validate_dangerous_path("/sbin/").is_err());
+        assert!(validate_dangerous_path("//sbin").is_err());
+        assert!(validate_dangerous_path(".git").is_err());
+        assert!(validate_dangerous_path(".git/").is_err());
+        assert!(validate_dangerous_path("~/.git").is_err());
+        assert!(validate_dangerous_path("./.git").is_err());
     }
 
     #[test]
