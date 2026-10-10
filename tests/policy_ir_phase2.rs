@@ -2584,7 +2584,7 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
         .iter()
         .find(|c| c["name"] == "contract-integrity")
         .expect("contract-integrity check must exist");
-    assert_eq!(integrity_check["status"], "leak");
+    assert_eq!(integrity_check["status"], "LEAK");
 
     // 19.5: Negative check for secret leak in preflight probe
     let mut leak_policy = policy.clone();
@@ -2605,7 +2605,7 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
         .iter()
         .find(|c| c["name"] == "secret-mask-deny")
         .unwrap();
-    assert_eq!(secret_check["status"], "leak");
+    assert_eq!(secret_check["status"], "LEAK");
 
     // 19.6: Negative check for open network in preflight probe
     let mut open_net_contract = contract.clone();
@@ -2620,7 +2620,7 @@ fn test_m4_sandbox_preflight_verify_simulated_and_json_schema() {
         .iter()
         .find(|c| c["name"] == "network-block")
         .unwrap();
-    assert_eq!(net_check["status"], "leak");
+    assert_eq!(net_check["status"], "LEAK");
 
     let _ = std::fs::remove_dir_all(&ws);
 }
@@ -2794,7 +2794,7 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
         &ws,
         Some(NetworkMode::Allowlist),
         &[ws.clone(), home.clone()],
-        &[ws.clone()],
+        std::slice::from_ref(&ws),
     )
     .expect("compile contract");
 
@@ -2955,7 +2955,7 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
             meta_v.is_denied(),
             "Cloud metadata target {meta} must be denied"
         );
-        assert_eq!(meta_v.denial_rule().unwrap(), "cloud_metadata");
+        assert_eq!(meta_v.denial_rule().unwrap(), "cloud_metadata_block");
     }
 
     // f. Loopback blocking

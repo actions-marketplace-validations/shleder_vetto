@@ -419,7 +419,9 @@ mod tests {
             .map(PathBuf::from)
         {
             let logs_dir = home.join(".vetto").join("logs");
-            let _ = std::fs::create_dir_all(&logs_dir);
+            if std::fs::create_dir_all(&logs_dir).is_err() {
+                return;
+            }
 
             // Test <session>.jsonl
             let s1 = format!("test-tail-unit-{}", std::process::id());
