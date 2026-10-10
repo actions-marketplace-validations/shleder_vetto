@@ -305,3 +305,66 @@ fn adv_snapshot_list_concurrent_with_churn_never_lies() {
     assert!(final_list.iter().any(|m| m.session_id == "adv-stable-a"));
     assert!(final_list.iter().any(|m| m.session_id == "adv-stable-b"));
 }
+
+#[test]
+fn adv_userns_uid_gid_mapping_and_setgroups_denial() {
+    #[cfg(target_os = "linux")]
+    {
+        if detected_tier().as_deref() != Some("full") {
+            eprintln!("SKIP: requires Tier::Full (user namespace support)");
+            return;
+        }
+
+        let proj = TempProject::new("adv-userns");
+        let script = r#"
+echo "UID=$(id -u)"
+echo "GID=$(id -g)"
+if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import os, errno
+try:
+    os.setgroups([])
+    print('SETGROUPS_ALLOWED')
+except PermissionError:
+    print('SETGROUPS_EPERM')
+except OSError as e:
+    if e.errno == errno.EPERM:
+        print('SETGROUPS_EPERM')
+    else:
+        print(f'SETGROUPS_ERR_{e.errno}')
+"
+else
+    echo "SETGROUPS_EPERM"
+fi
+"#;
+
+        let out = run_vetto_in(
+            proj.path(),
+            &["--tui=none", "--ci", "--", "sh", "-c", script],
+        );
+
+        let text = stdout(&out);
+        assert!(
+            out.status.success(),
+            "execution failed in sandbox: exit={:?} stdout={} stderr={}",
+            out.status.code(),
+            text,
+            stderr(&out)
+        );
+
+        assert!(
+            text.contains("UID=1000"),
+            "id -u must return 1000: stdout={text} stderr={}",
+            stderr(&out)
+        );
+        assert!(
+            text.contains("GID=1000"),
+            "id -g must return 1000: stdout={text} stderr={}",
+            stderr(&out)
+        );
+        assert!(
+            text.contains("SETGROUPS_EPERM"),
+            "setgroups(2) must fail with EPERM inside user namespace: stdout={text} stderr={}",
+            stderr(&out)
+        );
+    }
+}

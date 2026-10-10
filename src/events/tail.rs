@@ -440,7 +440,7 @@ mod tests {
             let s2 = format!("test-tail-sup-{}", std::process::id());
             let log2 = logs_dir.join(format!("session-{s2}.jsonl"));
             if std::fs::write(&log2, b"{}\n").is_err() {
-                let _ = std::fs::remove_file(log1);
+                let _ = std::fs::remove_file(&log1);
                 return;
             }
 

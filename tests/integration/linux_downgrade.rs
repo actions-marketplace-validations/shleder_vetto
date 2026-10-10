@@ -85,3 +85,50 @@ fn test_seccomp_tier_executes_simple_command() {
         "seccomp micro tier execution failed: {text}"
     );
 }
+
+#[test]
+fn test_landlock_abi_under_4_with_net_rules_fails_closed_contract() {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::{FromRawFd, IntoRawFd, OwnedFd};
+        use vetto::error::VettoError;
+        use vetto::sandbox::linux::landlock::{apply_net_port_rules, apply_policy_advanced};
+
+        let f = std::fs::File::open("/dev/null").expect("open /dev/null");
+        // SAFETY: valid opened file descriptor
+        let fake_ruleset = unsafe { OwnedFd::from_raw_fd(f.into_raw_fd()) };
+
+        // Test ABI 1, 2, 3 (< 4) with strict_net = true
+        for abi in [1, 2, 3] {
+            let res = apply_net_port_rules(&fake_ruleset, abi, &[80], &[443], true);
+            assert!(
+                res.is_err(),
+                "strict_net on ABI {abi} (< 4) must fail closed"
+            );
+            let err = res.unwrap_err();
+            assert!(matches!(err, VettoError::Landlock(_)));
+            assert_eq!(err.exit_code(), 125, "must exit 125 (INV-01)");
+            assert!(
+                err.to_string().contains("fail-closed (INV-01)"),
+                "error message must cite INV-01: {err}"
+            );
+        }
+
+        // When strict_net is false on ABI < 4, graceful downgrade is permitted
+        assert!(apply_net_port_rules(&fake_ruleset, 3, &[80], &[443], false).is_ok());
+
+        // Also verify live apply_policy_advanced fail-closed behavior if running on ABI < 4 kernel
+        if let Some(abi) = vetto::sandbox::linux::landlock::abi_version() {
+            if abi < 4 {
+                let res = apply_policy_advanced(&[], &[], false, &[], &[], true);
+                assert!(
+                    res.is_err(),
+                    "apply_policy_advanced on ABI < 4 with strict_net must fail closed"
+                );
+                let err = res.unwrap_err();
+                assert_eq!(err.exit_code(), 125);
+                assert!(err.to_string().contains("fail-closed (INV-01)"));
+            }
+        }
+    }
+}
