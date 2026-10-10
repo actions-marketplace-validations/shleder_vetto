@@ -71,7 +71,7 @@ pub fn macos_tcc_fix_for_path(path: &Path) -> Option<DoctorFix> {
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DoctorFix {
     pub primitive: &'static str,
     pub issue: String,
@@ -107,6 +107,26 @@ pub fn collect_linux_fixes(p: &crate::sandbox::linux::Probe) -> Vec<DoctorFix> {
                 "sudo sysctl --system".into(),
             ],
             explanation: "User namespaces allow vetto to mount secret-masking overlays and isolate network without root permissions. Note: vetto does NOT use bubblewrap (bwrap); AppArmor bwrap restrictions do not apply.".into(),
+        });
+    }
+
+    let has_cgroup_v2 = !p.cgroup_controllers.is_empty();
+    let has_memory_pid = p.cgroup_controllers.iter().any(|c| c == "memory")
+        && p.cgroup_controllers.iter().any(|c| c == "pids");
+
+    if !has_cgroup_v2 || !has_memory_pid {
+        fixes.push(DoctorFix {
+            primitive: "Cgroups v2 Resource Controllers",
+            issue: "cgroups v2 hierarchy is missing or memory/pids controllers are not delegated".into(),
+            commands: vec![
+                "# Enable cgroups v2 in GRUB (/etc/default/grub):".into(),
+                "GRUB_CMDLINE_LINUX=\"systemd.unified_cgroup_hierarchy=1\"".into(),
+                "# Enable user delegation for unprivileged sandbox limits and cgroup.kill:".into(),
+                "sudo mkdir -p /etc/systemd/system/user@.service.d/".into(),
+                "printf '[Service]\\nDelegate=memory pids cpu\\n' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf".into(),
+                "sudo systemctl daemon-reload".into(),
+            ],
+            explanation: "cgroups v2 provides hardware resource ceilings (memory.max, pids.max) and guarantees atomic process tree extinction (cgroup.kill).".into(),
         });
     }
 

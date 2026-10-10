@@ -24,7 +24,7 @@ use crate::sandbox::handle::SandboxHandle;
 use super::app::{self, AppState, EventFilter};
 use super::input;
 
-const REPAINT_INTERVAL: Duration = Duration::from_millis(200); // ~5 fps cap
+const REPAINT_INTERVAL: Duration = Duration::from_millis(100); // 10 fps cap
 const TICK: Duration = Duration::from_millis(20);
 const REPLAY_CAP: usize = 1024 * 1024;
 
@@ -202,7 +202,7 @@ impl NonblockingStdout {
 
     /// Restore terminal scrolling and clean up.
     pub fn restore_terminal(&mut self, rows_total: u16) {
-        let seq = format!("\x1b[1;{rows_total}r\x1b[0m");
+        let seq = format!("\x1b[1;{rows_total}r\x1b[{rows_total};1H\x1b[2K\x1b[0m");
         self.buffer.extend(seq.as_bytes());
         self.flush_bounded(Duration::from_millis(100));
         let _ = terminal::disable_raw_mode();
@@ -217,6 +217,22 @@ impl Drop for NonblockingStdout {
             }
         }
     }
+}
+
+fn sample_process_memory(_pid: u32) -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(content) = std::fs::read_to_string(format!("/proc/{_pid}/statm")) {
+            let mut parts = content.split_whitespace();
+            let _size = parts.next();
+            if let Some(resident) = parts.next() {
+                if let Ok(pages) = resident.parse::<u64>() {
+                    return pages * 4096;
+                }
+            }
+        }
+    }
+    0
 }
 
 /// Run the session in statusline mode; returns the agent's exit code.
@@ -235,6 +251,14 @@ pub fn run(
 ) -> (i32, bool) {
     let mut rx = bus.subscribe();
     let mut app_state = AppState::new(tier, net, profile);
+    #[cfg(target_os = "linux")]
+    if let Some(cmd) = handle.options.agent_cmd.first() {
+        let name = std::path::Path::new(cmd)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(cmd);
+        app_state.agent = Some(name.to_string());
+    }
     let master = pty_master.as_raw_fd();
     let deadline = timeout.map(|d| Instant::now() + d);
 
@@ -244,11 +268,10 @@ pub fn run(
     let fwd = input::Forwarder::spawn(master);
 
     let mut stdout_writer = NonblockingStdout::new(256 * 1024);
-    let mut outer = terminal::size().unwrap_or((24, 80));
-    stdout_writer.set_scroll_region(outer.0.saturating_sub(1).max(1));
+    let mut outer = terminal::size().unwrap_or((80, 24));
+    stdout_writer.set_scroll_region(outer.1.saturating_sub(1).max(1));
 
     let mut last_paint = Instant::now() - REPAINT_INTERVAL;
-    let mut painted_generation = u64::MAX;
     let mut replay: Vec<u8> = Vec::new();
 
     let mut redactor = pty::AnsiRedactor::new();
@@ -265,15 +288,15 @@ pub fn run(
                     std::thread::sleep(Duration::from_millis(10));
                 }
                 stdout_writer.flush_bounded(Duration::from_millis(100));
-                stdout_writer.restore_terminal(outer.0);
+                stdout_writer.restore_terminal(outer.1);
                 return (crate::exit_codes::EXIT_TIMEOUT, true);
             }
         }
         // Outer resize -> resize inner pty (the kernel then signals the
         // agent's foreground group on the pty; we do not signal manually).
-        if let Some((rows, cols)) = pty::resizer::sync_to_outer(master) {
-            outer = (rows + 1, cols);
-            stdout_writer.set_scroll_region(rows);
+        if let Some((inner_rows, cols)) = pty::resizer::sync_to_outer(master) {
+            outer = (cols, inner_rows + 1);
+            stdout_writer.set_scroll_region(inner_rows);
         }
 
         // Ctrl+] -> scrollable event overlay.
@@ -282,7 +305,7 @@ pub fn run(
             run_overlay(&mut app_state, &mut rx, handle, master, &mut replay);
             fwd.resume();
             let _ = terminal::enable_raw_mode();
-            stdout_writer.set_scroll_region(outer.0.saturating_sub(1).max(1));
+            stdout_writer.set_scroll_region(outer.1.saturating_sub(1).max(1));
             if !replay.is_empty() {
                 stdout_writer.write_agent_output(&replay);
                 replay.clear();
@@ -317,16 +340,16 @@ pub fn run(
         }
 
         app_state.drain(&mut rx);
-        if app_state.generation != painted_generation && last_paint.elapsed() >= REPAINT_INTERVAL {
-            draw_status_buffered(&mut stdout_writer, outer.0, &app_state.status_text(outer.1));
-            painted_generation = app_state.generation;
+        if last_paint.elapsed() >= REPAINT_INTERVAL {
+            app_state.ram_bytes = sample_process_memory(handle.root_pid);
+            draw_status_buffered(&mut stdout_writer, outer.1, &app_state.status_text(outer.0));
             last_paint = Instant::now();
         }
         stdout_writer.flush_nonblocking();
         std::thread::sleep(TICK);
     };
 
-    stdout_writer.restore_terminal(outer.0);
+    stdout_writer.restore_terminal(outer.1);
     (exit_code, false)
 }
 

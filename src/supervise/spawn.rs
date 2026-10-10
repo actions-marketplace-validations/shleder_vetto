@@ -558,7 +558,7 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     #[cfg(unix)]
     let stdio = match cfg.tui {
         TuiMode::Statusline => {
-            let (rows, cols) = crossterm::terminal::size().unwrap_or((24, 80));
+            let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
             let p = crate::pty::Pty::open(rows.saturating_sub(1).max(1), cols).map_err(|e| {
                 SuperviseError::StdioAllocationFailed(std::io::Error::other(e.to_string()))
             })?;
@@ -659,13 +659,23 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
     if !cfg.benchmark {
         if let Ok(reg) = crate::cli::status::SessionRegistry::new() {
             let agent_name = cfg.agent_preset.as_deref().unwrap_or_else(|| &cfg.agent[0]);
-            let _ = reg.register(
+            #[cfg(target_os = "linux")]
+            let cg_path = spawned
+                .handle
+                .cgroup
+                .as_ref()
+                .map(|cg| cg.path().display().to_string());
+            #[cfg(not(target_os = "linux"))]
+            let cg_path: Option<String> = None;
+
+            let _ = reg.register_with_cgroup(
                 &session_id,
                 root_pid,
                 agent_name,
                 &pol.name,
                 tier_label(tier),
                 &project,
+                cg_path.as_deref(),
             );
         }
     }
