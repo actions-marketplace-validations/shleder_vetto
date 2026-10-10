@@ -51,3 +51,10 @@ pass_through = [
     "BROWSER",
     "XDG_RUNTIME_DIR",
 ]
+
+[network]
+allow = [
+    "api.devin.ai",
+    "cognition.ai",
+    "api.openai.com",
+]

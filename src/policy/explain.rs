@@ -386,6 +386,193 @@ fn print_text(
         );
     }
 
+    // Render structured Effective Rights Tree view
+    println!("  Effective Rights Tree:");
+    println!("  ├── Filesystem");
+    println!(
+        "  │   ├── Workspace: {}",
+        contract.filesystem.workspace_root.display()
+    );
+    println!("  │   ├── Write Roots ({}):", policy.allow_write.len());
+    if policy.allow_write.is_empty() {
+        println!("  │   │   └── (none)");
+    } else {
+        for (i, root) in policy.allow_write.iter().enumerate() {
+            let prefix = if i == policy.allow_write.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
+            println!("  │   │   {} {}", prefix, root.display());
+        }
+    }
+    println!("  │   ├── Read Roots ({}):", policy.allow_read.len());
+    if policy.allow_read.is_empty() {
+        println!("  │   │   └── (none)");
+    } else {
+        let listed = policy
+            .allow_read
+            .iter()
+            .take(MAX_LISTED_READ_ROOTS)
+            .collect::<Vec<_>>();
+        for (i, root) in listed.iter().enumerate() {
+            let prefix =
+                if i == listed.len() - 1 && policy.allow_read.len() <= MAX_LISTED_READ_ROOTS {
+                    "└──"
+                } else {
+                    "├──"
+                };
+            println!("  │   │   {} {}", prefix, root.display());
+        }
+        if policy.allow_read.len() > MAX_LISTED_READ_ROOTS {
+            println!(
+                "  │   │   └── ... {} more",
+                policy.allow_read.len() - MAX_LISTED_READ_ROOTS
+            );
+        }
+    }
+    println!(
+        "  │   └── Masked Secrets ({}) [{}]:",
+        policy.deny_resolved.len(),
+        strategy
+    );
+    if policy.deny_resolved.is_empty() {
+        println!("  │       └── (none)");
+    } else {
+        for (i, entry) in policy.deny_resolved.iter().enumerate() {
+            let prefix = if i == policy.deny_resolved.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
+            println!(
+                "  │       {} {}{}",
+                prefix,
+                entry.path.display(),
+                if entry.is_dir { "/" } else { "" }
+            );
+        }
+    }
+
+    println!("  ├── Process Execution");
+    let invoked_bin = if contract
+        .agent_identity
+        .invoked_binary
+        .as_os_str()
+        .is_empty()
+    {
+        "(default)".to_string()
+    } else {
+        contract.agent_identity.invoked_binary.display().to_string()
+    };
+    println!("  │   ├── Invoked Binary: {}", invoked_bin);
+    println!("  │   └── Execution Policy: restricted to allow roots");
+
+    println!("  ├── Network");
+    println!("  │   ├── Mode: {}", net.label());
+    println!(
+        "  │   ├── Allowed Domains ({}):",
+        policy.network_allow.len()
+    );
+    if policy.network_allow.is_empty() {
+        println!("  │   │   └── (none)");
+    } else {
+        for (i, d) in policy.network_allow.iter().enumerate() {
+            let prefix = if i == policy.network_allow.len() - 1 {
+                "└──"
+            } else {
+                "├──"
+            };
+            println!("  │   │   {} {}", prefix, d);
+        }
+    }
+    println!(
+        "  │   ├── Allowed Ports: {}",
+        if policy.net_connect_ports.is_empty() {
+            "(all default)".to_string()
+        } else {
+            policy
+                .net_connect_ports
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    );
+    println!(
+        "  │   └── Allowed CIDR: {}",
+        if policy.allow_cidr.is_empty() {
+            "(none)".to_string()
+        } else {
+            policy.allow_cidr.join(", ")
+        }
+    );
+
+    println!("  └── Resource Quotas");
+    println!(
+        "      ├── CPU: rlimit={}, cpu_max={}, effective={}%",
+        policy
+            .limits
+            .cpu_seconds
+            .map(|s| format!("{s}s"))
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .cpu_max
+            .as_deref()
+            .or_else(|| policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref()))
+            .unwrap_or("(none)"),
+        contract.resources.max_cpu_percent
+    );
+    println!(
+        "      ├── Memory: rlimit={}, memory_max={}, effective={}",
+        policy
+            .limits
+            .address_space_bytes
+            .map(human_bytes)
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .cgroup
+            .as_ref()
+            .and_then(|c| c.memory_max.as_deref())
+            .unwrap_or("(none)"),
+        if contract.resources.max_memory_bytes > 0 {
+            human_bytes(contract.resources.max_memory_bytes)
+        } else {
+            "unconstrained".into()
+        }
+    );
+    println!(
+        "      ├── PIDs: rlimit={}, pids_max={}, effective={}",
+        policy
+            .limits
+            .processes
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .cgroup
+            .as_ref()
+            .and_then(|c| c.pids_max.as_deref())
+            .unwrap_or("(none)"),
+        if contract.resources.max_pids > 0 {
+            contract.resources.max_pids.to_string()
+        } else {
+            "unconstrained".into()
+        }
+    );
+    println!(
+        "      └── Files: open_files={}, file_size={}",
+        policy
+            .limits
+            .open_files
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "(none)".into()),
+        policy
+            .limits
+            .file_size_bytes
+            .map(human_bytes)
+            .unwrap_or_else(|| "(none)".into())
+    );
+
     println!("  Resources:");
     println!("    CPU:");
     println!(
@@ -555,6 +742,18 @@ fn print_json(
     let strategy = masking_strategy(tier);
     let limits = &policy.limits;
     let p_info = platform_diagnostic(tier);
+    let masked_secrets_json = policy
+        .deny_resolved
+        .iter()
+        .map(|entry| {
+            serde_json::json!({
+                "path": entry.path.display().to_string(),
+                "is_dir": entry.is_dir,
+                "strategy": strategy,
+            })
+        })
+        .collect::<Vec<_>>();
+
     let object = serde_json::json!({
         "contract": {
             "contract_digest_blake3": contract.contract_digest_blake3,
@@ -574,26 +773,64 @@ fn print_json(
         "net": net.label(),
         "profile": policy.name.clone(),
         "immutable": policy.is_immutable,
+        "filesystem": {
+            "workspace_root": contract.filesystem.workspace_root.display().to_string(),
+            "allow_write": paths_as_strings(&policy.allow_write),
+            "allow_read": paths_as_strings(&policy.allow_read),
+            "deny_write": paths_as_strings(&policy.deny_write),
+            "deny_read": paths_as_strings(&policy.deny_read),
+            "masked_secrets": masked_secrets_json.clone(),
+            "cow_overlay": contract.filesystem.cow_overlay,
+            "masking_strategy": strategy,
+        },
+        "process_execution": {
+            "invoked_binary": contract.agent_identity.invoked_binary.display().to_string(),
+            "invoked_args": contract.agent_identity.invoked_args.clone(),
+            "allowed_binaries": paths_as_strings(&contract.filesystem.allow_execute),
+        },
+        "network": {
+            "mode": net.label(),
+            "allowed_domains": policy.network_allow.clone(),
+            "allowed_ports": policy.net_connect_ports.clone(),
+            "allow_cidr": policy.allow_cidr.clone(),
+            "deny_network": policy.deny_network,
+        },
+        "quotas": {
+            "cpu": {
+                "rlimit_seconds": limits.cpu_seconds,
+                "cpu_max": policy.cpu_max.as_deref().or_else(|| {
+                    policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref())
+                }),
+                "effective_percent": contract.resources.max_cpu_percent,
+            },
+            "memory": {
+                "rlimit_bytes": limits.address_space_bytes,
+                "memory_max": policy.cgroup.as_ref().and_then(|c| c.memory_max.as_deref()),
+                "swap_max": policy.cgroup.as_ref().and_then(|c| c.swap_max.as_deref()),
+                "effective_bytes": contract.resources.max_memory_bytes,
+            },
+            "pids": {
+                "rlimit_nproc": limits.processes,
+                "pids_max": policy.cgroup.as_ref().and_then(|c| c.pids_max.as_deref()),
+                "effective_pids": contract.resources.max_pids,
+            },
+            "file": {
+                "open_files": limits.open_files,
+                "file_size_bytes": limits.file_size_bytes,
+            },
+        },
         "write_roots": paths_as_strings(&policy.allow_write),
         "read_root_count": policy.allow_read.len(),
         "read_roots": paths_as_strings(
             &policy.allow_read.iter().take(MAX_LISTED_READ_ROOTS).cloned().collect::<Vec<_>>(),
         ),
-        "masked_secrets": policy
-            .deny_resolved
-            .iter()
-            .map(|entry| {
-                serde_json::json!({
-                    "path": entry.path.display().to_string(),
-                    "is_dir": entry.is_dir,
-                    "strategy": strategy,
-                })
-            })
-            .collect::<Vec<_>>(),
+        "masked_secrets": masked_secrets_json,
         "resources": {
             "cpu": {
                 "rlimit_cpu": limits.cpu_seconds,
-                "cpu_max": policy.cpu_max.as_deref().or_else(|| policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref())),
+                "cpu_max": policy.cpu_max.as_deref().or_else(|| {
+                    policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref())
+                }),
                 "effective_percent": contract.resources.max_cpu_percent,
             },
             "memory": {
@@ -612,7 +849,9 @@ fn print_json(
                 "file_size_bytes": limits.file_size_bytes,
             },
             "rlimit_cpu": limits.cpu_seconds,
-            "cpu_max": policy.cpu_max.as_deref().or_else(|| policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref())),
+            "cpu_max": policy.cpu_max.as_deref().or_else(|| {
+                policy.cgroup.as_ref().and_then(|c| c.cpu_max.as_deref())
+            }),
             "rlimit_as": limits.address_space_bytes,
             "memory_max": policy.cgroup.as_ref().and_then(|c| c.memory_max.as_deref()),
             "swap_max": policy.cgroup.as_ref().and_then(|c| c.swap_max.as_deref()),

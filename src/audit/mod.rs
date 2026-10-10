@@ -20,4 +20,4 @@ pub use record::{
     SessionInitPayload, SessionVerdictPayload, SyscallActionTaken, SyscallDenialPayload,
     TierClassification, TreeExtinctionPayload, VettoAuditRecord,
 };
-pub use verdict::{EvidenceStrength, FinalVerdict, VerdictEngine, VerdictStatus};
+pub use verdict::{EvidenceStrength, FinalVerdict, SecurityVerdict, VerdictEngine, VerdictStatus};
