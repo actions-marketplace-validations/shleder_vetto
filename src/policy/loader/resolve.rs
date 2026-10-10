@@ -338,7 +338,7 @@ pub fn resolve_list(entries: &[String], vars: &Vars, agent: Option<&Path>) -> Re
             bail!("policy path '{}' requires an agent context for $AGENT", e);
         }
         for p in glob_resolve::resolve_entry_with_agent(e, vars, agent) {
-            out.insert(lexical_normalize(&p));
+            out.insert(p);
         }
     }
     Ok(out.into_iter().collect())
