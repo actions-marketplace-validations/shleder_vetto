@@ -363,6 +363,7 @@ struct OpenHow {
 
 const RESOLVE_NO_MAGICLINKS: u64 = 0x02;
 const RESOLVE_NO_SYMLINKS: u64 = 0x04;
+pub const RESOLVE_BENEATH: u64 = 0x08;
 
 struct OpenPath {
     _fd: OwnedFd,
@@ -436,9 +437,102 @@ pub fn open_landlock_path_fd(path: &Path) -> Result<OwnedFd, std::io::Error> {
     Err(err)
 }
 
+/// Opens a filesystem path beneath a directory descriptor using `SYS_openat2` with
+/// `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS` to guarantee no escape
+/// from the workspace directory tree.
+pub fn open_landlock_path_fd_beneath(
+    dir_fd: std::os::fd::RawFd,
+    path: &Path,
+) -> Result<OwnedFd, std::io::Error> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let c_path = CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("NUL byte in path {}", path.display()),
+        )
+    })?;
+
+    let how = OpenHow {
+        flags: (libc::O_PATH | libc::O_CLOEXEC) as u64,
+        mode: 0,
+        resolve: RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS,
+    };
+
+    // SAFETY: c_path is a valid NUL-terminated string and how is a valid repr(C) OpenHow struct.
+    let fd = unsafe {
+        libc::syscall(
+            libc::SYS_openat2,
+            dir_fd,
+            c_path.as_ptr(),
+            &how as *const OpenHow,
+            std::mem::size_of::<OpenHow>(),
+        )
+    };
+
+    if fd >= 0 {
+        // SAFETY: fd is a fresh descriptor returned by openat2.
+        return Ok(unsafe { OwnedFd::from_raw_fd(fd as i32) });
+    }
+
+    let err = std::io::Error::last_os_error();
+    if matches!(err.raw_os_error(), Some(libc::ENOSYS) | Some(libc::EPERM)) {
+        if path.is_absolute()
+            || path.has_root()
+            || path
+                .components()
+                .any(|c| c == std::path::Component::ParentDir)
+        {
+            return Err(std::io::Error::from_raw_os_error(libc::EXDEV));
+        }
+        let fallback_fd = unsafe {
+            libc::openat(
+                dir_fd,
+                c_path.as_ptr(),
+                libc::O_PATH | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            )
+        };
+        if fallback_fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let owned = unsafe { OwnedFd::from_raw_fd(fallback_fd) };
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let mode = unsafe { stat.assume_init() }.st_mode;
+        if (mode & libc::S_IFMT) == libc::S_IFLNK {
+            return Err(std::io::Error::from_raw_os_error(libc::ELOOP));
+        }
+        return Ok(owned);
+    }
+
+    Err(err)
+}
+
 fn open_path_fd(path: &Path) -> VettoResult<OpenPath> {
-    let owned = open_landlock_path_fd(path)
-        .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?;
+    let owned = if !path.is_absolute() {
+        open_landlock_path_fd_beneath(libc::AT_FDCWD, path)
+            .or_else(|_| open_landlock_path_fd(path))
+            .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?
+    } else if let Ok(cwd) = std::env::current_dir() {
+        if let Ok(rel) = path.strip_prefix(&cwd) {
+            if !rel.as_os_str().is_empty() {
+                open_landlock_path_fd_beneath(libc::AT_FDCWD, rel)
+                    .or_else(|_| open_landlock_path_fd(path))
+                    .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?
+            } else {
+                open_landlock_path_fd(path)
+                    .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?
+            }
+        } else {
+            open_landlock_path_fd(path)
+                .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?
+        }
+    } else {
+        open_landlock_path_fd(path)
+            .map_err(|e| VettoError::Landlock(format!("open {}: {e}", path.display())))?
+    };
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
     // SAFETY: valid fd + valid out-pointer.
     if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
@@ -557,13 +651,21 @@ fn add_pty_whitelist(ruleset: &OwnedFd, abi: u32) -> VettoResult<()> {
 }
 
 /// Apply TCP port allow rules for ABI >= 4.
+/// When strict network isolation is required (`strict_net == true`), any failure to enforce
+/// net rules by the kernel fails closed with `VettoError::Landlock` (Exit 125, INV-01).
 pub fn apply_net_port_rules(
     ruleset: &OwnedFd,
     abi: u32,
     bind_ports: &[u16],
     connect_ports: &[u16],
+    strict_net: bool,
 ) -> VettoResult<()> {
     if abi < 4 {
+        if strict_net {
+            return Err(VettoError::Landlock(format!(
+                "strict network isolation requested but kernel Landlock ABI is {abi} (< 4): fail-closed (INV-01)"
+            )));
+        }
         return Ok(());
     }
 
@@ -585,10 +687,11 @@ pub fn apply_net_port_rules(
         };
         if r < 0 {
             let err = std::io::Error::last_os_error();
-            if err.raw_os_error() == Some(libc::EOPNOTSUPP)
-                || err.raw_os_error() == Some(libc::ENOPKG)
+            if (err.raw_os_error() == Some(libc::EOPNOTSUPP)
+                || err.raw_os_error() == Some(libc::ENOPKG))
+                && !strict_net
             {
-                // Network rules not supported by kernel configuration; graceful fallback
+                // Network rules not supported by kernel configuration; graceful fallback only if not strict
                 return Ok(());
             }
             return Err(VettoError::Landlock(format!(
@@ -666,32 +769,22 @@ pub fn apply_policy_advanced(
 
     for rule in prepared.rules {
         let rule_path = rule.path.clone();
-        let owned = match open_landlock_path_fd(&rule.path) {
-            Ok(fd) => fd,
-            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
+        let opened = match open_path_fd(&rule.path) {
+            Ok(op) => op,
+            Err(VettoError::Landlock(ref msg))
+                if msg.contains("Too many levels of symbolic links") || msg.contains("ELOOP") =>
+            {
                 // Reject symlink or magiclink traversal: Landlock rules cannot be attached
                 // to symlink inodes (e.g. /bin -> usr/bin). Real directories in the ruleset
                 // (e.g. /usr) provide the underlying Landlock coverage.
                 continue;
             }
             Err(err) => {
-                return Err(VettoError::Landlock(format!(
-                    "open {}: {err}",
-                    rule_path.display()
-                )));
+                return Err(err);
             }
         };
-        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-        // SAFETY: valid fd + valid out-pointer.
-        if unsafe { libc::fstat(owned.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
-            return Err(VettoError::Landlock(format!(
-                "fstat {}: {}",
-                rule_path.display(),
-                std::io::Error::last_os_error()
-            )));
-        }
-        // SAFETY: fstat initialized the value.
-        let is_dir = unsafe { stat.assume_init() }.st_mode & libc::S_IFMT == libc::S_IFDIR;
+        let is_dir = opened.is_dir;
+        let owned = opened._fd;
         let effective = if is_dir {
             rule.allowed_access
         } else {
@@ -728,7 +821,13 @@ pub fn apply_policy_advanced(
 
     // Add network port rules if requested and supported
     if net_active {
-        apply_net_port_rules(&ruleset, effective_abi, bind_ports, connect_ports)?;
+        apply_net_port_rules(
+            &ruleset,
+            effective_abi,
+            bind_ports,
+            connect_ports,
+            strict_net,
+        )?;
     }
 
     // SAFETY: prctl with scalar args only.
@@ -993,5 +1092,56 @@ mod tests {
         assert_eq!(symlink_err.raw_os_error(), Some(libc::ELOOP));
 
         let _ = std::fs::remove_dir_all(&base_dir);
+    }
+
+    #[test]
+    fn open_landlock_path_fd_beneath_resolves_inside_and_rejects_parent_traversal() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base_dir =
+            std::env::temp_dir().join(format!("vetto_beneath_test_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&base_dir).expect("create test dir");
+
+        let inner_file = base_dir.join("inner.txt");
+        std::fs::write(&inner_file, b"beneath-test").expect("write inner file");
+
+        let dir_fd = open_landlock_path_fd(&base_dir).expect("open base dir");
+        let beneath_fd = open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("inner.txt"))
+            .expect("open beneath should succeed for inner.txt");
+        assert!(beneath_fd.as_raw_fd() >= 0);
+
+        let parent_escape =
+            open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("../escaped.txt"));
+        assert!(parent_escape.is_err(), "resolving outside dirfd must fail");
+
+        let _ = std::fs::remove_dir_all(&base_dir);
+    }
+
+    #[test]
+    fn apply_net_port_rules_fails_closed_under_strict_net() {
+        use std::os::fd::IntoRawFd;
+        let f = std::fs::File::open("/dev/null").expect("open /dev/null");
+        // SAFETY: valid opened file descriptor
+        let fake_ruleset = unsafe { OwnedFd::from_raw_fd(f.into_raw_fd()) };
+
+        let err = apply_net_port_rules(&fake_ruleset, 3, &[80], &[443], true)
+            .expect_err("strict_net on ABI < 4 must fail-closed");
+        assert!(matches!(err, VettoError::Landlock(_)));
+        assert!(err.to_string().contains("fail-closed (INV-01)"));
+
+        assert!(apply_net_port_rules(&fake_ruleset, 3, &[80], &[443], false).is_ok());
+    }
+
+    #[test]
+    fn open_landlock_path_fd_beneath_rejects_absolute_path() {
+        use std::os::fd::AsRawFd;
+        let f = std::fs::File::open("/dev/null").expect("open /dev/null");
+        let res = open_landlock_path_fd_beneath(f.as_raw_fd(), Path::new("/etc/shadow"));
+        assert!(
+            res.is_err(),
+            "open_landlock_path_fd_beneath must reject absolute path"
+        );
     }
 }

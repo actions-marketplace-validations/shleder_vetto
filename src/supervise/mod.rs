@@ -30,11 +30,13 @@ pub fn supervise(mut cfg: RunConfig) -> Result<SupervisionVerdict, SuperviseErro
     let mut session = spawn::spawn_supervised_session(&mut cfg)?;
 
     // 2. Start streaming non-blocking I/O pump adhering to INV-25
+    let is_statusline = cfg.tui == crate::config::TuiMode::Statusline;
     let mut pump = pump::StdioPump::start(
         session.stdio.pty_master.take(),
         session.stdio.stdout_r.take(),
         session.stdio.stderr_r.take(),
         session.stdio.mask_secrets,
+        is_statusline,
     )?;
 
     // 3. Manage signals via RAII self-pipe, enforce timeouts, and await child
