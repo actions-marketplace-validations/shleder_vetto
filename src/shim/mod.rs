@@ -371,9 +371,25 @@ pub fn parse_shim_args(args: &[String]) -> (bool, bool, Option<std::time::Durati
     (allow_override, no_loop_guard, timeout, clean)
 }
 
+/// Normalizes and prepares agent arguments before invocation.
+/// Injects `--no-daemon` for OpenAI Codex CLI to prevent background daemon failures in private PID namespaces.
+pub fn prepare_shim_args(binary_name: &str, clean_args: &[String]) -> Vec<String> {
+    let mut args = clean_args.to_vec();
+    let is_codex = binary_name == "codex"
+        || binary_name.ends_with("/codex")
+        || binary_name.ends_with("\\codex")
+        || binary_name.ends_with("\\codex.exe")
+        || binary_name == "codex-cli";
+    if is_codex && !args.iter().any(|a| a == "--no-daemon") {
+        args.push("--no-daemon".to_string());
+    }
+    args
+}
+
 /// Fast native dispatch entrypoint for shimmed binaries.
 pub fn dispatch(binary_name: &str, args: &[String]) -> Result<i32> {
-    let (allow_override, no_loop_guard, configured_timeout, clean_args) = parse_shim_args(args);
+    let (allow_override, no_loop_guard, configured_timeout, raw_clean_args) = parse_shim_args(args);
+    let clean_args = prepare_shim_args(binary_name, &raw_clean_args);
 
     let bypass_active = allow_override
         || env::var("VETTO_ALLOW_DESTRUCTIVE_GIT")
@@ -912,5 +928,24 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_prepare_shim_args_codex_no_daemon() {
+        let empty_args: Vec<String> = vec![];
+        let prepped = prepare_shim_args("codex", &empty_args);
+        assert_eq!(prepped, vec!["--no-daemon".to_string()]);
+
+        let custom_args = vec!["exec".to_string(), "task".to_string()];
+        let prepped_custom = prepare_shim_args("codex", &custom_args);
+        assert_eq!(prepped_custom, vec!["exec".to_string(), "task".to_string(), "--no-daemon".to_string()]);
+
+        let explicit_args = vec!["--no-daemon".to_string(), "run".to_string()];
+        let prepped_explicit = prepare_shim_args("codex", &explicit_args);
+        assert_eq!(prepped_explicit, vec!["--no-daemon".to_string(), "run".to_string()]);
+
+        let claude_args = vec!["run".to_string()];
+        let prepped_claude = prepare_shim_args("claude", &claude_args);
+        assert_eq!(prepped_claude, vec!["run".to_string()]);
     }
 }
