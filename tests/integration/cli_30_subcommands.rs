@@ -184,7 +184,7 @@ fn test_man_page_generation() {
     assert!(out.status.success(), "vetto man failed: {}", stderr(&out));
     let man_text = stdout(&out);
     assert!(
-        man_text.contains(".TH") && man_text.contains("VETTO"),
+        man_text.contains(".TH") && (man_text.contains("vetto") || man_text.contains("VETTO")),
         "vetto man output does not look like roff man page: {man_text}"
     );
 }

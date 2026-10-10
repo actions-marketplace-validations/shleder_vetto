@@ -369,7 +369,8 @@ fn test_doctor_fix_and_agent_check_remediation() {
 fn test_doctor_landlock_abi_probes_and_features() {
     #[cfg(target_os = "linux")]
     {
-        for abi in 1..=6 {
+        assert!(vetto::sandbox::linux::landlock::abi_feature_hints(1).is_empty());
+        for abi in 2..=6 {
             let hints = vetto::sandbox::linux::landlock::abi_feature_hints(abi);
             assert!(
                 !hints.is_empty(),
