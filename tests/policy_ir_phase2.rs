@@ -2782,9 +2782,8 @@ fn test_capability_gate_extended_edge_cases_and_precedence() {
     let ws = temp_dir.join(format!("vetto_r1_ext_{}", std::process::id()));
     std::fs::create_dir_all(ws.join("src")).expect("create test workspace");
 
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/root"));
+    let home = temp_dir.join("home");
+    std::fs::create_dir_all(&home).expect("create test home");
 
     // 1. Explicit allow vs Secret Mask Precedence:
     // Construct a contract where secret paths (.env and ~/.ssh/id_rsa) are explicitly in allow_write and allow_read.
