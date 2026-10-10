@@ -465,7 +465,7 @@ pub fn resolve_session_and_snapshot_in(
                 .unwrap_or(false)
     });
 
-    Ok(Some(matching.unwrap_or(&snapshots[0]).clone()))
+    Ok(matching.cloned())
 }
 
 /// Compare snapshot tar archive against disk files.

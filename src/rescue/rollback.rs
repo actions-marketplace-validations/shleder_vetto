@@ -50,8 +50,29 @@ pub fn atomic_commit_bytes_with_mode(
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
+
+    // Remove any conflicting regular files or symlinks along the ancestor hierarchy (GAP-03)
+    let mut current = PathBuf::new();
+    for comp in parent.components() {
+        current.push(comp);
+        if let Ok(meta) = fs::symlink_metadata(&current) {
+            if !meta.is_dir() {
+                let _ = fs::remove_file(&current);
+            }
+        }
+    }
+
     fs::create_dir_all(parent)
         .with_context(|| format!("create parent dir {}", parent.display()))?;
+
+    // Clear any conflicting directory or symlink at the target path itself
+    if let Ok(meta) = fs::symlink_metadata(target_path) {
+        if meta.file_type().is_symlink() {
+            let _ = fs::remove_file(target_path);
+        } else if meta.is_dir() {
+            let _ = fs::remove_dir_all(target_path);
+        }
+    }
 
     let file_name = target_path
         .file_name()
@@ -210,8 +231,12 @@ pub fn rollback_session(
 
         snapshot_files.insert(clean_path.to_path_buf());
         let out_path = dest.join(clean_path);
-        if out_path.is_dir() {
-            let _ = fs::remove_dir_all(&out_path);
+        if let Ok(meta) = fs::symlink_metadata(&out_path) {
+            if meta.file_type().is_symlink() {
+                let _ = fs::remove_file(&out_path);
+            } else if meta.is_dir() {
+                let _ = fs::remove_dir_all(&out_path);
+            }
         }
         atomic_commit_bytes_with_mode(&out_path, &data, Some(mode))?;
         files_restored += 1;
@@ -552,6 +577,172 @@ mod tests {
             fs::read_to_string(&file1).unwrap(),
             "file content before conflict\n"
         );
+
+        let _ = fs::remove_dir_all(&proj);
+    }
+
+    #[test]
+    fn test_rollback_ancestor_file_type_collision() {
+        let proj = test_dir("rollback-ancestor-collision");
+        let sub_dir = proj.join("deep").join("nested");
+        fs::create_dir_all(&sub_dir).unwrap();
+        let target_file = sub_dir.join("code.rs");
+        fs::write(&target_file, "original deep code\n").unwrap();
+
+        let session_id = format!("test-sess-anc-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        // Rogue agent wipes 'deep' directory and places a regular file named 'deep'
+        fs::remove_dir_all(proj.join("deep")).unwrap();
+        fs::write(proj.join("deep"), "rogue file replacing ancestor directory").unwrap();
+        assert!(proj.join("deep").is_file());
+
+        let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+        assert_eq!(res.files_restored, 1);
+        assert!(target_file.is_file());
+        assert_eq!(
+            fs::read_to_string(&target_file).unwrap(),
+            "original deep code\n"
+        );
+
+        let _ = fs::remove_dir_all(&proj);
+    }
+
+    #[test]
+    fn test_rollback_symlink_to_directory_not_traversed() {
+        let proj = test_dir("rollback-symlink-guard");
+        let external_vault = test_dir("external-vault-safe");
+        let vault_file = external_vault.join("secret_token.txt");
+        fs::write(&vault_file, "sacred host secret\n").unwrap();
+
+        let project_target = proj.join("config.json");
+        fs::write(&project_target, "{\"safe\": true}\n").unwrap();
+
+        let session_id = format!("test-sess-symguard-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            fs::remove_file(&project_target).unwrap();
+            symlink(&external_vault, &project_target).unwrap();
+
+            let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+            assert_eq!(res.files_restored, 1);
+
+            // Crucially, external vault file must NEVER have been touched or removed
+            assert!(
+                vault_file.exists(),
+                "external directory contents must not be deleted via symlink traversal"
+            );
+            assert_eq!(
+                fs::read_to_string(&vault_file).unwrap(),
+                "sacred host secret\n"
+            );
+
+            // And project target must be restored to original regular file
+            assert!(project_target.is_file());
+            assert_eq!(
+                fs::read_to_string(&project_target).unwrap(),
+                "{\"safe\": true}\n"
+            );
+        }
+
+        let _ = fs::remove_dir_all(&proj);
+        let _ = fs::remove_dir_all(&external_vault);
+    }
+
+    #[test]
+    fn test_rollback_mass_untracked_stress() {
+        let proj = test_dir("rollback-mass-untracked");
+        for i in 0..5 {
+            fs::write(
+                proj.join(format!("base_{i}.txt")),
+                format!("base content {i}\n"),
+            )
+            .unwrap();
+        }
+
+        let session_id = format!("test-sess-mass-{}", std::process::id());
+        let _meta = crate::rescue::snapshot::create_snapshot(
+            &proj,
+            &session_id,
+            crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+        )
+        .expect("snapshot creation");
+
+        // Mutate: delete 1 base, modify 2 bases, create 30 untracked files in nested dirs
+        fs::remove_file(proj.join("base_0.txt")).unwrap();
+        fs::write(proj.join("base_1.txt"), "modified\n").unwrap();
+        fs::write(proj.join("base_2.txt"), "modified\n").unwrap();
+
+        for d in 0..5 {
+            let sub = proj.join(format!("untracked_dir_{d}"));
+            fs::create_dir_all(&sub).unwrap();
+            for f in 0..6 {
+                fs::write(sub.join(format!("garbage_{f}.tmp")), "untracked trash\n").unwrap();
+            }
+        }
+
+        let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+        assert_eq!(res.files_restored, 5); // all 5 snapshot baseline files restored
+        assert_eq!(res.files_deleted, 30); // 5 dirs * 6 garbage files
+
+        for i in 0..5 {
+            let p = proj.join(format!("base_{i}.txt"));
+            assert!(p.exists());
+            assert_eq!(
+                fs::read_to_string(&p).unwrap(),
+                format!("base content {i}\n")
+            );
+        }
+        for d in 0..5 {
+            assert!(!proj.join(format!("untracked_dir_{d}")).exists());
+        }
+
+        let _ = fs::remove_dir_all(&proj);
+    }
+
+    #[test]
+    fn test_rollback_preserves_posix_permissions_chmod() {
+        let proj = test_dir("rollback-chmod");
+        let script = proj.join("exec.sh");
+        fs::write(&script, "#!/bin/sh\necho execute\n").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+
+            let session_id = format!("test-sess-chmod-{}", std::process::id());
+            let _meta = crate::rescue::snapshot::create_snapshot(
+                &proj,
+                &session_id,
+                crate::rescue::snapshot::DEFAULT_MAX_SNAPSHOT_SIZE,
+            )
+            .expect("snapshot creation");
+
+            // Agent downgrades permission to 0o644
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).unwrap();
+            let degraded = fs::metadata(&script).unwrap().permissions().mode() & 0o777;
+            assert_eq!(degraded, 0o644);
+
+            let res = rollback_session(&session_id, Some(&proj)).expect("rollback_session");
+            assert_eq!(res.files_restored, 1);
+
+            let restored = fs::metadata(&script).unwrap().permissions().mode() & 0o777;
+            assert_eq!(restored, 0o755);
+        }
 
         let _ = fs::remove_dir_all(&proj);
     }

@@ -225,6 +225,7 @@ pub fn create_snapshot(
                     // Clean up and fail closed
                     drop(file);
                     let _ = std::fs::remove_file(&archive_path);
+                    let _ = std::fs::remove_dir_all(&snapshots_dir);
                     eprintln!(
                         "vetto: warning: project size exceeds snapshot limit ({} MB); snapshot aborted (undo/rollback disabled).",
                         max_bytes / (1024 * 1024)
@@ -353,10 +354,35 @@ pub fn write_tar_entry_with_mode<W: Write>(
 ) -> Result<()> {
     let mut header = [0u8; 512];
 
-    // Name (100 bytes)
+    // Name (100 bytes) and optional ustar prefix (155 bytes, bytes 345..500)
     let path_bytes = path.as_bytes();
-    let name_len = path_bytes.len().min(100);
-    header[..name_len].copy_from_slice(&path_bytes[..name_len]);
+    if path_bytes.len() <= 100 {
+        header[..path_bytes.len()].copy_from_slice(path_bytes);
+    } else {
+        let mut split = None;
+        let max_split = path_bytes.len().min(156);
+        for i in (1..max_split).rev() {
+            if path_bytes[i] == b'/' {
+                let name_len = path_bytes.len() - i - 1;
+                if name_len <= 100 && i <= 155 {
+                    split = Some(i);
+                    break;
+                }
+            }
+        }
+        if let Some(i) = split {
+            let prefix = &path_bytes[..i];
+            let name = &path_bytes[i + 1..];
+            header[345..345 + prefix.len()].copy_from_slice(prefix);
+            header[..name.len()].copy_from_slice(name);
+        } else {
+            anyhow::bail!(
+                "path '{}' ({} bytes) cannot be split to fit ustar format limits (prefix <= 155, name <= 100)",
+                path,
+                path_bytes.len()
+            );
+        }
+    }
 
     // Mode (8 bytes): octal mode
     let mode_oct = format!("{:07o}\0", mode & 0o777);
@@ -414,6 +440,18 @@ pub fn parse_tar_header_with_mode(header: &[u8; 512]) -> Result<(String, u64, u3
         .collect();
     let name = String::from_utf8_lossy(&name_bytes).to_string();
 
+    let prefix_bytes: Vec<u8> = header[345..500]
+        .iter()
+        .take_while(|&&b| b != 0)
+        .copied()
+        .collect();
+    let prefix = String::from_utf8_lossy(&prefix_bytes).to_string();
+    let full_name = if !prefix.is_empty() {
+        format!("{}/{}", prefix, name)
+    } else {
+        name
+    };
+
     let mode_str = String::from_utf8_lossy(&header[100..108])
         .trim()
         .trim_matches('\0')
@@ -426,7 +464,7 @@ pub fn parse_tar_header_with_mode(header: &[u8; 512]) -> Result<(String, u64, u3
         .to_string();
     let size = u64::from_str_radix(&size_str, 8).unwrap_or(0);
 
-    Ok((name, size, mode))
+    Ok((full_name, size, mode))
 }
 
 /// Read entries, contents, and POSIX modes from a snapshot tar archive.
@@ -683,5 +721,73 @@ mod tests {
         assert_eq!(content, payload, "destination must match test payload");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_snapshot_cyclic_directory_symlink_safety() {
+        let dir = temp_test_dir("cyclic-symlink");
+        fs::write(dir.join("legit.txt"), "regular content").unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let _ = symlink(&dir, dir.join("self_loop"));
+            let _ = symlink(dir.parent().unwrap_or(&dir), dir.join("parent_loop"));
+        }
+
+        let session_id = format!("test-cyclic-symlink-{}", std::process::id());
+        let meta = create_snapshot(&dir, &session_id, DEFAULT_MAX_SNAPSHOT_SIZE)
+            .expect("snapshot must complete safely without cyclic loop");
+        assert_eq!(meta.file_count, 1, "only legit.txt should be indexed");
+
+        let _ = fs::remove_dir_all(&dir);
+        if let Ok(root) = snapshots_root_dir() {
+            let _ = fs::remove_dir_all(root.join(&session_id));
+        }
+    }
+
+    #[test]
+    fn test_snapshot_size_limit_directory_cleanup() {
+        let src_dir = temp_test_dir("size-cleanup");
+        fs::write(src_dir.join("large.bin"), vec![0u8; 1000]).unwrap();
+
+        let session_id = format!("test-size-cleanup-{}", std::process::id());
+        let res = create_snapshot(&src_dir, &session_id, 500);
+        assert!(res.is_err());
+
+        if let Ok(root) = snapshots_root_dir() {
+            let session_dir = root.join(&session_id);
+            assert!(
+                !session_dir.exists(),
+                "snapshot session directory must be deleted upon exceeding size limit"
+            );
+        }
+
+        let _ = fs::remove_dir_all(&src_dir);
+    }
+
+    #[test]
+    fn test_snapshot_long_path_ustar_prefix_roundtrip() {
+        let mut buffer = Vec::new();
+        let long_path = "nested/deeply/within/a/fairly/long/hierarchy/of/directories/that/exceeds/one/hundred/bytes/in/total/length/sample_file_name.rs";
+        assert!(long_path.len() > 100 && long_path.len() <= 256);
+
+        let test_data = b"pub fn long_path_test() -> bool { true }\n";
+        let test_mode = 0o755;
+        let test_mtime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1700000000);
+
+        write_tar_entry_with_mode(&mut buffer, long_path, test_data, test_mtime, test_mode)
+            .expect("write tar entry");
+
+        assert!(buffer.len() >= 512);
+        let mut header = [0u8; 512];
+        header.copy_from_slice(&buffer[..512]);
+
+        let (parsed_name, parsed_size, parsed_mode) =
+            parse_tar_header_with_mode(&header).expect("parse header");
+
+        assert_eq!(parsed_name, long_path);
+        assert_eq!(parsed_size, test_data.len() as u64);
+        assert_eq!(parsed_mode, test_mode);
     }
 }

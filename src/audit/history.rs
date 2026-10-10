@@ -136,9 +136,12 @@ pub fn load_agent_durations(project_dir: &Path, agent_name: &str) -> Vec<u64> {
 
     if let Ok(file) = File::open(&history_file) {
         let reader = BufReader::new(file);
+        let mut seen = std::collections::HashSet::new();
         for line in reader.lines().map_while(Result::ok) {
             if let Ok(record) = serde_json::from_str::<SessionHistoryRecord>(&line) {
-                if record.agent == agent_name || record.agent.ends_with(agent_name) {
+                if (record.agent == agent_name || record.agent.ends_with(agent_name))
+                    && seen.insert(line)
+                {
                     samples.push(record.duration_secs);
                 }
             }
@@ -213,6 +216,10 @@ pub fn verify_ledger_cli(target: Option<&str>, json_output: bool) -> Result<()> 
     let result = crate::audit::AuditLedger::verify_file_detailed(&path)?;
     if json_output {
         println!("{}", serde_json::to_string_pretty(&result)?);
+        if !result.is_valid {
+            std::process::exit(crate::exit_codes::EXIT_FAIL_CLOSED);
+        }
+        return Ok(());
     } else if result.is_valid {
         println!(
             "Audit ledger '{}' verified successfully ({} records verified, hash chain intact).",
@@ -276,6 +283,32 @@ pub fn append_record_to_file(path: &Path, record: &AuditRecord) -> Result<()> {
     Ok(())
 }
 
+/// Deduplicates audit records by `session_id`, keeping the latest record (by timestamp or order).
+pub fn deduplicate_records(records: Vec<AuditRecord>) -> Vec<AuditRecord> {
+    let mut map: std::collections::HashMap<String, AuditRecord> = std::collections::HashMap::new();
+    let mut nameless = Vec::new();
+    for rec in records {
+        if rec.session_id.is_empty() {
+            nameless.push(rec);
+        } else {
+            match map.get_mut(&rec.session_id) {
+                Some(existing) => {
+                    if rec.ts >= existing.ts {
+                        *existing = rec;
+                    }
+                }
+                None => {
+                    map.insert(rec.session_id.clone(), rec);
+                }
+            }
+        }
+    }
+    let mut result: Vec<AuditRecord> = map.into_values().collect();
+    result.extend(nameless);
+    result.sort_by_key(|r| r.ts);
+    result
+}
+
 /// Reads all audit records from a history file (or auto-discovers from logs if empty).
 pub fn read_history(path: &Path) -> Result<Vec<AuditRecord>> {
     let mut records = Vec::new();
@@ -305,7 +338,7 @@ pub fn read_history(path: &Path) -> Result<Vec<AuditRecord>> {
         }
     }
 
-    Ok(records)
+    Ok(deduplicate_records(records))
 }
 
 /// Auto-discovers past session records from ~/.vetto/logs/*.jsonl.
@@ -345,8 +378,7 @@ pub fn discover_history_from_logs() -> Vec<AuditRecord> {
             }
         }
     }
-    records.sort_by_key(|r| r.ts);
-    records
+    deduplicate_records(records)
 }
 
 /// Filter and sort history records.
@@ -1795,5 +1827,130 @@ mod tests {
 
         let unknown_samples = load_agent_durations_from_records(&records, "unknown");
         assert!(unknown_samples.is_empty());
+    }
+
+    #[test]
+    fn test_deduplicate_records_preserves_latest() {
+        let t1 = Utc::now() - chrono::Duration::hours(2);
+        let t2 = Utc::now() - chrono::Duration::hours(1);
+
+        let records = vec![
+            AuditRecord {
+                ts: t1,
+                session_id: "duplicate-session-1".into(),
+                agent: "claude".into(),
+                command: Some("v1".into()),
+                profile: "default".into(),
+                policy_path: None,
+                exit_code: 1,
+                duration_secs: 10,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                blocked_count: 0,
+                events_total: 2,
+                report_path: None,
+                log_path: None,
+            },
+            AuditRecord {
+                ts: t2,
+                session_id: "duplicate-session-1".into(),
+                agent: "claude".into(),
+                command: Some("v2".into()),
+                profile: "default".into(),
+                policy_path: None,
+                exit_code: 0,
+                duration_secs: 25,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                blocked_count: 0,
+                events_total: 5,
+                report_path: None,
+                log_path: None,
+            },
+            AuditRecord {
+                ts: t1,
+                session_id: "unique-session-2".into(),
+                agent: "codex".into(),
+                command: None,
+                profile: "default".into(),
+                policy_path: None,
+                exit_code: 0,
+                duration_secs: 50,
+                tier: "full".into(),
+                net_mode: "off".into(),
+                blocked_count: 0,
+                events_total: 6,
+                report_path: None,
+                log_path: None,
+            },
+        ];
+
+        let deduped = deduplicate_records(records);
+        assert_eq!(deduped.len(), 2);
+        let s1 = deduped
+            .iter()
+            .find(|r| r.session_id == "duplicate-session-1")
+            .unwrap();
+        assert_eq!(s1.command.as_deref(), Some("v2"));
+        assert_eq!(s1.duration_secs, 25);
+        assert_eq!(s1.exit_code, 0);
+    }
+
+    #[test]
+    fn test_read_history_deduplication_from_file() {
+        let temp = std::env::temp_dir().join(format!("vetto-dedup-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        let hist_file = temp.join("history.jsonl");
+
+        let rec1 = r#"{"ts":"2026-10-01T10:00:00Z","session_id":"sess-repeat","agent":"claude","command":"run1","profile":"default","exit_code":1,"duration_secs":12,"tier":"full","net_mode":"off","blocked_count":0,"events_total":1}"#;
+        let rec2 = r#"{"ts":"2026-10-01T11:00:00Z","session_id":"sess-repeat","agent":"claude","command":"run2","profile":"default","exit_code":0,"duration_secs":24,"tier":"full","net_mode":"off","blocked_count":0,"events_total":2}"#;
+        fs::write(&hist_file, format!("{rec1}\n{rec2}\n")).unwrap();
+
+        let read = read_history(&hist_file).unwrap();
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].session_id, "sess-repeat");
+        assert_eq!(read[0].command.as_deref(), Some("run2"));
+        assert_eq!(read[0].duration_secs, 24);
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_compute_auto_timeout_bimodal_distribution() {
+        let temp = std::env::temp_dir().join(format!("vetto-bimodal-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+
+        // 95 fast runs (10s) and 5 slow runs (400s)
+        for _ in 0..95 {
+            append_session_history(
+                &temp,
+                &SessionHistoryRecord {
+                    agent: "test-bot".into(),
+                    duration_secs: 10,
+                    ts: "2026-10-01T00:00:00Z".into(),
+                    exit_code: 0,
+                },
+            )
+            .unwrap();
+        }
+        for _ in 0..5 {
+            append_session_history(
+                &temp,
+                &SessionHistoryRecord {
+                    agent: "test-bot".into(),
+                    duration_secs: 400,
+                    ts: "2026-10-01T00:00:00Z".into(),
+                    exit_code: 0,
+                },
+            )
+            .unwrap();
+        }
+
+        let timeout = compute_auto_timeout(&temp, "test-bot").unwrap();
+        assert!(timeout.as_secs() >= MIN_AUTO_TIMEOUT_SECS);
+
+        let _ = fs::remove_dir_all(&temp);
     }
 }
