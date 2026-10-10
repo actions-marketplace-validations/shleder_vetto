@@ -2636,7 +2636,7 @@ fn test_m4_policy_explain_effective_rights_and_why_remediation() {
     let ws = temp_dir.join(format!("vetto_m4_explain_{}", std::process::id()));
     std::fs::create_dir_all(&ws).expect("create test workspace");
 
-    let mut policy = Policy {
+    let policy = Policy {
         name: "explain-m4".to_string(),
         allow_write: vec![ws.clone()],
         allow_read: vec![PathBuf::from("/usr")],
@@ -3023,7 +3023,7 @@ fn test_policy_compiler_complex_traversal_and_extended_masks() {
             argv: &["agent".to_string()],
             cwd: &ws,
             env: &std::collections::BTreeMap::new(),
-            net: &NetMode::Off,
+            net: &CliNetMode::Off,
             nonce: "nonce-r2-test",
             timeout: None,
             tier: None,
@@ -3060,7 +3060,7 @@ fn test_policy_compiler_complex_traversal_and_extended_masks() {
             argv: &["agent".to_string()],
             cwd: &ws,
             env: &std::collections::BTreeMap::new(),
-            net: &NetMode::Off,
+            net: &CliNetMode::Off,
             nonce: "nonce-r2-masks",
             timeout: None,
             tier: None,
@@ -3134,33 +3134,34 @@ fn test_sealed_contract_single_byte_fuzzing_and_order_invariance() {
 
     // f. resources quota mutations
     let mut mut_time = contract.clone();
-    mut_time.resources.max_wall_time_ms = Some(999_999);
+    mut_time.resources.max_wall_time_ms = 999_999;
     assert!(
         !mut_time.verify_sha256(),
         "Mutating max_wall_time_ms must invalidate SHA-256"
     );
 
     let mut mut_mem = contract.clone();
-    mut_mem.resources.max_memory_bytes = Some(1024 * 1024);
+    mut_mem.resources.max_memory_bytes = 1024 * 1024;
     assert!(
         !mut_mem.verify_sha256(),
         "Mutating max_memory_bytes must invalidate SHA-256"
     );
 
     let mut mut_cpu = contract.clone();
-    mut_cpu.resources.max_cpu_percent = Some(25);
+    mut_cpu.resources.max_cpu_percent = 25;
     assert!(
         !mut_cpu.verify_sha256(),
         "Mutating max_cpu_percent must invalidate SHA-256"
     );
 
     // 2. JSON serialization key-order independence
-    let digest_original = contract.compute_sha256_digest().expect("original digest");
+    let digest_original = contract.unsealed().compute_sha256_digest().expect("original digest");
     let contract_val = serde_json::to_value(&contract).expect("serialize value");
     let serialized_str = serde_json::to_string(&contract_val).expect("to string");
     let deserialized_contract: SecurityContract =
         serde_json::from_str(&serialized_str).expect("deserialize");
     let digest_roundtrip = deserialized_contract
+        .unsealed()
         .compute_sha256_digest()
         .expect("roundtrip digest");
     assert_eq!(
