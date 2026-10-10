@@ -748,7 +748,7 @@ pub fn apply_policy_advanced(
     };
 
     let has_net = !bind_ports.is_empty() || !connect_ports.is_empty() || strict_net;
-    let (ruleset, effective_abi, net_active) = create_ruleset_dynamic(detected_abi, has_net)?;
+    let (ruleset, effective_abi, _net_active) = create_ruleset_dynamic(detected_abi, has_net)?;
     let prepared = prepare_ruleset_with_net_for_abi(
         effective_abi,
         allow_write,
@@ -819,8 +819,8 @@ pub fn apply_policy_advanced(
     // PTY whitelist explicitly granted under ABI >= 5
     let _ = add_pty_whitelist(&ruleset, effective_abi);
 
-    // Add network port rules if requested and supported
-    if net_active {
+    // Add network port rules if requested (enforces fail-closed on ABI < 4 via apply_net_port_rules)
+    if has_net {
         apply_net_port_rules(
             &ruleset,
             effective_abi,
@@ -1143,5 +1143,25 @@ mod tests {
             res.is_err(),
             "open_landlock_path_fd_beneath must reject absolute path"
         );
+    }
+
+    #[test]
+    fn open_landlock_path_fd_beneath_rejects_external_symlink() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base_dir =
+            std::env::temp_dir().join(format!("vetto_symlink_ext_test_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&base_dir).expect("create test dir");
+
+        let symlink_path = base_dir.join("link_out");
+        let _ = std::os::unix::fs::symlink("/etc/passwd", &symlink_path);
+
+        let dir_fd = open_landlock_path_fd(&base_dir).expect("open base dir");
+        let res = open_landlock_path_fd_beneath(dir_fd.as_raw_fd(), Path::new("link_out"));
+        assert!(res.is_err(), "resolving symlink beneath must fail with error");
+
+        let _ = std::fs::remove_dir_all(&base_dir);
     }
 }

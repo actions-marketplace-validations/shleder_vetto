@@ -78,3 +78,110 @@ fn json_report_is_sanitized_and_written() {
     }
     assert!(found, "no json report written");
 }
+
+#[test]
+fn test_package_configs_and_daemon_sockets_masking() {
+    if !have_landlock() {
+        eprintln!("SKIP: no tier");
+        return;
+    }
+
+    // Verify dangerous unix sockets list includes docker and podman sockets
+    #[cfg(target_os = "linux")]
+    {
+        let sockets = vetto::sandbox::linux::vfs_overlays::get_dangerous_unix_sockets();
+        assert!(
+            sockets.contains(&std::path::PathBuf::from("/var/run/docker.sock")),
+            "dangerous sockets must include /var/run/docker.sock"
+        );
+        assert!(
+            sockets.contains(&std::path::PathBuf::from("/run/docker.sock")),
+            "dangerous sockets must include /run/docker.sock"
+        );
+        assert!(
+            sockets.contains(&std::path::PathBuf::from("/run/podman/podman.sock")),
+            "dangerous sockets must include /run/podman/podman.sock"
+        );
+    }
+
+    let proj = TempProject::new("secret-pkg-mask");
+    let home = test_home();
+
+    // 1. Create .docker/config.json in test home
+    let docker_dir = home.join(".docker");
+    let _ = std::fs::create_dir_all(&docker_dir);
+    write_file(
+        &docker_dir.join("config.json"),
+        r#"{"auths":{"secret.registry.io":{"auth":"SECRET_DOCKER_CONFIG_TOKEN_ABC"}}}"#,
+    );
+
+    // 2. Create .npmrc in test home
+    write_file(
+        &home.join(".npmrc"),
+        "//registry.npmjs.org/:_authToken=SECRET_NPMRC_AUTH_TOKEN_DEF\n",
+    );
+
+    // 3. Create .config/gh/hosts.yml in test home
+    let gh_dir = home.join(".config/gh");
+    let _ = std::fs::create_dir_all(&gh_dir);
+    write_file(
+        &gh_dir.join("hosts.yml"),
+        "github.com:\n  user: secretuser\n  oauth_token: SECRET_GH_HOSTS_TOKEN_GHI\n",
+    );
+
+    let test_script = r#"
+echo "--- DOCKER CONFIG ---"
+cat "$HOME/.docker/config.json" 2>&1 || true
+echo "--- NPMRC ---"
+cat "$HOME/.npmrc" 2>&1 || true
+echo "--- GH HOSTS ---"
+cat "$HOME/.config/gh/hosts.yml" 2>&1 || true
+echo "--- DOCKER SOCK ---"
+if [ -e "/var/run/docker.sock" ]; then
+    cat "/var/run/docker.sock" 2>&1 || true
+fi
+"#;
+
+    let out = run_vetto_in(
+        proj.path(),
+        &["--tui=none", "--ci", "--", "sh", "-c", test_script],
+    );
+
+    let stdout_str = stdout(&out);
+    let stderr_str = stderr(&out);
+
+    assert!(
+        !stdout_str.contains("SECRET_DOCKER_CONFIG_TOKEN_ABC"),
+        "docker config token leaked in stdout:\n{stdout_str}"
+    );
+    assert!(
+        !stderr_str.contains("SECRET_DOCKER_CONFIG_TOKEN_ABC"),
+        "docker config token leaked in stderr:\n{stderr_str}"
+    );
+
+    assert!(
+        !stdout_str.contains("SECRET_NPMRC_AUTH_TOKEN_DEF"),
+        "npmrc token leaked in stdout:\n{stdout_str}"
+    );
+    assert!(
+        !stderr_str.contains("SECRET_NPMRC_AUTH_TOKEN_DEF"),
+        "npmrc token leaked in stderr:\n{stderr_str}"
+    );
+
+    assert!(
+        !stdout_str.contains("SECRET_GH_HOSTS_TOKEN_GHI"),
+        "gh hosts token leaked in stdout:\n{stdout_str}"
+    );
+    assert!(
+        !stderr_str.contains("SECRET_GH_HOSTS_TOKEN_GHI"),
+        "gh hosts token leaked in stderr:\n{stderr_str}"
+    );
+
+    // If host has /var/run/docker.sock, verify it cannot be communicated with as a docker daemon
+    if std::path::Path::new("/var/run/docker.sock").exists() {
+        assert!(
+            !stdout_str.contains("Docker daemon") && !stdout_str.contains("{\"message\""),
+            "docker socket was accessible in sandbox:\n{stdout_str}"
+        );
+    }
+}
