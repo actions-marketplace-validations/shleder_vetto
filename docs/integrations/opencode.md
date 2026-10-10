@@ -39,7 +39,7 @@ You can also integrate Vetto directly into OpenCode's configuration file (`~/.co
   },
   "vetto": {
     "enabled": true,
-    "version": "0.6.1"
+    "version": "0.6.2"
   }
 }
 ```

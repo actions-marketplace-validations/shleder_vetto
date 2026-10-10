@@ -5,6 +5,32 @@ Keep a Changelog; versioning follows SemVer.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-10
+
+### Added
+- **Capability Gate & Action Authorization (`src/policy/types.rs`, `src/policy_ir/mod.rs`)**:
+  - Fine-grained interception and verification for `Action::FsRead`, `FsWrite`, `FsExecute`, `ProcessExec`, and `NetConnect` with deterministic fail-closed protection.
+- **4-Phase Policy Compiler (`src/policy_ir/compiler.rs`)**:
+  - Deterministic compilation pipeline: Path Canonicalization & Normalization, Ancestor Containment check, Secret Masking Priority, and Sealed Binary Contract generation.
+- **Cryptographic Sealed Contract (`src/policy_ir/contract.rs`)**:
+  - SHA-256 sealed contract hash verification (`INV-36`) enforcing instant fail-closed Exit 125 upon runtime policy divergence.
+- **12-State Execution State Machine (`src/policy_ir/fsm.rs`)**:
+  - Transition invariants blocking state bypassing with guaranteed fallback to `EmergencyCleanup` (Exit 125).
+- **Authoritative Verdict Engine (`src/audit/verdict.rs`)**:
+  - Strictly decouples process exit code from security verdict, preventing false-positive PASS verdicts on child crashes or SIGSEGV.
+- **Merkle DAG Audit Ledger & Rescue Snapshot Rollback (`src/audit/history.rs`, `src/rescue/snapshot.rs`, `src/rescue/rollback.rs`)**:
+  - Tamper-proof SHA-256 Merkle chain with immutable sequence numbering, CoW directory snapshots, and two-phase atomic file sibling restoration with directory fsync.
+- **Batch Shim Deactivation (`src/cli/enable.rs:disable_all`)**:
+  - Added `vetto disable --all` to cleanly remove all managed PATH shims.
+
+### Fixed
+- **Landlock LSM Fail-Closed Hardening (`src/sandbox/linux/landlock.rs`)**:
+  - Enforced fail-closed Exit 125 when Landlock ABI < 4 is detected in the presence of network restriction policies.
+- **Symlink Rollback Protection (`src/rescue/rollback.rs`)**:
+  - Prevented symlink traversal hazards during snapshot cleanup and sibling extraction.
+- **Platform-Aligned Home Directory & Test Isolation (`src/events/tail.rs`)**:
+  - Aligned home resolution to check `USERPROFILE` on Windows and isolated environment tests under `TEST_ENV_LOCK` with RAII variable restoration.
+
 ## [0.6.1] - 2026-10-06
 
 ### Added
