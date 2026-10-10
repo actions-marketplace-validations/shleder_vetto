@@ -443,6 +443,8 @@ pub fn finalize_session(ctx: FinalizeContext) -> Result<SupervisionVerdict, Supe
         .map_err(SuperviseError::Fatal)?;
     }
 
+    crate::tui::guard::TerminalResetGuard::reset_now();
+
     Ok(SupervisionVerdict {
         final_exit_code: code,
         pass: code == 0,

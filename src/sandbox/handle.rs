@@ -139,6 +139,7 @@ impl SandboxHandle {
                     let old_sigttou = libc::signal(libc::SIGTTOU, libc::SIG_IGN);
                     libc::tcsetpgrp(stdin_fd, libc::getpgrp());
                     libc::signal(libc::SIGTTOU, old_sigttou);
+                    libc::tcflush(stdin_fd, libc::TCIFLUSH);
                 }
             }
         }
