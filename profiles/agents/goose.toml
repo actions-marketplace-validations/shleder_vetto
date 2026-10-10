@@ -5,6 +5,7 @@ description = "Compatibility profile for Block Goose agent."
 [filesystem]
 allow_read = [
     "$AGENT",
+    "$HOME/.goose",
     "$HOME/.config/goose",
     "$HOME/.config/goose/plugins",
     "$HOME/.goose/plugins",
@@ -24,6 +25,7 @@ allow_read = [
 ]
 allow_write = [
     "$AGENT",
+    "$HOME/.goose",
     "$HOME/.config/goose",
     "$HOME/.config/goose/plugins",
     "$HOME/.goose/plugins",

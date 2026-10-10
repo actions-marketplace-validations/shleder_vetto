@@ -937,3 +937,90 @@ fn test_swebench_profile_consistency() {
         "~/.swebench must be in allow_read as agent root"
     );
 }
+
+#[test]
+fn test_all_32_agent_profiles_auth_and_config_coverage_tier_full() {
+    let temp = TempProject::new("all-32-auth-coverage");
+    let project = temp.path().join("project");
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&project).expect("create project dir");
+    std::fs::create_dir_all(&home).expect("create home dir");
+
+    // Create fake secret files to verify host secret masking
+    let ssh_dir = home.join(".ssh");
+    std::fs::create_dir_all(&ssh_dir).expect("create .ssh dir");
+    std::fs::write(ssh_dir.join("id_rsa"), "FAKE_PRIVATE_KEY").expect("write fake id_rsa");
+    std::fs::write(project.join(".env"), "SECRET=true").expect("write fake .env");
+
+    let all_agents = vetto::policy::defaults::AGENT_PROFILE_NAMES;
+    assert_eq!(all_agents.len(), 32, "Must cover all 32 agent profiles");
+
+    for agent in all_agents {
+        let opts = PolicyLoadOptions {
+            agent: Some(agent.to_string()),
+            include_project_policy: false,
+            ..Default::default()
+        };
+
+        let pol = load_with_options("default", None, &project, &home, Tier::Full, &opts)
+            .unwrap_or_else(|e| panic!("Failed to load profile for agent {}: {:#}", agent, e));
+
+        // 1. Check resolve_preset paths for this agent
+        if let Some(preset_paths) = vetto::policy::presets::resolve_preset(agent) {
+            for raw_path in preset_paths {
+                let resolved = if raw_path.starts_with("$HOME/") {
+                    home.join(raw_path.trim_start_matches("$HOME/"))
+                } else if *raw_path == "$HOME" {
+                    home.clone()
+                } else {
+                    std::path::PathBuf::from(raw_path)
+                };
+
+                // Every agent preset path must be in allow_read
+                assert!(
+                    pol.allow_read.contains(&resolved),
+                    "Agent '{}' must have {:?} (from {}) in allow_read under Tier::Full",
+                    agent,
+                    resolved,
+                    raw_path
+                );
+
+                // For write: all agents except swebench must also have preset paths in allow_write
+                if agent != "swebench" {
+                    assert!(
+                        pol.allow_write.contains(&resolved),
+                        "Agent '{}' must have {:?} (from {}) in allow_write under Tier::Full",
+                        agent,
+                        resolved,
+                        raw_path
+                    );
+                }
+            }
+        }
+
+        // 2. Ensure agent auth tokens/sessions are NOT denied in deny_resolved
+        let agent_auth_candidates = [
+            home.join(format!(".{agent}/auth.json")),
+            home.join(format!(".{agent}/.credentials.json")),
+            home.join(format!(".config/{agent}/auth.json")),
+            home.join(format!(".config/{agent}/token.json")),
+        ];
+        for auth_file in &agent_auth_candidates {
+            assert!(
+                !pol.deny_resolved.iter().any(|d| &d.path == auth_file),
+                "Agent '{}' session file {:?} must not be in deny_resolved",
+                agent,
+                auth_file
+            );
+        }
+
+        // 3. Ensure host secrets remain strictly blocked
+        let dot_env = project.join(".env");
+        assert!(
+            pol.deny_resolved.iter().any(|d| d.path == dot_env),
+            "Agent '{}' must strictly deny project .env",
+            agent
+        );
+    }
+}
+

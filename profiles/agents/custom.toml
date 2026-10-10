@@ -4,6 +4,8 @@ description = "Generic sandboxed execution profile for user-defined tools."
 
 [filesystem]
 allow_read = [
+    "$AGENT",
+    "$HOME/.config/vetto/agents/custom",
     "$PROJECT",
     "$HOME/.config/vetto/agents/custom/plugins",
     "$HOME/.config/vetto/agents/custom/skills",
@@ -14,6 +16,8 @@ allow_read = [
     "$HOME/.cache/puppeteer",
 ]
 allow_write = [
+    "$AGENT",
+    "$HOME/.config/vetto/agents/custom",
     "$PROJECT",
     "/tmp",
     "$HOME/.config/vetto/agents/custom/plugins",
