@@ -314,7 +314,7 @@ pub fn run_bench(bench_args: &BenchArgs, cli: &Cli) -> Result<BenchJsonResult> {
         ..PolicyOverrides::default()
     };
     let policy_options = PolicyLoadOptions {
-        agent: None,
+        agent: Some(bench_args.profile.clone()),
         include_project_policy: false,
         include_system_policy: false,
         include_user_policy: false,

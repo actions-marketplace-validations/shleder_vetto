@@ -51,6 +51,87 @@ fn test_mcp_server_stdio_protocol() {
     let tools = resp["result"]["tools"].as_array().expect("tools array");
     assert_eq!(tools[0]["name"], "run_sandboxed");
 
+    // 3. Send tools/call for unknown tool to verify clean JSON-RPC error response
+    let call_err_req = json!({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": "non_existent_tool",
+            "arguments": {}
+        }
+    });
+    writeln!(stdin, "{}", call_err_req).expect("write tools/call err");
+    stdin.flush().expect("flush");
+
+    line.clear();
+    reader
+        .read_line(&mut line)
+        .expect("read tools/call err resp");
+    let resp_err: serde_json::Value =
+        serde_json::from_str(&line).expect("parse tools/call err resp");
+    assert_eq!(resp_err["id"], 3);
+    assert!(
+        resp_err.get("error").is_some() || resp_err["result"]["isError"] == true,
+        "expected error response for unknown tool: {resp_err}"
+    );
+
     drop(stdin);
     let _ = child.wait();
+}
+
+#[test]
+fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
+    // 1. `vetto mcp wrap --help` must succeed with exit code 0
+    let help_out = Command::new(vetto_bin())
+        .args(["mcp", "wrap", "--help"])
+        .output()
+        .expect("exec vetto mcp wrap --help");
+
+    assert!(
+        help_out.status.success(),
+        "vetto mcp wrap --help must succeed"
+    );
+    let help_text = String::from_utf8_lossy(&help_out.stdout);
+    assert!(
+        help_text.contains("vetto mcp wrap")
+            || help_text.contains("vetto.exe mcp wrap")
+            || help_text.contains("mcp wrap"),
+        "unexpected help text: {help_text}"
+    );
+
+    // 2. Wrap command test: verify stdout is hermetic and receives only the child stdout
+    #[cfg(unix)]
+    {
+        let wrap_out = Command::new(vetto_bin())
+            .args([
+                "mcp",
+                "wrap",
+                "--",
+                "echo",
+                "{\"jsonrpc\":\"2.0\",\"id\":1}",
+            ])
+            .output()
+            .expect("exec vetto mcp wrap echo");
+
+        assert!(
+            wrap_out.status.success(),
+            "mcp wrap failed: {}",
+            String::from_utf8_lossy(&wrap_out.stderr)
+        );
+        let stdout_str = String::from_utf8_lossy(&wrap_out.stdout);
+        assert!(
+            stdout_str.contains("{\"jsonrpc\":\"2.0\",\"id\":1}"),
+            "stdout must contain child output: {stdout_str}"
+        );
+        // Ensure no Vetto banners leaked into stdout
+        assert!(
+            !stdout_str.contains("[vetto]"),
+            "stdout must not contain vetto banners: {stdout_str}"
+        );
+        assert!(
+            !stdout_str.contains("vetto v"),
+            "stdout must not contain version banner: {stdout_str}"
+        );
+    }
 }

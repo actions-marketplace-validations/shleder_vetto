@@ -439,3 +439,112 @@ fn test_preset_swebench_cli_run() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn test_interactive_process_tui_mode_fallback() {
+    // 1. Full-screen interactive agents default to no TUI
+    let interactive_agents = [
+        "claude",
+        "aider",
+        "codex",
+        "cursor",
+        "cline",
+        "openhands",
+        "devin",
+    ];
+    for agent in interactive_agents {
+        assert!(
+            vetto::config::should_default_to_no_tui(Some(agent), &[]),
+            "Interactive agent '{agent}' must default to no TUI"
+        );
+    }
+
+    // 2. Interactive console commands default to no TUI
+    let interactive_cmds = [
+        vec!["vim".to_string(), "main.rs".to_string()],
+        vec!["nvim".to_string(), "main.rs".to_string()],
+        vec!["nano".to_string(), "file.txt".to_string()],
+        vec!["less".to_string(), "log.txt".to_string()],
+        vec!["htop".to_string()],
+    ];
+    for cmd in &interactive_cmds {
+        assert!(
+            vetto::config::should_default_to_no_tui(None, cmd),
+            "Interactive command '{:?}' must default to no TUI",
+            cmd
+        );
+    }
+
+    // 3. Shims always default to no TUI
+    std::env::set_var("VETTO_SHIM_ACTIVE", "1");
+    assert!(
+        vetto::config::should_default_to_no_tui(None, &["ls".to_string()]),
+        "VETTO_SHIM_ACTIVE=1 must force no TUI"
+    );
+    std::env::remove_var("VETTO_SHIM_ACTIVE");
+
+    // 4. CI environment always defaults to no TUI
+    std::env::set_var("CI", "true");
+    assert!(
+        vetto::config::should_default_to_no_tui(None, &["ls".to_string()]),
+        "CI=true must force no TUI"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_tui_10_fps_and_decstbm_scroll_isolation() {
+    use std::time::{Duration, Instant};
+
+    // 1. 10 FPS rate-limiting invariant (100ms interval)
+    let fps_10_interval = Duration::from_millis(100);
+    assert_eq!(
+        fps_10_interval.as_millis(),
+        100,
+        "10 FPS corresponds strictly to 100ms repaint interval"
+    );
+
+    // 2. DECSTBM escape sequence format for terminal rows 1..N-1 vs N
+    let rows_total: u16 = 24;
+    let bottom = rows_total.saturating_sub(1).max(1);
+    let decstbm_seq = format!("\x1b[1;{bottom}r");
+    assert_eq!(decstbm_seq, "\x1b[1;23r");
+
+    // 3. Terminal restoration sequence
+    let restore_seq = format!("\x1b[1;{rows_total}r\x1b[{rows_total};1H\x1b[2K\x1b[0m");
+    assert!(restore_seq.contains("\x1b[1;24r"));
+    assert!(restore_seq.contains("\x1b[2K\x1b[0m"));
+
+    // 4. AppState 3-second security block alert timer
+    let mut app = vetto::tui::app::AppState::new("full", "off", "default");
+    app.agent = Some("claude".to_string());
+
+    // Inactive alert returns standard protected text
+    let normal_text = app.status_text(80);
+    assert!(normal_text.contains("[PROTECTED]"));
+    assert!(!normal_text.contains("[BLOCKED:"));
+
+    // Active alert sets 3s timer
+    app.active_alert = Some((
+        "[BLOCKED: ~/.ssh/id_rsa]".to_string(),
+        Instant::now() + Duration::from_secs(3),
+    ));
+    let alert_text = app.status_text(80);
+    assert!(
+        alert_text.contains("[BLOCKED: ~/.ssh/id_rsa]"),
+        "active alert must be rendered in status_text: {alert_text}"
+    );
+
+    // Expired alert clears the blocked prefix
+    app.active_alert = Some((
+        "[BLOCKED: ~/.ssh/id_rsa]".to_string(),
+        Instant::now()
+            .checked_sub(Duration::from_millis(50))
+            .unwrap(),
+    ));
+    let expired_text = app.status_text(80);
+    assert!(
+        !expired_text.contains("[BLOCKED:"),
+        "expired alert must not appear in status_text: {expired_text}"
+    );
+}

@@ -311,3 +311,55 @@ fn test_vetto_bench_argv0_rewrite_to_bench_subcommand() {
     assert!(bench_args.json);
     assert_eq!(bench_args.command, vec!["pytest", "tests/"]);
 }
+
+#[cfg(unix)]
+#[test]
+fn test_bench_fast_path_json_execution() {
+    let project = crate::common::TempProject::new("bench-fast-path");
+    let proj_dir = project.path();
+
+    let out = std::process::Command::new(crate::common::vetto_bin())
+        .args([
+            "bench",
+            "--json",
+            "--workspace",
+            &proj_dir.to_string_lossy(),
+            "--",
+            "true",
+        ])
+        .current_dir(proj_dir)
+        .env("HOME", crate::common::test_home())
+        .output()
+        .expect("exec vetto bench --json");
+
+    let stderr_str = crate::common::stderr(&out);
+    if !out.status.success() && stderr_str.contains("cgroup v2 is unavailable or not writable") {
+        // Enforces fail-closed exit 125 when cgroups unavailable on host runner (INV-01)
+        assert_eq!(
+            out.status.code(),
+            Some(125),
+            "expected fail-closed exit 125 when cgroups unavailable on host runner"
+        );
+        return;
+    }
+
+    assert!(
+        out.status.success(),
+        "vetto bench execution failed: {}",
+        stderr_str
+    );
+
+    let stdout_str = crate::common::stdout(&out);
+    let val: serde_json::Value =
+        serde_json::from_str(&stdout_str).expect("parse bench json output");
+
+    assert_eq!(val["exit_code"], 0);
+    assert_eq!(val["verdict"], "pass");
+    assert_eq!(val["status"], "COMPLETED");
+    assert_eq!(val["blocked_attempts"], 0);
+    assert_eq!(val["timed_out"], false);
+    assert_eq!(val["oom_killed"], false);
+    assert!(val["cold_start_ms"].is_number());
+    assert!(val["duration_ms"].is_number());
+    assert!(val["peak_memory_bytes"].is_number());
+}

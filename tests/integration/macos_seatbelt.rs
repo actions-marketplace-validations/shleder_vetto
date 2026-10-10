@@ -28,9 +28,10 @@ fn secret_reads_are_not_yet_isolated_on_macos() {
     std::fs::write(ssh.join("id_rsa"), "FAKE-VETTO-MACOS-KEY\n").expect("write fake key");
     let key_path = home.join(".ssh/id_rsa");
     let proj = crate::common::TempProject::new("seatbelt-secret-macos");
-    let out = crate::common::run_vetto_in(
+    let out = crate::common::run_vetto_env_in(
         proj.path(),
         &["--tui=none", "--", "cat", &key_path.to_string_lossy()],
+        &[("HOME", &home.to_string_lossy())],
     );
     let _ = std::fs::remove_dir_all(&home);
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -43,7 +44,10 @@ fn secret_reads_are_not_yet_isolated_on_macos() {
     // The enforced property: the session completes.
     assert!(
         out.status.success() || !stdout.is_empty(),
-        "session did not complete"
+        "session did not complete: status={:?}, stdout={}, stderr={}",
+        out.status,
+        stdout,
+        String::from_utf8_lossy(&out.stderr)
     );
 }
 
