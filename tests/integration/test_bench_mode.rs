@@ -332,10 +332,21 @@ fn test_bench_fast_path_json_execution() {
         .output()
         .expect("exec vetto bench --json");
 
+    let stderr_str = crate::common::stderr(&out);
+    if !out.status.success() && stderr_str.contains("cgroup v2 is unavailable or not writable") {
+        // Enforces fail-closed exit 125 when cgroups unavailable on host runner (INV-01)
+        assert_eq!(
+            out.status.code(),
+            Some(125),
+            "expected fail-closed exit 125 when cgroups unavailable on host runner"
+        );
+        return;
+    }
+
     assert!(
         out.status.success(),
         "vetto bench execution failed: {}",
-        crate::common::stderr(&out)
+        stderr_str
     );
 
     let stdout_str = crate::common::stdout(&out);

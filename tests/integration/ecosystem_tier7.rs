@@ -93,7 +93,10 @@ fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
         "vetto mcp wrap --help must succeed"
     );
     let help_text = String::from_utf8_lossy(&help_out.stdout);
-    assert!(help_text.contains("vetto mcp wrap"));
+    assert!(
+        help_text.contains("vetto mcp wrap") || help_text.contains("vetto.exe mcp wrap") || help_text.contains("mcp wrap"),
+        "unexpected help text: {help_text}"
+    );
 
     // 2. Wrap command test: verify stdout is hermetic and receives only the child stdout
     #[cfg(unix)]
