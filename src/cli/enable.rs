@@ -377,6 +377,7 @@ pub fn disable_agent(agent: &str, scope: HookScope) -> Result<()> {
 
     println!("vetto: disabled sandbox wrapper for '{agent}' (removed {removed_count} shim(s))");
     println!("'{agent}' will now run unconfined as a standard host binary.");
+    println!("{}", crate::cli::shell_env::SHELL_PATH_CACHE_HINT);
 
     Ok(())
 }
@@ -414,6 +415,7 @@ pub fn disable_all(scope: HookScope) -> Result<()> {
         shims_dir.display()
     );
     println!("All agents will now run unconfined as standard host binaries.");
+    println!("{}", crate::cli::shell_env::SHELL_PATH_CACHE_HINT);
 
     Ok(())
 }
