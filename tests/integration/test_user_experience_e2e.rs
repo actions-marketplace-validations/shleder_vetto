@@ -33,8 +33,7 @@ const WINDOWS_SKIP: &str =
 #[cfg(target_os = "windows")]
 fn windows_backend_available() -> bool {
     let doctor = doctor_output();
-    doctor.contains("appcontainer-api=yes")
-        && doctor.contains("experimental-process-sandbox=yes")
+    doctor.contains("appcontainer-api=yes") && doctor.contains("experimental-process-sandbox=yes")
 }
 
 fn create_single_mock_agent(bin_dir: &Path, agent_name: &str) {
