@@ -94,7 +94,9 @@ fn test_mcp_wrap_stdio_hermeticity_and_stderr_redirection() {
     );
     let help_text = String::from_utf8_lossy(&help_out.stdout);
     assert!(
-        help_text.contains("vetto mcp wrap") || help_text.contains("vetto.exe mcp wrap") || help_text.contains("mcp wrap"),
+        help_text.contains("vetto mcp wrap")
+            || help_text.contains("vetto.exe mcp wrap")
+            || help_text.contains("mcp wrap"),
         "unexpected help text: {help_text}"
     );
 
