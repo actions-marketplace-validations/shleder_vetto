@@ -1015,7 +1015,9 @@ mod tests {
     #[test]
     fn test_diagnose_missing_host_binary_output() {
         let diag = diagnose_missing_host_binary("nonexistent_test_agent_xyz");
-        assert!(diag.contains("shim: failed to resolve host binary for 'nonexistent_test_agent_xyz'"));
+        assert!(
+            diag.contains("shim: failed to resolve host binary for 'nonexistent_test_agent_xyz'")
+        );
         assert!(diag.contains("~/.local/share/nodejs/bin"));
         assert!(diag.contains("~/.cargo/bin"));
         assert!(diag.contains("~/.local/bin"));
