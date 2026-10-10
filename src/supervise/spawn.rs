@@ -251,6 +251,25 @@ pub fn spawn_supervised_session(cfg: &mut RunConfig) -> Result<SupervisedSession
             source,
         })?;
 
+    // Injects `--no-daemon` for OpenAI Codex CLI to ensure clean foreground execution in private PID namespaces
+    let is_codex_bin = agent_cmd
+        .first()
+        .map(|c| {
+            let norm = c.replace('\\', "/");
+            let stem = std::path::Path::new(&norm)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            stem.eq_ignore_ascii_case("codex") || stem.eq_ignore_ascii_case("codex-cli")
+        })
+        .unwrap_or(false);
+    if is_codex_bin && !agent_cmd.iter().any(|a| a == "--no-daemon") {
+        agent_cmd.push("--no-daemon".to_string());
+        if !cfg.agent.iter().any(|a| a == "--no-daemon") {
+            cfg.agent.push("--no-daemon".to_string());
+        }
+    }
+
     // 2. Detect sandbox backend
     let backend_res =
         Backend::detect_with_backend(cfg.net.clone(), cfg.observe_seccomp, cfg.backend.as_deref());
