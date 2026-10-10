@@ -19,7 +19,7 @@ vetto --version
 vetto doctor --preflight
 ```
 
-The package contains the native executable for the host platform in the current `0.6.1` package.
+The package contains the native executable for the host platform in the current `0.6.2` package.
 It does not need a Rust toolchain or an install-time binary download. If npm reports an
 unsupported platform, record the platform and architecture and stop; do not
 work around the package selector by copying a binary from another platform.

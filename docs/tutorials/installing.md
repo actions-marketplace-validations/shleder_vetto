@@ -6,7 +6,7 @@ Target length: 2 minutes.
    sentence.
 2. Install via npm (`npm install --global @shledery/vetto`), Homebrew
    (`brew install shleder/tap/vetto`), Cargo (`cargo install vetto`), or curl.
-   To pin this release via npm, use `npm install --global @shledery/vetto@0.6.1`.
+   To pin this release via npm, use `npm install --global @shledery/vetto@0.6.2`.
    The prebuilt package contains native executables for Linux x64/ARM64,
    macOS x64/Apple Silicon, and Windows x64.
 3. Run `vetto doctor` and read the selected tier aloud.
